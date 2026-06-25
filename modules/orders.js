@@ -51,7 +51,7 @@ function upcoming(all){
     <div class="card"><h3>Follow-up queue</h3>
       ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Client</th><th>Phone</th><th>Region</th><th>Crop</th><th>Starts</th><th class="num">Days</th><th class="num">Daily acres</th><th>Action</th></tr></thead>
       <tbody>${rows.map(x=>{ const urgent=x.d<=15; return `<tr class="clickable" data-id="${x.o.id}">
-        <td><b>${esc(x.o.client_name||'')}</b></td><td>${esc(x.o.client_phone||'')}</td>
+        <td><b>${esc(x.o.client_name||'')}</b></td><td>${esc(window.OPS.helpers.maskPhone(x.o.client_phone))}</td>
         <td>${esc([x.o.location,x.o.city,x.o.state].filter(Boolean).join(", "))}</td><td>${esc(x.o.crop||'')}</td>
         <td>${esc(x.o.start_month||fmtDate(x.sd))}</td><td class="num">${x.d}</td><td class="num">${x.o.avg_daily_order||''}</td>
         <td>${urgent?'<span class="chip rejected">Follow up now</span>':'<span class="chip in_review">Upcoming</span>'}</td></tr>`; }).join("")}</tbody></table></div>`
@@ -64,7 +64,7 @@ function listAll(all){
   $("oBody").innerHTML=`<div class="searchbar"><input id="oSearch" placeholder="Search client / region / status…" style="max-width:300px"></div><div id="oList"></div>`;
   function render(rows){
     $("oList").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Client</th><th>Phone</th><th>Status</th><th>Region</th><th>Crop</th><th>Window</th><th class="num">Rate</th></tr></thead>
-      <tbody>${rows.map(o=>`<tr class="clickable" data-id="${o.id}"><td><b>${esc(o.client_name||'')}</b></td><td>${esc(o.client_phone||'')}</td>
+      <tbody>${rows.map(o=>`<tr class="clickable" data-id="${o.id}"><td><b>${esc(o.client_name||'')}</b></td><td>${esc(window.OPS.helpers.maskPhone(o.client_phone))}</td>
         <td>${esc(o.status||'')}</td><td>${esc([o.city,o.state].filter(Boolean).join(", "))}</td><td>${esc(o.crop||'')}</td>
         <td>${esc([o.start_month,o.end_month].filter(Boolean).join(" → "))}</td><td class="num">${o.gross_rate?money(o.gross_rate):''}</td></tr>`).join("")}</tbody></table></div>`
       : '<div class="card muted">No orders yet.</div>';

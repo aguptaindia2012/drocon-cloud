@@ -7,13 +7,13 @@
 const { esc, money } = window.OPS.helpers;
 
 window.OPS.routes.clients = window.OPS.makeRegistry({
-  tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true,
+  tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"name",
   searchKeys:["name","firm_name","mobile","city","state","gstin"],
   listCols:[
     {key:"firm_name", label:"Firm / Buyer", fmt:(v,r)=>esc(v||r.name||"")},
     {key:"name", label:"Contact"},
-    {key:"mobile", label:"Mobile"},
+    {key:"mobile", label:"Mobile", mask:true},
     {key:"city", label:"City"},
     {key:"state", label:"State"},
     {key:"client_type", label:"Type"},
@@ -35,14 +35,14 @@ window.OPS.routes.clients = window.OPS.makeRegistry({
 });
 
 window.OPS.routes.partners = window.OPS.makeRegistry({
-  tool:"partners", table:"authorized_partners", title:"Authorized Partners", eyebrow:"Order Management",
+  tool:"partners", table:"authorized_partners", title:"Authorized Partners", eyebrow:"Order Management", logView:true,
   orderBy:"name",
   extraActions:[{ label:"🔎 Pilot Finder", fn:()=>{ if(window.OPS.partnerFinder) window.OPS.partnerFinder(); } }],
   searchKeys:["name","company","phone","home_state","home_district","drone_model"],
   listCols:[
     {key:"name", label:"Pilot / Partner"},
     {key:"company", label:"Company"},
-    {key:"phone", label:"Phone"},
+    {key:"phone", label:"Phone", mask:true},
     {key:"home_district", label:"Home District"},
     {key:"home_state", label:"Home State"},
     {key:"capacity_acres_day", label:"Acres/Day", num:true},

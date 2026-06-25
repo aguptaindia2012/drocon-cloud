@@ -173,8 +173,8 @@ async function viewTeam(){
     if(error) alert(error.message); else { s.style.borderColor="var(--green)"; }
   }));
 
-  // permission matrix
-  const tools = window.OPS.PERMISSIONED_TOOLS;
+  // permission matrix (tools + capabilities like "view_contacts")
+  const tools = window.OPS.PERMISSIONED_TOOLS.concat(window.OPS.CAPABILITIES||[]);
   const { data:permRows }=await sb.from("app_permissions").select("user_id,tool_key");
   const granted = new Set((permRows||[]).map(r=>r.user_id+"|"+r.tool_key));
   const members = ps.filter(p=>p.role!=="admin");

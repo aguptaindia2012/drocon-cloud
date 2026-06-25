@@ -23,7 +23,7 @@ function parseISO(s){ return s?new Date(s+"T00:00:00Z"):null; }
 
 /* ============================ Employees ============================ */
 window.OPS.routes.hr_employees = window.OPS.makeRegistry({
-  tool:"hr_employees", table:"employees", title:"Employees & Consultants", eyebrow:"HR",
+  tool:"hr_employees", table:"employees", title:"Employees & Consultants", eyebrow:"HR", logView:true,
   orderBy:"name",
   searchKeys:["name","designation","emp_type","phone","email"],
   listCols:[
@@ -121,6 +121,7 @@ async function saveMonth(){
 /* ============================ Salary Records ============================ */
 async function records(){
   const ym=(window.OPS._hrMonth)||todayISO().slice(0,7);
+  if(window.OPS.access) window.OPS.access.log("salary_runs", ym, "Salary records "+ym);
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">HR</div><h1>Salary Records</h1>
     <div class="row" style="margin:10px 0"><label style="margin:0">Month</label><input id="rMonth" type="month" value="${ym}" style="width:auto">

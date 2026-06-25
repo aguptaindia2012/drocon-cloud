@@ -73,6 +73,7 @@ async function startNew(type){
 }
 function openExisting(rec){
   TYPE=rec.doc_type;
+  if(window.OPS.access) window.OPS.access.log("documents", rec.id, rec.number);
   D=Object.assign({ id:rec.id, doc_type:rec.doc_type, fiscal_year:rec.fiscal_year, seq:rec.seq, number:rec.number,
     doc_date:rec.doc_date, copyLabel:(rec.data&&rec.data.copyLabel)||null, party:rec.party_snapshot||blankParty(),
     party_id:rec.party_id, related_doc_id:rec.related_doc_id, items:rec.line_items||[], terms:rec.terms||{}, status:rec.status||"draft" }, {});

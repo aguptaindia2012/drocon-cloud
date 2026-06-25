@@ -67,7 +67,7 @@ function makeRegistry(cfg){
     all=data||[];
     function render(rows){
       $("rqList").innerHTML = rows.length ? `<table><thead><tr>${cfg.listCols.map(c=>`<th class="${c.num?'num':''}">${esc(c.label)}</th>`).join("")}</tr></thead>
-        <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.listCols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.key],r):esc(r[c.key]==null?"":r[c.key])}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+        <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.listCols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.key],r):(c.mask?esc(window.OPS.helpers.maskPhone(r[c.key])):esc(r[c.key]==null?"":r[c.key]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`
         : '<div class="card muted">No records yet.</div>';
       $("rqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>x.id===tr.getAttribute("data-id")))));
     }
@@ -100,6 +100,7 @@ function makeRegistry(cfg){
       </div>
       <div id="rqApproval"></div>`;
     if(cfg.approvable && rec && window.OPS.approvals){ window.OPS.approvals.bar(cfg.table, rec, $("rqApproval"), ()=>{ sb().from(cfg.table).select("*").eq("id",rec.id).single().then(({data})=>form(data||rec)); }); }
+    if(cfg.logView && rec && window.OPS.access){ window.OPS.access.log(cfg.table, rec.id, rec[cfg.fields[0].key]||""); }
     $("rqBack").addEventListener("click",list);
     $("rqCancel").addEventListener("click",list);
     $("rqSave").addEventListener("click",async()=>{

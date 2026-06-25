@@ -7,7 +7,7 @@
 const { esc } = window.OPS.helpers;
 
 window.OPS.routes.vendors = window.OPS.makeRegistry({
-  tool:"vendors", table:"vendors", title:"Vendors", eyebrow:"Finance", approvable:true,
+  tool:"vendors", table:"vendors", title:"Vendors", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"name",
   searchKeys:["name","firm_name","city","country","gstin","email"],
   listCols:[
@@ -15,7 +15,7 @@ window.OPS.routes.vendors = window.OPS.makeRegistry({
     {key:"name", label:"Contact"},
     {key:"country", label:"Country"},
     {key:"currency", label:"Currency"},
-    {key:"mobile", label:"Phone"},
+    {key:"mobile", label:"Phone", mask:true},
     {key:"gstin", label:"GSTIN"},
   ],
   fields:[

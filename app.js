@@ -76,10 +76,14 @@ const TOOLS = [
   // Team & Access + Audit (now top-level, admin-only)
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
+  { key:"access_log", section:"audit", label:"Access Log",    gate:"admin" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)
 window.OPS.PERMISSIONED_TOOLS = TOOLS.filter(t=>t.gate==="perm");
+// Capabilities = grantable permissions that are NOT navigable tabs (shown in Team & Access)
+const CAPABILITIES = [ { key:"view_contacts", label:"View contacts (unmask phone numbers)" } ];
+window.OPS.CAPABILITIES = CAPABILITIES;
 
 // ---------- boot ----------
 (function boot(){
@@ -166,7 +170,10 @@ $("btnSignOut").addEventListener("click", async ()=>{ await sb.auth.signOut(); }
 // ---------- role + permission helpers ----------
 const isAdmin    = ()=> profile && profile.role==="admin";
 const isApprover = ()=> profile && (profile.role==="admin"||profile.role==="approver");
+const canViewContacts = ()=> isAdmin() || window.OPS.perms.has("view_contacts");
+function maskPhone(v){ if(v==null||v==="") return ""; if(canViewContacts()) return v; const d=String(v).replace(/\D/g,""); return d.length<=3 ? "•••" : ("•••••• "+d.slice(-3)); }
 window.OPS.isAdmin=isAdmin; window.OPS.isApprover=isApprover;
+window.OPS.canViewContacts=canViewContacts; window.OPS.helpers.maskPhone=maskPhone;
 function toolByKey(k){ return TOOLS.find(t=>t.key===k); }
 function canSee(tool){
   if(!tool) return false;
