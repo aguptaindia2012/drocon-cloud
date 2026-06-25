@@ -20,9 +20,12 @@ async function view(){
       <button class="btn sm ${tab==='dashboard'?'green':''}" data-t="dashboard">Dashboard</button>
       <button class="btn sm ${tab==='entry'?'green':''}" data-t="entry">Daily Entry</button>
       <button class="btn sm ${tab==='locations'?'green':''}" data-t="locations">Locations</button>
+      <div class="spacer"></div>
+      <button class="btn sm" id="aImport">⬆ Import CSV</button>
     </div>
     <div id="aBody" class="muted">Loading…</div>`;
   m.querySelectorAll("[data-t]").forEach(b=>b.addEventListener("click",()=>{ tab=b.getAttribute("data-t"); view(); }));
+  $("aImport").addEventListener("click",importCSV);
   if(tab==="dashboard") dashboard();
   else if(tab==="entry") entry();
   else locationsView();
@@ -163,5 +166,37 @@ async function dashboard(){
         :'<div class="muted">No sprays in the last 7 days.</div>'}</div>`;
 }
 
+/* ---------- CSV import (Date,Location,Pilot,Acres,Rate[,State,District,Crop]) ---------- */
+function importCSV(){
+  window.OPS.csv.pickCSV(async rows=>{
+    if(!rows.length){ alert("No rows found."); return; }
+    const low=r=>{ const o={}; Object.keys(r).forEach(h=>o[h.toLowerCase().trim()]=r[h]); return o; };
+    const recs=rows.map(low);
+    await loadLocations();
+    const byName={}; locations.forEach(l=>byName[(l.name||"").toLowerCase().trim()]=l);
+    // create any missing locations (carry first-seen rate/state/district)
+    const need={};
+    recs.forEach(r=>{ const n=(r.location||"").trim(); if(!n) return; const k=n.toLowerCase();
+      if(!byName[k] && !need[k]) need[k]={ name:n, state:r.state||null, district:r.district||null, rate:num(r.rate)||null }; });
+    for(const k in need){ const t=need[k];
+      const { data, error }=await sb().from("spray_locations").insert({ name:t.name, state:t.state, district:t.district, rates:{default:t.rate} }).select().single();
+      if(!error && data) byName[k]=data; }
+    // build entries
+    const entries=[];
+    recs.forEach(r=>{ const n=(r.location||"").trim(); if(!n) return; const loc=byName[n.toLowerCase()]; if(!loc) return;
+      const acres=num(r.acres!=null?r.acres:r.acre); if(!(acres>0)) return;
+      let d=(r.date||"").trim(); if(d && !/^\d{4}-\d{2}-\d{2}/.test(d)){ const dt=new Date(d); if(!isNaN(dt)) d=dt.toISOString().slice(0,10); }
+      const rate=num(r.rate) || (loc.rates&&loc.rates.default) || 0;
+      entries.push({ entry_date:d||null, location_id:loc.id, pilot_name:r.pilot||null, acres, rate:rate||null, amount:rate?acres*rate:null, crop:r.crop||null, created_by:window.OPS.me.id });
+    });
+    const valid=entries.filter(e=>e.entry_date);
+    if(!valid.length){ alert("No valid rows (need Date, Location, Acres)."); return; }
+    if(!confirm("Import "+valid.length+" acre entries across "+Object.keys(byName).length+" locations?")) return;
+    for(let i=0;i<valid.length;i+=500){ const { error }=await sb().from("acre_entries").insert(valid.slice(i,i+500)); if(error){ alert("Import failed: "+error.message); return; } }
+    window.OPS.flashTop("Imported "+valid.length+" acre entries ✓"); await loadLocations(); tab="dashboard"; view();
+  });
+}
+
 window.OPS.routes.acre = view;
 })();
+
