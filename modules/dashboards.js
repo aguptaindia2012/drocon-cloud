@@ -78,5 +78,56 @@ async function view(){
       :'<div class="muted">No farmer data yet.</div>'}</div>`;
 }
 
+/* ---------- Agreement Dashboard ---------- */
+async function agreementDash(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Agreement Dashboard</h1><div id="adBody" class="muted">Loading…</div>`;
+  const { data }=await sb().from("agreements").select("id,title,counterparty,category,status,updated_at, creator:created_by(full_name,email)").order("updated_at",{ascending:false});
+  const rows=data||[];
+  const byS={}, byC={};
+  rows.forEach(r=>{ byS[r.status]=(byS[r.status]||0)+1; const c=r.category||"(uncategorised)"; byC[c]=(byC[c]||0)+1; });
+  const STAT=["draft","in_review","recommended","approved","rejected","executed"];
+  $("adBody").innerHTML=`
+    <div class="statrow">
+      <div class="stat"><div class="n">${rows.length}</div><div class="l">Total agreements</div></div>
+      <div class="stat"><div class="n">${byS.in_review||0}</div><div class="l">In review</div></div>
+      <div class="stat"><div class="n">${byS.executed||0}</div><div class="l">Executed</div></div>
+      <div class="stat"><div class="n">${(byS.draft||0)+(byS.rejected||0)}</div><div class="l">Draft / rejected</div></div>
+    </div>
+    <div class="card"><h3>By status</h3><table><thead><tr>${STAT.map(s=>`<th>${esc(s)}</th>`).join("")}</tr></thead>
+      <tbody><tr>${STAT.map(s=>`<td>${byS[s]||0}</td>`).join("")}</tr></tbody></table></div>
+    <div class="card"><h3>By category</h3><table><thead><tr><th>Category</th><th class="num">Count</th></tr></thead>
+      <tbody>${Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join("")}</tbody></table></div>
+    <div class="card"><h3>Recent activity</h3><table><thead><tr><th>Title</th><th>Counterparty</th><th>Status</th><th>Updated</th></tr></thead>
+      <tbody>${rows.slice(0,12).map(r=>`<tr><td><b>${esc(r.title)}</b></td><td>${esc(r.counterparty||'')}</td><td>${window.OPS.statusChip(r.status)}</td><td class="muted">${fmtDate(r.updated_at)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+/* ---------- Business Development Dashboard (quotations + POs generated/sent) ---------- */
+async function bdDash(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Business Development</h1>
+    <p class="muted">All quotations and purchase orders generated and sent.</p><div id="bdBody" class="muted">Loading…</div>`;
+  const { data }=await sb().from("documents").select("doc_type,number,doc_date,party_snapshot,totals,status").in("doc_type",["quotation","purchase_order"]).order("doc_date",{ascending:false});
+  const rows=data||[];
+  const q=rows.filter(r=>r.doc_type==="quotation"), po=rows.filter(r=>r.doc_type==="purchase_order");
+  const sum=a=>a.reduce((s,r)=>s+num((r.totals||{}).total),0);
+  $("bdBody").innerHTML=`
+    <div class="statrow">
+      <div class="stat"><div class="n">${q.length}</div><div class="l">Quotations</div></div>
+      <div class="stat"><div class="n">${money(sum(q))}</div><div class="l">Quoted value</div></div>
+      <div class="stat"><div class="n">${po.length}</div><div class="l">Purchase Orders</div></div>
+      <div class="stat"><div class="n">${money(sum(po))}</div><div class="l">PO value</div></div>
+    </div>
+    <div class="card"><h3>Quotations &amp; Purchase Orders</h3>
+      ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Type</th><th>Number</th><th>Date</th><th>Party</th><th class="num">Total</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.doc_type==="quotation"?'<span class="chip in_review">Quotation</span>':'<span class="chip executed">PO</span>'}</td>
+        <td><b>${esc(r.number)}</b></td><td>${fmtDate(r.doc_date)}</td><td>${esc((r.party_snapshot||{}).firmName||(r.party_snapshot||{}).name||'')}</td>
+        <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(r.status||'draft')}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted">No quotations or purchase orders yet.</div>'}</div>`;
+}
+
 window.OPS.routes.dashboards = view;
+window.OPS.routes.agreement_dashboard = agreementDash;
+window.OPS.routes.bd_dashboard = bdDash;
 })();
+

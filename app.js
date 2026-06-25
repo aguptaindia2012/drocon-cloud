@@ -31,36 +31,49 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
 /* ---------- sections + tools registry ----------
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
-  { key:"agreement", label:"Agreement" },
-  { key:"order",     label:"Order Management" },
-  { key:"admin",     label:"Administration" },
+  { key:"agreement",  label:"Agreement" },
+  { key:"order",      label:"Order Management" },
+  { key:"finance",    label:"Finance" },
+  { key:"trackers",   label:"Trackers" },
+  { key:"dashboards", label:"Dashboards" },
+  { key:"hr",         label:"HR" },
+  { key:"team",       label:"Team & Access" },
+  { key:"audit",      label:"Audit" },
 ];
 const TOOLS = [
-  // Agreement (existing studio) — role-based as before
+  // Agreement (existing studio)
   { key:"agreements", section:"agreement", label:"Agreements",      gate:"all" },
   { key:"new",        section:"agreement", label:"New agreement",   gate:"all" },
   { key:"approvals",  section:"agreement", label:"Approvals",       gate:"approver" },
   { key:"templates",  section:"agreement", label:"Shared templates",gate:"approver" },
-  { key:"team",       section:"agreement", label:"Team & access",   gate:"admin" },
-  { key:"audit",      section:"agreement", label:"Audit log",       gate:"admin" },
-  // Order Management — pools (visible to all signed-in staff)
-  { key:"clients",    section:"order", label:"Clients",             gate:"all" },
-  { key:"partners",   section:"order", label:"Authorized Partners", gate:"all" },
-  { key:"orders",     section:"order", label:"Order Tracker",       gate:"all" },
-  { key:"pilots",     section:"order", label:"Pilot Finder",        gate:"all" },
-  // Administration — per-tool permission (admin grants access)
-  { key:"quotation",     section:"admin", label:"Quotation",            gate:"perm" },
-  { key:"invoice",       section:"admin", label:"Invoice",              gate:"perm" },
-  { key:"credit_note",   section:"admin", label:"Credit Note",          gate:"perm" },
-  { key:"purchase_order",section:"admin", label:"Purchase Order",       gate:"perm" },
-  { key:"vendors",       section:"admin", label:"Vendors",              gate:"perm" },
-  { key:"catalogues",    section:"admin", label:"Service & Spares",     gate:"perm" },
-  { key:"inventory",     section:"admin", label:"Inventory",            gate:"perm" },
-  { key:"bom",           section:"admin", label:"BOM Calculator",       gate:"perm" },
-  { key:"receivables",   section:"admin", label:"Invoices & Receivables",gate:"perm" },
-  { key:"acre",          section:"admin", label:"Acre Tracker",         gate:"perm" },
-  { key:"farmer",        section:"admin", label:"Farmer Tracker",       gate:"perm" },
-  { key:"dashboards",    section:"admin", label:"Dashboards",           gate:"perm" },
+  // Order Management — pools + sales documents
+  { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
+  { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },
+  { key:"quotation",     section:"order", label:"Quotation",           gate:"perm" },
+  { key:"bom",           section:"order", label:"BOM Calculator",      gate:"perm" },
+  { key:"purchase_order",section:"order", label:"Purchase Order",      gate:"perm" },
+  // Finance
+  { key:"invoice",       section:"finance", label:"Invoice",       gate:"perm" },
+  { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
+  { key:"clients",       section:"finance", label:"Client",        gate:"perm" },
+  { key:"vendors",       section:"finance", label:"Vendors",       gate:"perm" },
+  { key:"inventory",     section:"finance", label:"Inventory",     gate:"perm" },
+  { key:"catalogues",    section:"finance", label:"Catalogue",     gate:"perm" },
+  // Trackers
+  { key:"receivables",   section:"trackers", label:"Invoice & Receivables", gate:"perm" },
+  { key:"acre",          section:"trackers", label:"Acre Tracking",         gate:"perm" },
+  { key:"farmer",        section:"trackers", label:"Farmer Tracking",       gate:"perm" },
+  // Dashboards
+  { key:"dashboards",          section:"dashboards", label:"Current",                   gate:"perm" },
+  { key:"agreement_dashboard", section:"dashboards", label:"Agreement Dashboard",       gate:"perm" },
+  { key:"bd_dashboard",        section:"dashboards", label:"Business Development",       gate:"perm" },
+  // HR
+  { key:"hr_salary",     section:"hr", label:"Salary Calculator",       gate:"perm" },
+  { key:"hr_employees",  section:"hr", label:"Employees & Consultants",  gate:"perm" },
+  { key:"hr_records",    section:"hr", label:"Salary Records",           gate:"perm" },
+  // Team & Access + Audit (now top-level, admin-only)
+  { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
+  { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)
@@ -197,8 +210,7 @@ window.OPS.openTool = openTool; window.OPS.openSection = openSection; window.OPS
 
 function comingSoon(tool){
   return `<div class="eyebrow">${esc(SECTIONS.find(s=>s.key===tool.section).label)}</div><h1>${esc(tool.label)}</h1>
-    <div class="callout warn">This module is planned for <b>Phase ${tool.phase||2}</b> of the rollout and isn't built yet.
-    The data model and navigation slot are already in place, so it will appear here once implemented.</div>`;
+    <div class="callout warn">This module is being built — its navigation slot is in place and it will appear here once ready.</div>`;
 }
 
 // ---------- shared data helpers ----------

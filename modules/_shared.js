@@ -54,11 +54,13 @@ function makeRegistry(cfg){
       <div class="row wrap" style="margin:10px 0">
         <input id="rqSearch" placeholder="Search ${esc(cfg.title.toLowerCase())}…" style="max-width:280px">
         <div class="spacer"></div>
+        ${(cfg.extraActions||[]).map((a,i)=>`<button class="btn sm" data-extra="${i}">${esc(a.label)}</button>`).join("")}
         <button class="btn sm" id="rqImport">⬆ Import CSV</button>
         <button class="btn sm" id="rqExport">⬇ Export CSV</button>
         <button class="btn green sm" id="rqNew">+ New</button>
       </div>
       <div id="rqList" class="muted">Loading…</div>`;
+    (cfg.extraActions||[]).forEach((a,i)=>{ const b=$("main").querySelector(`[data-extra="${i}"]`); if(b) b.addEventListener("click",a.fn); });
     let all=[];
     const { data, error } = await sb().from(cfg.table).select("*").order(cfg.orderBy||"created_at",{ascending:false});
     if(error){ $("rqList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }

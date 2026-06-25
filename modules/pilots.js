@@ -10,8 +10,9 @@ const sb = ()=>window.OPS.sb;
 
 async function view(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Order Management</div><h1>Pilot Finder</h1>
-    <div class="callout">Search the Authorized Partner pool by region to assign work to the nearest pilots. Add partners in <b>Order Management → Authorized Partners</b>, or sync them from signed agreements below.</div>
+  m.innerHTML=`<button class="btn sm" id="pfBack">← Back to Authorized Partners</button>
+    <div class="eyebrow" style="margin-top:10px">Order Management · Authorized Partners</div><h1>Pilot Finder</h1>
+    <div class="callout">Search the Authorized Partner pool by region to assign work to the nearest pilots. Add partners in the <b>Authorized Partners</b> list, or sync them from signed agreements below.</div>
     <div class="card">
       <div class="fgrid three">
         <div class="field"><label>State</label><select id="qState"><option value="">— any —</option></select></div>
@@ -44,6 +45,7 @@ async function view(){
         <td class="num">${p.capacity_acres_day||''}</td><td>${p.source==='agreement'?'<span class="chip executed">agreement</span>':'<span class="chip draft">manual</span>'}</td></tr>`).join("")}</tbody></table></div>`
       : '<div class="card muted">No partners match. Widen the search, add partners, or sync from agreements.</div>';
   }
+  $("pfBack").addEventListener("click",()=>{ if(window.OPS.routes.partners) window.OPS.routes.partners(); });
   $("qState").addEventListener("change",()=>{ fillDistricts(); run(); });
   $("qDist").addEventListener("change",run); $("qText").addEventListener("input",run);
   $("qSync").addEventListener("click",()=>syncFromAgreements(run));
@@ -75,5 +77,5 @@ async function syncFromAgreements(then){
   view();
 }
 
-window.OPS.routes.pilots = view;
+window.OPS.partnerFinder = view;   // opened as a sub-view from Authorized Partners
 })();

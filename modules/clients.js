@@ -37,6 +37,7 @@ window.OPS.routes.clients = window.OPS.makeRegistry({
 window.OPS.routes.partners = window.OPS.makeRegistry({
   tool:"partners", table:"authorized_partners", title:"Authorized Partners", eyebrow:"Order Management",
   orderBy:"name",
+  extraActions:[{ label:"🔎 Pilot Finder", fn:()=>{ if(window.OPS.partnerFinder) window.OPS.partnerFinder(); } }],
   searchKeys:["name","company","phone","home_state","home_district","drone_model"],
   listCols:[
     {key:"name", label:"Pilot / Partner"},
