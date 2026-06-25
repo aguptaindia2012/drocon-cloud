@@ -28,7 +28,7 @@ window.OPS.routes.vendors = window.OPS.makeRegistry({
     {key:"currency", label:"Currency", type:"select", options:["INR","USD","CNY","EUR"]},
     {key:"address", label:"Address", type:"textarea", full:true},
     {key:"city", label:"City"},
-    {key:"state", label:"State / Province"},
+    {key:"state", label:"State / Province (free text — vendors may be overseas)"},
     {key:"pincode", label:"Postal Code"},
     {key:"default_terms", label:"Default PO Terms (editable per PO)", type:"textarea", full:true},
     {key:"notes", label:"Notes", type:"textarea", full:true},

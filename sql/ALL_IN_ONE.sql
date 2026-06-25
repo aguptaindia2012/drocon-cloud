@@ -1373,3 +1373,14 @@ create index if not exists documents_entity_idx on public.documents(entity);
 drop index if exists public.documents_number_uniq;
 create unique index if not exists documents_entity_number_uniq
   on public.documents(doc_type, entity, number);
+
+-- ####################################################################
+-- ## 14_clients_fields.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Cloud — client master fields (align to the Client Setup structure)
+-- Adds the client reference number and district. Safe to re-run.
+-- ============================================================================
+alter table public.clients add column if not exists client_ref text;
+alter table public.clients add column if not exists district  text;

@@ -101,6 +101,12 @@ function makeRegistry(cfg){
       <div id="rqApproval"></div>`;
     if(cfg.approvable && rec && window.OPS.approvals){ window.OPS.approvals.bar(cfg.table, rec, $("rqApproval"), ()=>{ sb().from(cfg.table).select("*").eq("id",rec.id).single().then(({data})=>form(data||rec)); }); }
     if(cfg.logView && rec && window.OPS.access){ window.OPS.access.log(cfg.table, rec.id, rec[cfg.fields[0].key]||""); }
+    // dependent State -> District dropdowns
+    $("main").querySelectorAll('select[data-depends]').forEach(dsel=>{
+      const ssel=$("f_"+dsel.getAttribute("data-depends"));
+      if(ssel) ssel.addEventListener("change",()=>{ const ds=(window.OPS.GEO&&window.OPS.GEO[ssel.value])||[];
+        dsel.innerHTML='<option value="">— select district —</option>'+ds.map(o=>`<option>${esc(o)}</option>`).join(""); });
+    });
     $("rqBack").addEventListener("click",list);
     $("rqCancel").addEventListener("click",list);
     $("rqSave").addEventListener("click",async()=>{
@@ -130,12 +136,19 @@ function makeRegistry(cfg){
     });
   }
 
+  function geoStates(){ return Object.keys(window.OPS.GEO||{}).sort(); }
+  function geoDistricts(st){ return (window.OPS.GEO&&window.OPS.GEO[st])||[]; }
   function fieldHTML(f,e){
     const v=e[f.key]==null?"":e[f.key];
     const cls=f.full?"field full":"field";
     let inner;
     if(f.type==="select"){
       inner=`<select id="f_${f.key}">${(f.options||[]).map(o=>`<option value="${esc(o)}" ${String(v)===String(o)?'selected':''}>${esc(o)}</option>`).join("")}</select>`;
+    } else if(f.type==="state"){
+      inner=`<select id="f_${f.key}"><option value="">— select state —</option>${geoStates().map(o=>`<option ${String(v)===o?'selected':''}>${esc(o)}</option>`).join("")}${v && !geoStates().includes(v)?`<option selected>${esc(v)}</option>`:''}</select>`;
+    } else if(f.type==="district"){
+      const ds=geoDistricts(e[f.dependsOn]||"");
+      inner=`<select id="f_${f.key}" data-depends="${esc(f.dependsOn)}"><option value="">— select district —</option>${ds.map(o=>`<option ${String(v)===o?'selected':''}>${esc(o)}</option>`).join("")}${v && !ds.includes(v)?`<option selected>${esc(v)}</option>`:''}</select>`;
     } else if(f.type==="textarea"){
       inner=`<textarea id="f_${f.key}">${esc(v)}</textarea>`;
     } else {
