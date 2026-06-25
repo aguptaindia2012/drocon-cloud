@@ -122,7 +122,7 @@ function importInvoices(){
     const g=(r,k)=>{ const kk=Object.keys(r).find(h=>h.toLowerCase().trim()===k); return kk?String(r[kk]).trim():""; };
     const n=v=>{ v=String(v||"").replace(/[₹,%\s]/g,""); return v===""?0:(isNaN(+v)?0:+v); };
     const fyOfNum=num0=>{ const m=String(num0).match(/(\d{2})-(\d{2})/); return m?(m[1]+"-"+m[2]):null; };
-    const docs=[], recvByNumber={};
+    const docs=[], recvByKey={};
     rows.forEach(r=>{
       const number=g(r,"invoice number"); if(!number) return;
       const entity=g(r,"entity")||"DCB";
@@ -142,23 +142,25 @@ function importInvoices(){
         data:{ entity, acre_ref:g(r,"acre reference"), remarks:g(r,"remarks"), fy:g(r,"fy") },
         created_by:window.OPS.me.id
       });
-      if(received>0) recvByNumber[number]={ amount:received, date:g(r,"payment date")||g(r,"date")||todayISO() };
+      if(received>0) recvByKey[entity+"|"+number]={ amount:received, date:g(r,"payment date")||g(r,"date")||todayISO() };
     });
     if(!docs.filter(d=>d.doc_date).length){ alert("No rows with a valid invoice date."); return; }
-    const valid=docs.filter(d=>d.doc_date);
-    if(!confirm("Import "+valid.length+" invoices (DCB + IBS)? Existing ones with the same number are updated.")) return;
-    // upsert documents in chunks, collect ids by number
-    const idByNumber={};
+    // de-duplicate by entity+number (DB key) so one upsert can't hit a row twice
+    const byKey={}; docs.filter(d=>d.doc_date).forEach(d=>{ byKey[d.entity+"|"+d.number]=d; });
+    const valid=Object.values(byKey);
+    if(!confirm("Import "+valid.length+" invoices (DCB + IBS)? Existing ones (same entity + number) are updated.")) return;
+    // upsert documents in chunks, collect ids by entity+number
+    const idByKey={};
     for(let i=0;i<valid.length;i+=200){
-      const { data, error }=await sb().from("documents").upsert(valid.slice(i,i+200),{onConflict:"doc_type,number"}).select("id,number");
+      const { data, error }=await sb().from("documents").upsert(valid.slice(i,i+200),{onConflict:"doc_type,entity,number"}).select("id,number,entity");
       if(error){ alert("Import failed: "+error.message); return; }
-      (data||[]).forEach(d=>idByNumber[d.number]=d.id);
+      (data||[]).forEach(d=>idByKey[d.entity+"|"+d.number]=d.id);
     }
     // payments for received amounts (idempotent: clear prior tracker payments first)
-    const ids=Object.values(idByNumber);
+    const ids=Object.values(idByKey);
     if(ids.length){ await sb().from("payments").delete().in("document_id",ids).eq("mode","Tracker import"); }
     const pays=[];
-    Object.keys(recvByNumber).forEach(numk=>{ const id=idByNumber[numk]; if(!id) return; const p=recvByNumber[numk];
+    Object.keys(recvByKey).forEach(k=>{ const id=idByKey[k]; if(!id) return; const p=recvByKey[k];
       pays.push({ document_id:id, amount:p.amount, paid_on:p.date, mode:"Tracker import", note:"historical", created_by:window.OPS.me.id }); });
     for(let i=0;i<pays.length;i+=200){ const { error }=await sb().from("payments").insert(pays.slice(i,i+200)); if(error){ alert("Payments import failed: "+error.message); return; } }
     window.OPS.flashTop("Imported "+valid.length+" invoices ✓"); view();

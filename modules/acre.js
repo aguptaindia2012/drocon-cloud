@@ -155,15 +155,15 @@ async function dashboard(){
       <div class="stat"><div class="n">${monthA.toFixed(0)}</div><div class="l">Acres this month</div></div>
       <div class="stat"><div class="n">${money(monthR)}</div><div class="l">Revenue this month</div></div>
     </div>
+    <div class="card"><h3>Last 7 days — acres by location</h3>
+      ${dayList.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
+      <tbody>${Object.keys(byDayLoc).map(k=>{ const tot=dayList.reduce((s,d)=>s+(byDayLoc[k][d]||0),0); return `<tr><td><b>${esc(k)}</b></td>${dayList.map(d=>`<td class="num">${byDayLoc[k][d]?byDayLoc[k][d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`; }).join("")}</tbody></table></div>`
+        :'<div class="muted">No sprays in the last 7 days.</div>'}</div>
     <div class="card"><h3>Monthly work</h3><table><thead><tr><th>Month</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
       <tbody>${months.map(k=>`<tr><td>${k}</td><td class="num">${byM[k].a.toFixed(1)}</td><td class="num">${money(byM[k].r)}</td></tr>`).join("")}</tbody></table></div>
     <div class="card"><h3>Location-wise totals</h3><table><thead><tr><th>Location</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
       <tbody>${locs.map(l=>`<tr><td><b>${esc(l.k)}</b></td><td class="num">${l.a.toFixed(1)}</td><td class="num">${money(l.r)}</td></tr>`).join("")}</tbody></table>
-      <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>
-    <div class="card"><h3>Last 7 days — acres by location</h3>
-      ${dayList.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
-      <tbody>${Object.keys(byDayLoc).map(k=>{ const tot=dayList.reduce((s,d)=>s+(byDayLoc[k][d]||0),0); return `<tr><td><b>${esc(k)}</b></td>${dayList.map(d=>`<td class="num">${byDayLoc[k][d]?byDayLoc[k][d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`; }).join("")}</tbody></table></div>`
-        :'<div class="muted">No sprays in the last 7 days.</div>'}</div>`;
+      <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>`;
 }
 
 /* ---------- CSV import (Date,Location,Pilot,Acres,Rate[,State,District,Crop]) ---------- */
