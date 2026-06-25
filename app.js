@@ -46,8 +46,8 @@ const TOOLS = [
   // Order Management — pools (visible to all signed-in staff)
   { key:"clients",    section:"order", label:"Clients",             gate:"all" },
   { key:"partners",   section:"order", label:"Authorized Partners", gate:"all" },
-  { key:"orders",     section:"order", label:"Order Tracker",       gate:"all", phase:3 },
-  { key:"pilots",     section:"order", label:"Pilot Tracker",       gate:"all", phase:3 },
+  { key:"orders",     section:"order", label:"Order Tracker",       gate:"all" },
+  { key:"pilots",     section:"order", label:"Pilot Finder",        gate:"all" },
   // Administration — per-tool permission (admin grants access)
   { key:"quotation",     section:"admin", label:"Quotation",            gate:"perm" },
   { key:"invoice",       section:"admin", label:"Invoice",              gate:"perm" },
@@ -60,7 +60,7 @@ const TOOLS = [
   { key:"receivables",   section:"admin", label:"Invoices & Receivables",gate:"perm" },
   { key:"acre",          section:"admin", label:"Acre Tracker",         gate:"perm" },
   { key:"farmer",        section:"admin", label:"Farmer Tracker",       gate:"perm" },
-  { key:"dashboards",    section:"admin", label:"Dashboards",           gate:"perm", phase:3 },
+  { key:"dashboards",    section:"admin", label:"Dashboards",           gate:"perm" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)

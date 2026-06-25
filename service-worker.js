@@ -1,7 +1,7 @@
 /* DroCon Bharat Agreement Studio — Cloud service worker.
    Caches the app shell so it installs and launches like an app.
    IMPORTANT: never caches your Supabase API responses (those stay live). */
-const VERSION = "dcb-cloud-v4";
+const VERSION = "dcb-cloud-v5";
 const SHELL = [
   "./", "./index.html", "./studio.html", "./manifest.webmanifest",
   "./app.js", "./logo.js", "./docgen.js", "./agreement.js", "./config.js",
@@ -9,6 +9,7 @@ const SHELL = [
   "./modules/catalogues.js", "./modules/inventory.js", "./modules/bom.js",
   "./modules/billing.js", "./modules/receivables.js",
   "./modules/farmer.js", "./modules/acre.js",
+  "./modules/orders.js", "./modules/pilots.js", "./modules/dashboards.js",
   "./icons/icon-192.png", "./icons/icon-512.png",
   "./icons/icon-maskable-512.png", "./icons/apple-touch-icon-180.png"
 ];
