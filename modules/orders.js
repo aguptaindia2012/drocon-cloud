@@ -80,7 +80,8 @@ const FIELDS=[
   {key:"client_phone",label:"Phone"},
   {key:"referral_agent",label:"Referral (Agent)"},
   {key:"status",label:"Status",type:"select",opts:["New Client","In Discussion","Confirmed","Work Completed","Lost"]},
-  {key:"state",label:"State"},{key:"city",label:"City"},{key:"location",label:"Location"},
+  {key:"state",label:"State",type:"state"},{key:"district",label:"District",type:"district",dependsOn:"state"},
+  {key:"city",label:"City"},{key:"location",label:"Location"},
   {key:"crop",label:"Crop"},
   {key:"start_month",label:"Start (month, e.g. Mar-26)"},{key:"end_month",label:"End (month)"},
   {key:"start_date",label:"Start date (for follow-up)",type:"date"},
@@ -97,13 +98,16 @@ function form(rec){
     <div class="card" style="margin-top:12px"><h1>${rec?"Edit":"New"} order</h1>
       <div class="fgrid">${FIELDS.map(f=>{ const v=e[f.key]==null?"":e[f.key];
         const inner=f.type==="select"?`<select id="of_${f.key}"><option value=""></option>${f.opts.map(o=>`<option ${String(v)===o?'selected':''}>${o}</option>`).join("")}</select>`
+          :f.type==="state"?window.OPS.geoUI.stateSelect("of_"+f.key,v)
+          :f.type==="district"?window.OPS.geoUI.districtSelect("of_"+f.key,v,e.state||"")
           :f.type==="textarea"?`<textarea id="of_${f.key}">${esc(v)}</textarea>`
           :`<input id="of_${f.key}" type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" ${f.type==='number'?'step="any"':''} value="${esc(v)}">`;
         return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}${f.req?' *':''}</label>${inner}</div>`; }).join("")}</div>
       <div class="row"><button class="btn green" id="oSave">${rec?"Save":"Create"}</button><button class="btn" id="oCancel">Cancel</button>
-        <div class="spacer"></div>${rec?'<button class="btn sm" id="oDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
+        <div class="spacer"></div>${rec && window.OPS.canDelete()?'<button class="btn sm" id="oDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
       <div class="err" id="oErr"></div></div>`;
   $("oBack").addEventListener("click",view); $("oCancel").addEventListener("click",view);
+  window.OPS.geoUI.wire("of_state","of_district");
   $("oSave").addEventListener("click",async()=>{
     const out={}; for(const f of FIELDS){ let v=$("of_"+f.key).value; if(f.type==="number") v=v===""?null:num(v); out[f.key]=v===""?null:v;
       if(f.req&&!v){ $("oErr").textContent=f.label+" required."; return; } }
@@ -119,7 +123,7 @@ function importCSV(){
   window.OPS.csv.pickCSV(async rows=>{
     if(!rows.length){ alert("No rows."); return; }
     const map={"client name":"client_name","client phone number":"client_phone","client phone":"client_phone",
-      "client referal (agent name)":"referral_agent","referral":"referral_agent","status":"status","state":"state","city":"city",
+      "client referal (agent name)":"referral_agent","referral":"referral_agent","status":"status","state":"state","district":"district","city":"city",
       "location":"location","crop":"crop","start date":"start_month","end date":"end_month","gross rate":"gross_rate",
       "commission":"commission","average daily order":"avg_daily_order","client preference":"client_pref","order preference":"order_pref"};
     const recs=rows.map(r=>{ const o={created_by:window.OPS.me.id};

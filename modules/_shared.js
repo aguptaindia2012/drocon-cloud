@@ -45,6 +45,19 @@ function downloadCSV(filename, headers, rows){
 }
 window.OPS.csv = { parseCSV, pickCSV, downloadCSV };
 
+/* ---------- reusable State/District dropdowns (for custom forms) ---------- */
+window.OPS.geoUI = {
+  states(){ return Object.keys(window.OPS.GEO||{}).sort(); },
+  districts(st){ return (window.OPS.GEO&&window.OPS.GEO[st])||[]; },
+  stateSelect(id,val){ val=val||""; const o=this.states();
+    return `<select id="${id}"><option value="">— select state —</option>`+o.map(s=>`<option ${val===s?'selected':''}>${esc(s)}</option>`).join("")+(val&&!o.includes(val)?`<option selected>${esc(val)}</option>`:'')+`</select>`; },
+  districtSelect(id,val,st){ val=val||""; const o=this.districts(st);
+    return `<select id="${id}"><option value="">— select district —</option>`+o.map(d=>`<option ${val===d?'selected':''}>${esc(d)}</option>`).join("")+(val&&!o.includes(val)?`<option selected>${esc(val)}</option>`:'')+`</select>`; },
+  wire(stateId,distId){ const s=$(stateId), d=$(distId); if(!s||!d) return;
+    s.addEventListener("change",()=>{ const opts=this.districts(s.value);
+      d.innerHTML='<option value="">— select district —</option>'+opts.map(x=>`<option>${esc(x)}</option>`).join(""); }); }
+};
+
 /* ---------- generic registry ---------- */
 function makeRegistry(cfg){
   // cfg: { tool, table, title, eyebrow, fields[], listCols[], searchKeys[], orderBy }
@@ -56,7 +69,8 @@ function makeRegistry(cfg){
         <div class="spacer"></div>
         ${(cfg.extraActions||[]).map((a,i)=>`<button class="btn sm" data-extra="${i}">${esc(a.label)}</button>`).join("")}
         <button class="btn sm" id="rqImport">⬆ Import CSV</button>
-        <button class="btn sm" id="rqExport">⬇ Export CSV</button>
+        ${window.OPS.canExport()?'<button class="btn sm" id="rqExport">⬇ Export CSV</button>':''}
+        ${window.OPS.isAdmin()?'<button class="btn sm" id="rqClear" style="color:#a3322a;border-color:#e4b4b4">Clear all</button>':''}
         <button class="btn green sm" id="rqNew">+ New</button>
       </div>
       <div id="rqList" class="muted">Loading…</div>`;
@@ -77,8 +91,17 @@ function makeRegistry(cfg){
       render(!q?all:all.filter(r=>(cfg.searchKeys||cfg.listCols.map(c=>c.key)).some(k=>String(r[k]||"").toLowerCase().includes(q))));
     });
     $("rqNew").addEventListener("click",()=>form(null));
-    $("rqExport").addEventListener("click",()=>{
+    if($("rqExport")) $("rqExport").addEventListener("click",()=>{
       downloadCSV(cfg.table+".csv", cfg.fields.map(f=>f.label), all.map(r=>cfg.fields.map(f=>r[f.key]==null?"":r[f.key])));
+    });
+    if($("rqClear")) $("rqClear").addEventListener("click",async()=>{
+      if(!all.length){ alert("Nothing to clear."); return; }
+      if(!confirm("Delete ALL "+all.length+" "+cfg.title+" records? This is logged in the Audit log and cannot be undone.")) return;
+      if(!confirm("Final confirm — clear the entire "+cfg.title+" table?")) return;
+      const { error }=await sb().from(cfg.table).delete().neq("id","00000000-0000-0000-0000-000000000000");
+      if(error){ alert(error.message); return; }
+      window.OPS.audit("cleared", cfg.table, "all", all.length+" records cleared");
+      window.OPS.flashTop("Cleared "+cfg.title); list();
     });
     $("rqImport").addEventListener("click",()=>importCSV());
   }
@@ -94,7 +117,7 @@ function makeRegistry(cfg){
           <button class="btn green" id="rqSave">${rec?"Save changes":"Create"}</button>
           <button class="btn" id="rqCancel">Cancel</button>
           <div class="spacer"></div>
-          ${rec?'<button class="btn sm" id="rqDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
+          ${rec && window.OPS.canDelete()?'<button class="btn sm" id="rqDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
         </div>
         <div class="err" id="rqErr"></div>
       </div>

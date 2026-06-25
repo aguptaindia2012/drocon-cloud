@@ -69,7 +69,7 @@ function render(){
         <button class="btn blue" id="bQuote">Use in Quotation →</button>
         <button class="btn" id="bCancel">Cancel</button>
         <div class="spacer"></div>
-        ${design.id?'<button class="btn sm" id="bDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
+        ${design.id && window.OPS.canDelete()?'<button class="btn sm" id="bDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
       </div>
       <div class="err" id="bErr"></div>
     </div>

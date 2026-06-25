@@ -132,7 +132,7 @@ function editor(){
         <button class="btn sm" id="dImport">Import JSON…</button>
         ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px"><input type="checkbox" id="dStock" style="width:auto"> reduce spare stock on save</label>':''}
         <div class="spacer"></div>
-        ${D.id?'<button class="btn sm" id="dDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
+        ${D.id && window.OPS.canDelete()?'<button class="btn sm" id="dDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
       </div>
       <div class="err" id="dErr"></div>
     </div>

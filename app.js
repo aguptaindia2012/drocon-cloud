@@ -82,7 +82,11 @@ window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)
 window.OPS.PERMISSIONED_TOOLS = TOOLS.filter(t=>t.gate==="perm");
 // Capabilities = grantable permissions that are NOT navigable tabs (shown in Team & Access)
-const CAPABILITIES = [ { key:"view_contacts", label:"View contacts (unmask phone numbers)" } ];
+const CAPABILITIES = [
+  { key:"view_contacts", label:"View contacts (unmask phone numbers)" },
+  { key:"can_export",    label:"Export data (CSV)" },
+  { key:"can_delete",    label:"Delete records" },
+];
 window.OPS.CAPABILITIES = CAPABILITIES;
 
 // ---------- boot ----------
@@ -171,6 +175,9 @@ $("btnSignOut").addEventListener("click", async ()=>{ await sb.auth.signOut(); }
 const isAdmin    = ()=> profile && profile.role==="admin";
 const isApprover = ()=> profile && (profile.role==="admin"||profile.role==="approver");
 const canViewContacts = ()=> isAdmin() || window.OPS.perms.has("view_contacts");
+const canExport = ()=> isAdmin() || window.OPS.perms.has("can_export");
+const canDelete = ()=> isAdmin() || window.OPS.perms.has("can_delete");
+window.OPS.canExport=canExport; window.OPS.canDelete=canDelete;
 function maskPhone(v){ if(v==null||v==="") return ""; if(canViewContacts()) return v; const d=String(v).replace(/\D/g,""); return d.length<=3 ? "•••" : ("•••••• "+d.slice(-3)); }
 window.OPS.isAdmin=isAdmin; window.OPS.isApprover=isApprover;
 window.OPS.canViewContacts=canViewContacts; window.OPS.helpers.maskPhone=maskPhone;

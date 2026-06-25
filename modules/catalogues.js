@@ -76,7 +76,7 @@ function form(rec){
       }).join("")}</div>
       <div class="row"><button class="btn green" id="cSave">${rec?"Save":"Create"}</button>
         <button class="btn" id="cCancel">Cancel</button><div class="spacer"></div>
-        ${rec?'<button class="btn sm" id="cDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
+        ${rec && window.OPS.canDelete()?'<button class="btn sm" id="cDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
       <div class="err" id="cErr"></div>
     </div>`;
   $("cBack").addEventListener("click",view); $("cCancel").addEventListener("click",view);

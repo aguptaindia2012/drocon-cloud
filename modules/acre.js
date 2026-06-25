@@ -46,14 +46,15 @@ function locForm(rec){
   host.innerHTML=`<div class="card"><h3>${rec?"Edit":"New"} location</h3>
     <div class="fgrid">
       <div class="field"><label>Location name *</label><input id="lName" value="${esc(e.name||'')}"></div>
-      <div class="field"><label>District</label><input id="lDist" value="${esc(e.district||'')}"></div>
-      <div class="field"><label>State</label><input id="lState" value="${esc(e.state||'')}"></div>
+      <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("lState",e.state||"")}</div>
+      <div class="field"><label>District</label>${window.OPS.geoUI.districtSelect("lDist",e.district||"",e.state||"")}</div>
       <div class="field"><label>Default rate (₹/acre)</label><input id="lRate" type="number" step="any" value="${e.rates&&e.rates.default!=null?e.rates.default:''}"></div>
     </div>
     <div class="row"><button class="btn green" id="lSave">${rec?"Save":"Create"}</button><button class="btn" id="lCancel">Cancel</button>
       <div class="spacer"></div>${rec?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
     <div class="err" id="lErr"></div></div>`;
   $("lCancel").addEventListener("click",locationsView);
+  window.OPS.geoUI.wire("lState","lDist");
   $("lSave").addEventListener("click",async()=>{
     const name=$("lName").value.trim(); if(!name){ $("lErr").textContent="Name required."; return; }
     const rates={ default: num($("lRate").value)||null };

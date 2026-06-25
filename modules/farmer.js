@@ -59,8 +59,11 @@ function entry(){
         <div class="field"><label>Client name</label><input id="eClient"></div>
       </div>
       <div class="fgrid three">
-        <div class="field"><label>State</label><input id="eState"></div>
-        <div class="field"><label>City</label><input id="eCity"></div>
+        <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("eState","")}</div>
+        <div class="field"><label>District</label>${window.OPS.geoUI.districtSelect("eDistrict","","")}</div>
+        <div class="field"><label>City / Tehsil</label><input id="eCity"></div>
+      </div>
+      <div class="fgrid three">
         <div class="field"><label>Default rate (₹/acre)</label><input id="eRate" type="number" step="any" placeholder="optional"></div>
       </div>
       <h3>Sprays</h3>
@@ -75,6 +78,7 @@ function entry(){
   $("eBack").addEventListener("click",view); $("eCancel").addEventListener("click",view);
   $("eAdd").addEventListener("click",()=>{ rows.push(blankRow()); renderRows(); });
   $("eSave").addEventListener("click",save);
+  window.OPS.geoUI.wire("eState","eDistrict");
   renderRows();
 }
 function renderRows(){
@@ -98,11 +102,11 @@ function renderRows(){
 async function save(){
   const date=$("eDate").value||todayISO();
   const pilot=$("ePilot").value.trim(), client=$("eClient").value.trim();
-  const state=$("eState").value.trim(), city=$("eCity").value.trim(), defRate=num($("eRate").value);
+  const state=$("eState").value.trim(), district=$("eDistrict").value.trim(), city=$("eCity").value.trim(), defRate=num($("eRate").value);
   const recs=rows.filter(r=>String(r.farmer_name).trim()||num(r.acre)>0).map(r=>{
     const rate=num(r.rate)||defRate; const acre=num(r.acre);
     return { spray_date:date, pilot_name:pilot||null, client_name:client||null, farmer_name:r.farmer_name||null,
-      contact_no:r.contact_no||null, village:r.village||null, city:city||null, state:state||null,
+      contact_no:r.contact_no||null, village:r.village||null, city:city||null, state:state||null, district:district||null,
       chemical_company:r.chemical_company||null, crop:r.crop||null, acre:acre||null, rate:rate||null,
       amount:(acre*rate)||null, gps_image_present:!!r.gps, created_by:window.OPS.me.id };
   });
@@ -132,7 +136,7 @@ function importCSV(){
     if(!rows.length){ alert("No rows."); return; }
     const map={ "date":"spray_date","pilot name":"pilot_name","client name":"client_name","company name":"client_name",
       "farmer name":"farmer_name","contact no.":"contact_no","contact":"contact_no","village":"village","city":"city",
-      "state":"state","chemical company":"chemical_company","crop":"crop","acre":"acre","rate":"rate","amount":"amount",
+      "state":"state","district":"district","chemical company":"chemical_company","crop":"crop","acre":"acre","rate":"rate","amount":"amount",
       "invoice number":"invoice_number","payment status":"payment_status" };
     const recs=rows.map(r=>{ const o={created_by:window.OPS.me.id, gps_image_present:false};
       Object.keys(r).forEach(h=>{ const k=map[h.toLowerCase().trim()]; if(!k) return; let v=r[h];
