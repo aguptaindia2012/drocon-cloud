@@ -1384,3 +1384,4 @@ create unique index if not exists documents_entity_number_uniq
 -- ============================================================================
 alter table public.clients add column if not exists client_ref text;
 alter table public.clients add column if not exists district  text;
+alter table public.clients alter column name drop not null;
