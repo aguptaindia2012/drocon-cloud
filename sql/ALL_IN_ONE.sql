@@ -1,0 +1,1002 @@
+-- ============================================================================
+-- DroCon Cloud — ALL-IN-ONE setup script
+-- Paste this whole file into Supabase → SQL Editor → New query → RUN.
+-- It runs migrations 00→04 in order. Safe to re-run (idempotent guards).
+-- ============================================================================
+
+
+-- ####################################################################
+-- ## 00_schema_agreements.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Bharat Agreement Studio — Cloud Edition
+-- Database schema for Supabase (PostgreSQL)
+--
+-- HOW TO USE:
+--   1. Create a free project at https://supabase.com
+--   2. Open the project → SQL Editor → New query
+--   3. Paste this whole file and click RUN
+--   4. (Auth → Providers → Email) For quick testing, turn OFF "Confirm email"
+--      so new sign-ups are logged in immediately.
+--
+-- This sets up: profiles (with roles), agreements (with status workflow),
+-- shared template overrides, and an audit log — all protected by Row Level
+-- Security so the rules are enforced by the database, not just the browser.
+-- ============================================================================
+
+-- ---------- enums ----------------------------------------------------------
+do $$ begin
+  create type user_role as enum ('admin','approver','drafter','viewer');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type agreement_status as enum ('draft','in_review','approved','rejected','executed');
+exception when duplicate_object then null; end $$;
+
+-- ---------- profiles (one row per user) ------------------------------------
+create table if not exists public.profiles (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  email       text,
+  full_name   text,
+  role        user_role not null default 'drafter',
+  created_at  timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+
+-- ---------- agreements -----------------------------------------------------
+create table if not exists public.agreements (
+  id                uuid primary key default gen_random_uuid(),
+  title             text not null,
+  counterparty      text,
+  category          text,                       -- client | vendor | module
+  template_key      text,
+  status            agreement_status not null default 'draft',
+  data              jsonb,                       -- full Studio draft JSON
+  created_by        uuid not null references public.profiles(id),
+  assigned_approver uuid references public.profiles(id),
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+alter table public.agreements enable row level security;
+create index if not exists agreements_status_idx on public.agreements(status);
+create index if not exists agreements_creator_idx on public.agreements(created_by);
+
+-- ---------- shared template overrides (permanent in-app template edits) -----
+create table if not exists public.template_overrides (
+  template_key text primary key,
+  clauses      jsonb not null,
+  updated_by   uuid references public.profiles(id),
+  updated_at   timestamptz not null default now()
+);
+alter table public.template_overrides enable row level security;
+
+-- ---------- audit log ------------------------------------------------------
+create table if not exists public.audit_log (
+  id          bigint generated always as identity primary key,
+  actor       uuid references public.profiles(id),
+  action      text not null,                    -- created | submitted | approved | rejected | executed | edited | role_changed | template_saved
+  entity      text not null,                    -- agreement | template | profile
+  entity_id   text,
+  note        text,
+  created_at  timestamptz not null default now()
+);
+alter table public.audit_log enable row level security;
+create index if not exists audit_created_idx on public.audit_log(created_at desc);
+
+-- ============================================================================
+-- Helper functions (SECURITY DEFINER so they can read profiles without
+-- tripping the profiles RLS — this avoids policy recursion).
+-- ============================================================================
+create or replace function public.my_role()
+returns user_role language sql stable security definer set search_path = public as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
+create or replace function public.has_role(roles user_role[])
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = any(roles));
+$$;
+
+-- ============================================================================
+-- New-user bootstrap: create a profile automatically. The FIRST user to sign
+-- up becomes 'admin'; everyone after that starts as 'drafter'.
+-- ============================================================================
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  is_first boolean;
+begin
+  select count(*) = 0 into is_first from public.profiles;
+  insert into public.profiles (id, email, full_name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email,'@',1)),
+    case when is_first then 'admin'::user_role else 'drafter'::user_role end
+  );
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- keep updated_at fresh on agreements
+create or replace function public.touch_updated_at()
+returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end $$;
+
+drop trigger if exists agreements_touch on public.agreements;
+create trigger agreements_touch before update on public.agreements
+  for each row execute function public.touch_updated_at();
+
+-- ============================================================================
+-- Admin-only RPC to change a user's role (avoids self-privilege-escalation).
+-- ============================================================================
+create or replace function public.admin_set_role(target uuid, new_role user_role)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_role(array['admin']::user_role[]) then
+    raise exception 'Only admins can change roles';
+  end if;
+  update public.profiles set role = new_role where id = target;
+  insert into public.audit_log(actor, action, entity, entity_id, note)
+  values (auth.uid(), 'role_changed', 'profile', target::text, 'role set to '||new_role);
+end $$;
+
+-- ============================================================================
+-- ROW LEVEL SECURITY POLICIES
+-- ============================================================================
+
+-- profiles -------------------------------------------------------------------
+drop policy if exists profiles_read on public.profiles;
+create policy profiles_read on public.profiles
+  for select to authenticated using (true);
+
+-- a user may edit their OWN profile but NOT change their own role
+drop policy if exists profiles_update_self on public.profiles;
+create policy profiles_update_self on public.profiles
+  for update to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid() and role = public.my_role());
+
+-- admins may update any profile
+drop policy if exists profiles_update_admin on public.profiles;
+create policy profiles_update_admin on public.profiles
+  for update to authenticated
+  using (public.has_role(array['admin']::user_role[]));
+
+-- agreements -----------------------------------------------------------------
+-- whole team can see agreements (small-team model; tighten later if needed)
+drop policy if exists agreements_read on public.agreements;
+create policy agreements_read on public.agreements
+  for select to authenticated using (true);
+
+drop policy if exists agreements_insert on public.agreements;
+create policy agreements_insert on public.agreements
+  for insert to authenticated
+  with check (created_by = auth.uid());
+
+-- owner can update their own agreement…
+drop policy if exists agreements_update_owner on public.agreements;
+create policy agreements_update_owner on public.agreements
+  for update to authenticated
+  using (created_by = auth.uid());
+
+-- …and approvers/admins can update any (e.g. to approve / reject / execute)
+drop policy if exists agreements_update_approver on public.agreements;
+create policy agreements_update_approver on public.agreements
+  for update to authenticated
+  using (public.has_role(array['approver','admin']::user_role[]));
+
+-- owner may delete a draft; admins may delete anything
+drop policy if exists agreements_delete on public.agreements;
+create policy agreements_delete on public.agreements
+  for delete to authenticated
+  using (public.has_role(array['admin']::user_role[]) or created_by = auth.uid());
+
+-- template_overrides ---------------------------------------------------------
+drop policy if exists tmpl_read on public.template_overrides;
+create policy tmpl_read on public.template_overrides
+  for select to authenticated using (true);
+
+drop policy if exists tmpl_write on public.template_overrides;
+create policy tmpl_write on public.template_overrides
+  for all to authenticated
+  using (public.has_role(array['admin','approver']::user_role[]))
+  with check (public.has_role(array['admin','approver']::user_role[]));
+
+-- audit_log ------------------------------------------------------------------
+drop policy if exists audit_read on public.audit_log;
+create policy audit_read on public.audit_log
+  for select to authenticated using (true);
+
+drop policy if exists audit_insert on public.audit_log;
+create policy audit_insert on public.audit_log
+  for insert to authenticated
+  with check (actor = auth.uid());
+
+-- ============================================================================
+-- Done. Notes:
+--  • Data is encrypted at rest by Supabase (AES-256) and in transit (TLS).
+--  • RLS above is enforced by Postgres itself, so the browser cannot bypass it.
+--  • The anon API key used by the front-end is SAFE to expose publicly — RLS
+--    is what protects the data, not the key.
+-- ============================================================================
+
+
+-- ####################################################################
+-- ## 01_migrate_v2.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Bharat Agreement Studio — Cloud, migration v2
+-- Adds: separation of duties, two-level approval, and notifications.
+-- Safe to run once on your existing project (SQL Editor → paste → Run).
+-- Click through the "destructive operations" notice — it only changes YOUR schema.
+-- ============================================================================
+
+-- 1) Allow a new "recommended" status. We switch status to TEXT (+ check) so we
+--    can evolve states without enum-migration friction.
+alter table public.agreements alter column status drop default;
+alter table public.agreements alter column status type text using status::text;
+alter table public.agreements alter column status set default 'draft';
+do $$ begin
+  alter table public.agreements add constraint agreements_status_chk
+    check (status in ('draft','in_review','recommended','approved','rejected','executed'));
+exception when duplicate_object then null; end $$;
+
+-- 2) Notifications -----------------------------------------------------------
+create table if not exists public.notifications (
+  id           bigint generated always as identity primary key,
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  agreement_id uuid references public.agreements(id) on delete cascade,
+  type         text,
+  message      text not null,
+  is_read      boolean not null default false,
+  created_at   timestamptz not null default now()
+);
+alter table public.notifications enable row level security;
+create index if not exists notif_user_idx on public.notifications(user_id, is_read, created_at desc);
+
+drop policy if exists notif_read on public.notifications;
+create policy notif_read on public.notifications
+  for select to authenticated using (user_id = auth.uid());
+
+drop policy if exists notif_update on public.notifications;
+create policy notif_update on public.notifications
+  for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+grant select, update on public.notifications to authenticated;
+
+-- helper: write a notification (used inside the SECURITY DEFINER RPCs below)
+create or replace function public.notify(p_user uuid, p_ag uuid, p_type text, p_msg text)
+returns void language sql security definer set search_path=public as $$
+  insert into public.notifications(user_id, agreement_id, type, message)
+  select p_user, p_ag, p_type, p_msg where p_user is not null;
+$$;
+
+-- ============================================================================
+-- 3) Workflow RPCs. All rules live here, enforced by the database.
+-- ============================================================================
+
+-- Submit a draft for review (preparer only)
+create or replace function public.submit_for_review(p_id uuid, p_note text default null)
+returns void language plpgsql security definer set search_path=public as $$
+declare ag public.agreements; r record;
+begin
+  select * into ag from public.agreements where id = p_id;
+  if ag.id is null then raise exception 'Agreement not found'; end if;
+  if ag.created_by <> auth.uid() then raise exception 'Only the preparer can submit this agreement'; end if;
+  if ag.status not in ('draft','rejected') then raise exception 'Only a draft can be submitted'; end if;
+
+  update public.agreements set status='in_review' where id=p_id;
+  insert into public.audit_log(actor,action,entity,entity_id,note)
+    values (auth.uid(),'submitted','agreement',p_id::text, coalesce(p_note,'Submitted for review'));
+
+  -- notify the assigned approver, or (if none) every approver/admin
+  if ag.assigned_approver is not null then
+    perform public.notify(ag.assigned_approver, p_id, 'review', 'An agreement "'||ag.title||'" is awaiting your review.');
+  else
+    for r in select id from public.profiles where role in ('approver','admin') and id <> auth.uid() loop
+      perform public.notify(r.id, p_id, 'review', 'An agreement "'||ag.title||'" is awaiting review.');
+    end loop;
+  end if;
+end $$;
+
+-- Approve. Admin = final approval. Non-admin approver = "recommend" (needs admin).
+create or replace function public.approve_agreement(p_id uuid, p_note text default null)
+returns void language plpgsql security definer set search_path=public as $$
+declare ag public.agreements; v_role user_role; r record;
+begin
+  select * into ag from public.agreements where id=p_id;
+  if ag.id is null then raise exception 'Agreement not found'; end if;
+  v_role := public.my_role();
+  if v_role not in ('approver','admin') then raise exception 'You are not authorised to approve'; end if;
+  -- separation of duties: a preparer cannot approve their own work unless they are an admin
+  if ag.created_by = auth.uid() and v_role <> 'admin' then
+    raise exception 'The preparer cannot approve their own agreement';
+  end if;
+
+  if v_role = 'admin' and ag.status in ('in_review','recommended') then
+    update public.agreements set status='approved' where id=p_id;
+    insert into public.audit_log(actor,action,entity,entity_id,note)
+      values (auth.uid(),'approved','agreement',p_id::text, coalesce(p_note,'Approved (final)'));
+    perform public.notify(ag.created_by, p_id, 'approved', 'Your agreement "'||ag.title||'" has been approved.');
+    -- also tell any approver who recommended it
+    for r in select distinct actor from public.audit_log where entity='agreement' and entity_id=p_id::text and action='recommended' loop
+      perform public.notify(r.actor, p_id, 'approved', 'The agreement "'||ag.title||'" you reviewed has been approved by an admin.');
+    end loop;
+
+  elsif v_role = 'approver' and ag.status = 'in_review' then
+    update public.agreements set status='recommended' where id=p_id;
+    insert into public.audit_log(actor,action,entity,entity_id,note)
+      values (auth.uid(),'recommended','agreement',p_id::text, coalesce(p_note,'Recommended — awaiting admin approval'));
+    -- notify all admins (they must finalise) and the preparer (status update)
+    for r in select id from public.profiles where role='admin' loop
+      perform public.notify(r.id, p_id, 'final_needed', 'Agreement "'||ag.title||'" was recommended and needs your final approval.');
+    end loop;
+    perform public.notify(ag.created_by, p_id, 'recommended', 'Your agreement "'||ag.title||'" was reviewed and recommended; awaiting admin approval.');
+
+  elsif v_role = 'approver' and ag.status = 'recommended' then
+    raise exception 'Already recommended — awaiting an admin for final approval';
+  else
+    raise exception 'Cannot approve from the current status (%).', ag.status;
+  end if;
+end $$;
+
+-- Reject (approver/admin; not your own work unless admin)
+create or replace function public.reject_agreement(p_id uuid, p_note text default null)
+returns void language plpgsql security definer set search_path=public as $$
+declare ag public.agreements; v_role user_role; r record;
+begin
+  select * into ag from public.agreements where id=p_id;
+  if ag.id is null then raise exception 'Agreement not found'; end if;
+  v_role := public.my_role();
+  if v_role not in ('approver','admin') then raise exception 'You are not authorised to reject'; end if;
+  if ag.created_by = auth.uid() and v_role <> 'admin' then raise exception 'The preparer cannot reject their own agreement'; end if;
+  if ag.status not in ('in_review','recommended') then raise exception 'Only an item under review can be rejected'; end if;
+
+  update public.agreements set status='rejected' where id=p_id;
+  insert into public.audit_log(actor,action,entity,entity_id,note)
+    values (auth.uid(),'rejected','agreement',p_id::text, coalesce(p_note,'Rejected'));
+  perform public.notify(ag.created_by, p_id, 'rejected', 'Your agreement "'||ag.title||'" was returned with changes requested.'||case when p_note is not null then ' Note: '||p_note else '' end);
+  for r in select distinct actor from public.audit_log where entity='agreement' and entity_id=p_id::text and action='recommended' loop
+    perform public.notify(r.actor, p_id, 'rejected', 'The agreement "'||ag.title||'" you recommended was rejected.');
+  end loop;
+end $$;
+
+-- Mark executed (signed) — approver/admin, after final approval
+create or replace function public.mark_executed(p_id uuid, p_note text default null)
+returns void language plpgsql security definer set search_path=public as $$
+declare ag public.agreements; v_role user_role;
+begin
+  select * into ag from public.agreements where id=p_id;
+  v_role := public.my_role();
+  if v_role not in ('approver','admin') then raise exception 'Not authorised'; end if;
+  if ag.status <> 'approved' then raise exception 'Only an approved agreement can be marked executed'; end if;
+  update public.agreements set status='executed' where id=p_id;
+  insert into public.audit_log(actor,action,entity,entity_id,note)
+    values (auth.uid(),'executed','agreement',p_id::text, coalesce(p_note,'Marked executed (signed)'));
+  perform public.notify(ag.created_by, p_id, 'executed', 'Your agreement "'||ag.title||'" has been marked executed.');
+end $$;
+
+grant execute on function public.submit_for_review(uuid,text) to authenticated;
+grant execute on function public.approve_agreement(uuid,text) to authenticated;
+grant execute on function public.reject_agreement(uuid,text) to authenticated;
+grant execute on function public.mark_executed(uuid,text) to authenticated;
+grant execute on function public.notify(uuid,uuid,text,text) to authenticated;
+
+-- ============================================================================
+-- Done. Statuses now flow:
+--   draft → in_review → (recommended) → approved → executed
+--                         ↑ non-admin approver        ↑ admin only
+--   any review step → rejected → back to draft owner
+-- Separation of duties and "non-admin approvals need an admin" are enforced above.
+-- ============================================================================
+
+
+-- ####################################################################
+-- ## 02_migrate_v3_visibility.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Bharat Agreement Studio — Cloud, migration v3 (visibility)
+-- Restricts who can SEE agreements:
+--   • a drafter/viewer sees only agreements they created or are assigned to approve
+--   • approvers and admins see everything (so they can review)
+-- Run once in Supabase → SQL Editor → New query → paste → Run.
+-- ============================================================================
+
+drop policy if exists agreements_read on public.agreements;
+
+create policy agreements_read on public.agreements
+  for select to authenticated
+  using (
+    created_by = auth.uid()
+    or assigned_approver = auth.uid()
+    or public.has_role(array['approver','admin']::user_role[])
+  );
+
+-- Note: the INSERT/UPDATE/DELETE policies are unchanged. This only affects
+-- which rows each person can read. To go back to full shared visibility, run:
+--   drop policy if exists agreements_read on public.agreements;
+--   create policy agreements_read on public.agreements
+--     for select to authenticated using (true);
+
+
+-- ####################################################################
+-- ## 03_migrate_v4_ops.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Cloud — Operations Suite (v4)
+-- Additive migration: registries, catalogues, inventory, documents, payments,
+-- BOM designs, field trackers, potential orders, and per-tool permissions.
+--
+-- HOW TO USE:
+--   Run AFTER 00_schema_agreements.sql, 01_migrate_v2.sql, 02_migrate_v3_visibility.sql.
+--   Open Supabase → SQL Editor → paste this whole file → RUN.
+--
+-- RLS model (small-team): every authenticated user can READ all rows; any
+-- authenticated user can INSERT/UPDATE (the front-end gates *which tools* they
+-- see via app_permissions); only the creator or an admin can DELETE. Tighten
+-- later if needed. Helper functions my_role()/has_role() come from the base schema.
+-- ============================================================================
+
+-- ---------- generic helpers -------------------------------------------------
+create or replace function public.touch_updated_at_ops()
+returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end $$;
+
+-- Convenience: standard team-read + team-write + owner/admin-delete policy set.
+-- (Written out per table below for clarity / so each can be tuned independently.)
+
+-- ============================================================================
+-- 1. CLIENTS  (pulled into Invoice / Credit Note)
+-- ============================================================================
+create table if not exists public.clients (
+  id             uuid primary key default gen_random_uuid(),
+  name           text not null,           -- contact / display name
+  firm_name      text,                    -- Firm/Buyer Name on the invoice
+  gstin          text,                    -- GSTIN/UIN (or 'URP')
+  address        text,
+  city           text,
+  state          text,
+  state_code     text,
+  pincode        text,
+  mobile         text,
+  email          text,
+  contact_person text,
+  client_type    text,                    -- Key Client | Normal | ...
+  notes          text,
+  created_by     uuid references public.profiles(id),
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 2. VENDORS  (pulled into Purchase Order) — replicates the client tracker
+-- ============================================================================
+create table if not exists public.vendors (
+  id             uuid primary key default gen_random_uuid(),
+  name           text not null,
+  firm_name      text,
+  gstin          text,
+  address        text,
+  city           text,
+  state          text,
+  state_code     text,
+  pincode        text,
+  country        text default 'India',    -- supports overseas (e.g. China) vendors
+  currency       text default 'INR',
+  mobile         text,
+  email          text,
+  contact_person text,
+  default_terms  text,                     -- default PO terms for this vendor
+  notes          text,
+  created_by     uuid references public.profiles(id),
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 3. AUTHORIZED PARTNERS (pilots / drone-owning companies) — pool + search
+-- ============================================================================
+create table if not exists public.authorized_partners (
+  id                uuid primary key default gen_random_uuid(),
+  name              text not null,
+  company           text,
+  phone             text,
+  email             text,
+  home_state        text,
+  home_district     text,
+  home_lat          double precision,
+  home_lng          double precision,
+  drone_model       text,
+  battery           text,
+  capacity_acres_day numeric,
+  rates             jsonb,                 -- {short:400, tall:500, ...}
+  source            text default 'manual', -- 'manual' | 'agreement'
+  agreement_id      uuid references public.agreements(id),
+  notes             text,
+  created_by        uuid references public.profiles(id),
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 4. SERVICE CATALOGUE  (line-item source for services)
+-- ============================================================================
+create table if not exists public.service_catalogue (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,
+  hsn_sac       text,
+  unit          text default 'Acre',
+  default_rate  numeric,
+  gst_rate      numeric default 0,         -- percent
+  description   text,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 5. SPARE CATALOGUE  (line-item source for goods) + INVENTORY
+-- ============================================================================
+create table if not exists public.spare_catalogue (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,
+  hsn_code      text,
+  unit          text,
+  rate_excl_gst numeric,
+  gst_rate      numeric default 5,
+  description   text,
+  current_stock numeric default 0,         -- denormalised running stock
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create table if not exists public.inventory_moves (
+  id          bigint generated always as identity primary key,
+  spare_id    uuid references public.spare_catalogue(id) on delete cascade,
+  qty         numeric not null,            -- positive number
+  direction   text not null check (direction in ('in','out')),
+  reason      text,                        -- purchase | sale | adjustment | ...
+  ref_doc_id  uuid,                         -- FK to documents added after that table exists
+  moved_on    date not null default current_date,
+  created_by  uuid references public.profiles(id),
+  created_at  timestamptz not null default now()
+);
+
+-- keep current_stock in sync with moves
+create or replace function public.apply_inventory_move()
+returns trigger language plpgsql as $$
+begin
+  if (tg_op = 'INSERT') then
+    update public.spare_catalogue
+      set current_stock = coalesce(current_stock,0) + (case when new.direction='in' then new.qty else -new.qty end),
+          updated_at = now()
+      where id = new.spare_id;
+  elsif (tg_op = 'DELETE') then
+    update public.spare_catalogue
+      set current_stock = coalesce(current_stock,0) - (case when old.direction='in' then old.qty else -old.qty end),
+          updated_at = now()
+      where id = old.spare_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists inv_move_apply on public.inventory_moves;
+create trigger inv_move_apply after insert or delete on public.inventory_moves
+  for each row execute function public.apply_inventory_move();
+
+-- ============================================================================
+-- 6. DOCUMENTS  (quotation | invoice | credit_note | purchase_order)
+-- ============================================================================
+create table if not exists public.documents (
+  id             uuid primary key default gen_random_uuid(),
+  doc_type       text not null check (doc_type in ('quotation','invoice','credit_note','purchase_order')),
+  number         text not null,            -- e.g. DCB/26-27/0023 or DCB26-270002
+  fiscal_year    text,                     -- e.g. 26-27
+  seq            integer,                  -- numeric part for next-number logic
+  doc_date       date not null default current_date,
+  party_kind     text,                     -- client | vendor | none
+  party_id       uuid,                     -- clients.id or vendors.id (no FK: polymorphic)
+  party_snapshot jsonb,                    -- frozen buyer/supplier block at issue time
+  line_items     jsonb not null default '[]',
+  totals         jsonb,                    -- {sub, gst, total, in_words}
+  terms          jsonb,                    -- {payment, delivery, po_terms[]...}
+  status         text not null default 'draft', -- draft|issued|paid|partial|cancelled
+  related_doc_id uuid references public.documents(id), -- credit_note -> invoice
+  data           jsonb,                    -- full editable draft (for re-open + JSON)
+  created_by     uuid references public.profiles(id),
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists documents_type_idx on public.documents(doc_type);
+create index if not exists documents_party_idx on public.documents(party_id);
+create unique index if not exists documents_number_uniq on public.documents(doc_type, number);
+
+drop trigger if exists documents_touch on public.documents;
+create trigger documents_touch before update on public.documents
+  for each row execute function public.touch_updated_at_ops();
+
+-- now that documents exists, link inventory moves to source documents
+do $$ begin
+  alter table public.inventory_moves
+    add constraint inventory_moves_ref_doc_fk
+    foreign key (ref_doc_id) references public.documents(id) on delete set null;
+exception when duplicate_object then null; end $$;
+
+-- Next-number suggestion. Returns the next sequence integer for a doc_type+FY.
+create or replace function public.next_doc_seq(p_doc_type text, p_fy text)
+returns integer language sql stable security definer set search_path = public as $$
+  select coalesce(max(seq),0) + 1
+  from public.documents
+  where doc_type = p_doc_type and coalesce(fiscal_year,'') = coalesce(p_fy,'');
+$$;
+
+-- ============================================================================
+-- 7. PAYMENTS (receivables) — against invoices
+-- ============================================================================
+create table if not exists public.payments (
+  id          bigint generated always as identity primary key,
+  document_id uuid references public.documents(id) on delete cascade,
+  amount      numeric not null,
+  paid_on     date not null default current_date,
+  mode        text,                         -- UPI | NEFT | Cash | Cheque
+  note        text,
+  created_by  uuid references public.profiles(id),
+  created_at  timestamptz not null default now()
+);
+create index if not exists payments_doc_idx on public.payments(document_id);
+
+-- ============================================================================
+-- 8. BOM DESIGNS (Drone Quotations Builder)
+-- ============================================================================
+create table if not exists public.bom_designs (
+  id             uuid primary key default gen_random_uuid(),
+  name           text not null,
+  description    text,
+  parts          jsonb not null default '[]',  -- [{part, qty, rate_excl, gst_rate}]
+  overhead_pct   numeric default 15,
+  profit_pct     numeric default 10,
+  commission_pct numeric default 2,
+  created_by     uuid references public.profiles(id),
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 9. FIELD TRACKERS (Phase 2) — created now so the schema is stable
+-- ============================================================================
+create table if not exists public.spray_locations (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  state       text,
+  district    text,
+  client_id   uuid references public.clients(id),
+  rates       jsonb,                         -- {default:300, ...} multiple rates ok
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.acre_entries (
+  id          bigint generated always as identity primary key,
+  entry_date  date not null,
+  location_id uuid references public.spray_locations(id),
+  pilot_id    uuid references public.authorized_partners(id),
+  pilot_name  text,                           -- denormalised for legacy import
+  acres       numeric not null default 0,
+  rate        numeric,
+  amount      numeric,
+  crop        text,
+  created_by  uuid references public.profiles(id),
+  created_at  timestamptz not null default now()
+);
+create index if not exists acre_date_idx on public.acre_entries(entry_date);
+
+create table if not exists public.farmer_sprays (
+  id               bigint generated always as identity primary key,
+  spray_date       date not null,
+  pilot_name       text,
+  client_name      text,
+  farmer_name      text,
+  contact_no       text,
+  village          text,
+  city             text,
+  state            text,
+  chemical_company text,
+  crop             text,
+  acre             numeric,
+  rate             numeric,
+  amount           numeric,
+  gps_image_present boolean not null default false,
+  gps_image_url    text,
+  invoice_number   text,
+  payment_status   text,
+  created_by       uuid references public.profiles(id),
+  created_at       timestamptz not null default now()
+);
+create index if not exists farmer_date_idx on public.farmer_sprays(spray_date);
+
+-- ============================================================================
+-- 10. POTENTIAL ORDERS (Order Tracker pool)
+-- ============================================================================
+create table if not exists public.potential_orders (
+  id               uuid primary key default gen_random_uuid(),
+  client_name      text not null,
+  client_phone     text,
+  referral_agent   text,
+  status           text,                      -- New Client | Work Completed | ...
+  state            text,
+  city             text,
+  location         text,
+  crop             text,
+  start_month      text,
+  end_month        text,
+  start_date       date,                      -- parsed for the 15-day follow-up
+  gross_rate       numeric,
+  commission       numeric,
+  avg_daily_order  numeric,
+  client_pref      text,
+  order_pref       text,
+  notes            text,
+  created_by       uuid references public.profiles(id),
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+-- ============================================================================
+-- 11. PER-TOOL PERMISSIONS
+-- ============================================================================
+create table if not exists public.app_permissions (
+  user_id    uuid references public.profiles(id) on delete cascade,
+  tool_key   text not null,
+  granted_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  primary key (user_id, tool_key)
+);
+
+create or replace function public.admin_set_permission(target uuid, p_tool text, p_grant boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_role(array['admin']::user_role[]) then
+    raise exception 'Only admins can change tool access';
+  end if;
+  if p_grant then
+    insert into public.app_permissions(user_id, tool_key, granted_by)
+    values (target, p_tool, auth.uid())
+    on conflict (user_id, tool_key) do nothing;
+  else
+    delete from public.app_permissions where user_id = target and tool_key = p_tool;
+  end if;
+end $$;
+
+-- ============================================================================
+-- updated_at triggers for the master tables
+-- ============================================================================
+do $$
+declare t text;
+begin
+  foreach t in array array['clients','vendors','authorized_partners','service_catalogue',
+                           'spare_catalogue','bom_designs','potential_orders']
+  loop
+    execute format('drop trigger if exists %I_touch on public.%I;', t, t);
+    execute format('create trigger %I_touch before update on public.%I
+                    for each row execute function public.touch_updated_at_ops();', t, t);
+  end loop;
+end $$;
+
+-- ============================================================================
+-- ROW LEVEL SECURITY — team-read, team-write, owner/admin-delete
+-- ============================================================================
+do $$
+declare t text;
+begin
+  foreach t in array array['clients','vendors','authorized_partners','service_catalogue',
+                           'spare_catalogue','inventory_moves','documents','payments',
+                           'bom_designs','spray_locations','acre_entries','farmer_sprays',
+                           'potential_orders']
+  loop
+    execute format('alter table public.%I enable row level security;', t);
+
+    execute format('drop policy if exists %I_read on public.%I;', t, t);
+    execute format('create policy %I_read on public.%I for select to authenticated using (true);', t, t);
+
+    execute format('drop policy if exists %I_insert on public.%I;', t, t);
+    execute format('create policy %I_insert on public.%I for insert to authenticated with check (true);', t, t);
+
+    execute format('drop policy if exists %I_update on public.%I;', t, t);
+    execute format('create policy %I_update on public.%I for update to authenticated using (true);', t, t);
+  end loop;
+end $$;
+
+-- deletes: creator or admin (tables that carry created_by)
+do $$
+declare t text;
+begin
+  foreach t in array array['clients','vendors','authorized_partners','documents',
+                           'bom_designs','potential_orders','acre_entries','farmer_sprays']
+  loop
+    execute format('drop policy if exists %I_delete on public.%I;', t, t);
+    execute format('create policy %I_delete on public.%I for delete to authenticated
+                    using (public.has_role(array[''admin'']::user_role[]) or created_by = auth.uid());', t, t);
+  end loop;
+  -- catalogues / inventory / payments / locations: admin or approver may delete
+  foreach t in array array['service_catalogue','spare_catalogue','inventory_moves','payments','spray_locations']
+  loop
+    execute format('drop policy if exists %I_delete on public.%I;', t, t);
+    execute format('create policy %I_delete on public.%I for delete to authenticated
+                    using (public.has_role(array[''admin'',''approver'']::user_role[]));', t, t);
+  end loop;
+end $$;
+
+-- app_permissions: a user reads their own; admins read/write all
+alter table public.app_permissions enable row level security;
+drop policy if exists appperm_read_self on public.app_permissions;
+create policy appperm_read_self on public.app_permissions
+  for select to authenticated using (user_id = auth.uid() or public.has_role(array['admin']::user_role[]));
+drop policy if exists appperm_admin_all on public.app_permissions;
+create policy appperm_admin_all on public.app_permissions
+  for all to authenticated
+  using (public.has_role(array['admin']::user_role[]))
+  with check (public.has_role(array['admin']::user_role[]));
+
+-- ============================================================================
+-- Done. Run seed_catalogues.sql next to load the spare + service catalogues.
+-- ============================================================================
+
+
+-- ####################################################################
+-- ## 04_seed_catalogues.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Cloud — seed data for Service & Spare catalogues + a default BOM.
+-- Safe to re-run: guarded by NOT EXISTS on name.
+-- Run AFTER 03_migrate_v4_ops.sql.
+-- ============================================================================
+
+-- ---------- SERVICE CATALOGUE ----------------------------------------------
+insert into public.service_catalogue (name, hsn_sac, unit, default_rate, gst_rate, description)
+select v.name, v.hsn_sac, v.unit, v.rate, v.gst, v.descr
+from (values
+  ('Aerial Spraying - Agriculture Services (Short Crop)', '9986', 'Acre', 400, 0, 'Standard rate for short-crop aerial spraying'),
+  ('Aerial Spraying - Agriculture Services (Tall Crop)',  '9986', 'Acre', 500, 0, 'Standard rate for tall-crop aerial spraying'),
+  ('Aerial Spraying - Agriculture Services (Custom)',     '9986', 'Acre', null, 0, 'Aerial spraying at a location-specific negotiated rate'),
+  ('Drone Demonstration / Training',                      '9986', 'Day',  null, 18, 'On-site demonstration or pilot training')
+) as v(name, hsn_sac, unit, rate, gst, descr)
+where not exists (select 1 from public.service_catalogue s where s.name = v.name);
+
+-- ---------- SPARE CATALOGUE -------------------------------------------------
+insert into public.spare_catalogue (name, hsn_code, unit, rate_excl_gst, gst_rate, description, current_stock)
+select v.name, v.hsn, v.unit, v.rate, v.gst, v.descr, v.stock
+from (values
+  ('Propeller 2480 CW',                '88071000', 'Set',   null, 5, null, 2),
+  ('Propeller 2480 CCW',               '88071000', 'Set',   null, 5, null, 2),
+  ('Propeller 2388 CW',                '88071000', 'Set',   null, 5, null, 1),
+  ('Propeller 2388 CCW',               '88071000', 'Set',   null, 5, null, 0),
+  ('Propeller 3011 CW',                '88071000', 'Set',   null, 5, null, 1),
+  ('Propeller 3011 CCW',               '88071000', 'Set',   null, 5, null, 0),
+  ('Hub 3011',                         null,        'Unit',  null, 5, null, 2),
+  ('Horizontal Landing Gear 610',      '88073020', 'Set',   null, 5, null, 1),
+  ('Vertical Landing Gear',            '88073020', 'Set',   null, 5, null, 0),
+  ('Landing Gear Bar 610',             '88073020', 'Unit',  null, 5, null, 2),
+  ('Landing Gear Brace 610',           '88073020', 'Unit',  null, 5, null, 4),
+  ('Landing Gear Bar 616',             '88073020', 'Unit',  null, 5, null, 3),
+  ('Landing Gear Brace 616',           '88073020', 'Unit',  null, 5, null, 8),
+  ('Arm Joint',                        '88073020', 'Unit',  null, 5, null, 1),
+  ('Landing Gear Mount',               '88073020', 'Unit',  null, 5, null, 16),
+  ('Landing Gear T-Connector',         '88073020', 'Unit',  null, 5, null, 12),
+  ('Tank Mount',                       '88073020', 'Unit',  null, 5, null, 14),
+  ('Rubber Sponge (Landing Gear)',     '88073020', 'Unit',  null, 5, null, 12),
+  ('Nozzle Mount',                     null,        'Set',   null, 5, null, 1),
+  ('Pushin Fitting - L Connector',     null,        'Unit',  null, 18, '12-10mm', 50),
+  ('Pushin Fitting - T Connector (8-8-12)', null,   'Unit',  null, 18, '8-8-12mm', 50),
+  ('Pushin Fitting - T Connector (8-8-10)', null,   'Unit',  null, 18, '8-8-10mm', 53),
+  ('Pushin Fitting - T Connector (8-8-8)',  null,   'Unit',  null, 18, '8-8-8mm', 51),
+  ('Pushin Fitting - S Connector',     null,        'Unit',  null, 18, '8-6mm', 50),
+  ('Polyurethane (PU) Pipe (12-8mm)',  null,        'Meter', null, 18, '12-8mm', 104),
+  ('Polyurethane (PU) Pipe (10-6mm)',  null,        'Meter', null, 18, '10-6mm', 103),
+  ('Polyurethane (PU) Pipe (8-5mm)',   null,        'Meter', null, 18, '8-5mm', 105),
+  ('Battery Plug Holder',              '88073000', 'Unit',  null, 5, null, 2),
+  ('Power Cable XT-90',                null,        'Unit',  null, 18, null, 1),
+  ('XT-90 Connector with Cap',         null,        'Piece', null, 18, null, 50),
+  ('XT-60 Connector',                  null,        'Piece', null, 18, null, 50),
+  -- New spare from the VAAYU 24000 advertisement (₹30,083.89 excl GST, 18% GST)
+  ('Battery VAAYU 24000',              '85076000', 'Unit',  30083.89, 18, 'VAAYU 24000mAh 21.6V agriculture drone battery, BIS IS 16046 (Part 2), 400 cycles', 0)
+) as v(name, hsn, unit, rate, gst, descr, stock)
+where not exists (select 1 from public.spare_catalogue s where s.name = v.name);
+
+-- ---------- DEFAULT BOM DESIGN (from the Drone Quotations Builder) ----------
+insert into public.bom_designs (name, description, parts, overhead_pct, profit_pct, commission_pct)
+select 'Standard Agri Drone (No Sensor) — 1 Set Battery',
+       'Default BOM seeded from the Drone Quotations Builder. Rates are standard; edit per design.',
+       '[
+         {"part":"Frame","qty":1,"rate_excl":33999,"gst_rate":5},
+         {"part":"Flight Controller","qty":1,"rate_excl":30499,"gst_rate":5},
+         {"part":"Remote controller","qty":1,"rate_excl":17500,"gst_rate":5},
+         {"part":"Motor","qty":6,"rate_excl":8950,"gst_rate":5},
+         {"part":"Battery","qty":0,"rate_excl":27874,"gst_rate":18},
+         {"part":"Propellor","qty":6,"rate_excl":600,"gst_rate":5},
+         {"part":"Propellor Hub","qty":6,"rate_excl":402,"gst_rate":5},
+         {"part":"Centrifugal Nozzle","qty":0,"rate_excl":5999,"gst_rate":5},
+         {"part":"Nozzle","qty":4,"rate_excl":989,"gst_rate":5},
+         {"part":"Spraying Kit","qty":1,"rate_excl":891.45,"gst_rate":5},
+         {"part":"Terrain Radar","qty":0,"rate_excl":14999,"gst_rate":5},
+         {"part":"Optical Radar","qty":0,"rate_excl":15299,"gst_rate":5},
+         {"part":"CAN hub","qty":0,"rate_excl":6500,"gst_rate":5},
+         {"part":"Pump","qty":1,"rate_excl":5000,"gst_rate":5},
+         {"part":"Charger","qty":0,"rate_excl":17500,"gst_rate":18}
+       ]'::jsonb,
+       15, 10, 2
+where not exists (select 1 from public.bom_designs b where b.name = 'Standard Agri Drone (No Sensor) — 1 Set Battery');
+
+
+-- ####################################################################
+-- ## 05_grant_privileges.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Cloud — API role privileges
+-- Some Supabase projects do NOT auto-grant table privileges to the API roles
+-- (anon / authenticated). Without these GRANTs, PostgREST returns
+-- "42501 permission denied for table ..." even though RLS policies exist.
+-- These grants give the roles table access; ROW-LEVEL SECURITY still governs
+-- exactly which rows each user can see/change.
+-- Safe to run multiple times. Run this once on an existing project; it is also
+-- included at the end of ALL_IN_ONE.sql for fresh setups.
+-- ============================================================================
+
+grant usage on schema public to anon, authenticated;
+
+-- existing objects
+grant select, insert, update, delete on all tables    in schema public to authenticated;
+grant usage,  select                  on all sequences in schema public to authenticated;
+grant execute                         on all functions in schema public to anon, authenticated;
+
+-- future objects (so later migrations inherit the grants automatically)
+alter default privileges in schema public grant select, insert, update, delete on tables    to authenticated;
+alter default privileges in schema public grant usage,  select                  on sequences to authenticated;
+alter default privileges in schema public grant execute                         on functions to anon, authenticated;
+
+-- ============================================================================
+-- After running this: in the app, click the role pill (top-right) to refresh,
+-- or sign out and back in. The first user you created is the admin.
+-- ============================================================================
+
+-- ####################################################################
+-- ## 06_restrict_signup_domains.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Cloud — restrict self sign-up to approved company domains.
+-- Replaces handle_new_user so any sign-up from a non-approved email domain is
+-- rejected (the auth user creation rolls back). Edit the domain list below to
+-- add/remove allowed domains. Keep the first-user-becomes-admin behaviour.
+-- ============================================================================
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  is_first boolean;
+  email_domain text := lower(split_part(new.email,'@',2));
+  allowed text[] := array['droconbharat.com','ibsideas.com'];   -- <- edit here
+begin
+  if not (email_domain = any(allowed)) then
+    raise exception 'Sign-ups are restricted to %  email addresses.', array_to_string(allowed, ' or @');
+  end if;
+
+  select count(*) = 0 into is_first from public.profiles;
+  insert into public.profiles (id, email, full_name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email,'@',1)),
+    case when is_first then 'admin'::user_role else 'drafter'::user_role end
+  );
+  return new;
+end $$;
+-- (Trigger on_auth_user_created from the base schema already calls this function.)

@@ -1,0 +1,9 @@
+# OS / editor junk
+Thumbs.db
+.DS_Store
+*~
+.vscode/
+
+# local-only helper (not needed by the hosted site)
+# (kept in repo for convenience; uncomment to exclude)
+# server.ps1

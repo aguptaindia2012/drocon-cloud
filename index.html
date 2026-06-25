@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DroCon Cloud — Operations Suite</title>
+<link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#599533">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DroCon Cloud">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+:root{
+  --green:#599533; --orange:#F48A1C; --blue:#0A6496; --charcoal:#282828;
+  --soft-green:#EEF5E9; --cream:#FFF4EC; --grey:#F5F5F5; --line:#e2e6df; --muted:#7a8071;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Lato,system-ui,Arial,sans-serif;color:var(--charcoal);background:#fbfcfa}
+.hidden{display:none !important}
+a{color:var(--blue)}
+.btn{font-family:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--charcoal);
+  border-radius:8px;padding:8px 14px;cursor:pointer}
+.btn:hover{border-color:#cdd3c8}
+.btn.green{background:var(--green);color:#fff;border-color:var(--green)}
+.btn.blue{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn.orange{background:var(--orange);color:#fff;border-color:var(--orange)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn.grey{background:var(--grey)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font-family:inherit;font-size:14px;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff}
+textarea{min-height:80px;resize:vertical}
+label{font-size:12px;font-weight:700;display:block;margin-bottom:4px}
+.field{margin-bottom:12px}
+.row{display:flex;gap:10px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.spacer{flex:1}
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 22px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+.topbar .accentsq{width:9px;height:9px;background:var(--orange);border-radius:2px}
+.brand b{color:var(--green);font-weight:900;letter-spacing:.3px}
+.brand span{display:block;font-size:10px;color:var(--orange);font-weight:700;text-transform:uppercase;letter-spacing:2px}
+/* top section bar */
+.sectionbar{display:flex;gap:6px;padding:8px 18px;background:var(--charcoal)}
+.sectionbar button{background:rgba(255,255,255,.08);border:none;color:#fff;opacity:.8;padding:8px 16px;font-weight:700;font-size:13px;border-radius:7px;cursor:pointer}
+.sectionbar button.active{background:var(--green);opacity:1}
+.sectionbar button:hover{opacity:1}
+.nav{display:flex;gap:4px;padding:0 18px;background:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.nav button{background:none;border:none;border-bottom:3px solid transparent;padding:11px 13px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
+.nav button.active{color:var(--green);border-bottom-color:var(--green)}
+.nav .soon{font-size:9px;background:var(--cream);color:var(--orange);padding:1px 5px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
+.wrap{max-width:1080px;margin:0 auto;padding:22px 18px 70px}
+h1{font-size:24px;margin:0 0 4px}
+h3{margin:0 0 8px}
+.eyebrow{color:var(--orange);font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:700}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.4px}
+.chip.draft,.chip.cancelled{background:#eee;color:#555}
+.chip.in_review,.chip.partial,.chip.issued{background:#fff0db;color:#9a5b00}
+.chip.recommended{background:#e7e0fb;color:#5b3da8}
+.chip.approved,.chip.paid{background:#e3f0d9;color:#3e6b20}
+.chip.rejected{background:#fbe0de;color:#a3322a}
+.chip.executed{background:#dce9f2;color:#0a6496}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--green);color:#fff;text-transform:uppercase;letter-spacing:.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+td.num,th.num{text-align:right}
+tr.clickable:hover{background:var(--soft-green);cursor:pointer}
+.callout{background:var(--soft-green);border-left:3px solid var(--green);padding:10px 12px;border-radius:6px;font-size:13px;margin-bottom:14px}
+.callout.warn{background:var(--cream);border-left-color:var(--orange)}
+.muted{color:var(--muted);font-size:12px}
+.authwrap{max-width:380px;margin:8vh auto;padding:26px;background:#fff;border:1px solid var(--line);border-radius:14px;border-top:5px solid var(--green)}
+.authwrap h1{font-size:20px}
+.err{color:#a3322a;font-size:13px;margin-top:8px;min-height:16px}
+.ok{color:var(--green)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fgrid.three{grid-template-columns:1fr 1fr 1fr}
+.fgrid .full{grid-column:1/-1}
+.evt{font-size:12px;padding:7px 0;border-bottom:1px dashed var(--line)}
+.evt b{color:var(--charcoal)}
+.pill-role{font-size:11px;background:var(--grey);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-weight:700}
+.stat{background:var(--soft-green);border-radius:10px;padding:12px 14px;min-width:120px}
+.stat .n{font-size:22px;font-weight:900;color:var(--green)}
+.stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
+.statrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.searchbar{margin:10px 0}
+.linetable input,.linetable select{padding:6px 7px;font-size:13px}
+.linetable td{padding:4px 5px}
+.x{cursor:pointer;color:#a3322a;font-weight:900;text-align:center}
+@media(max-width:640px){.fgrid,.fgrid.three{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- ============ AUTH ============ -->
+<div id="authView">
+  <div class="authwrap">
+    <div class="row" style="gap:8px;margin-bottom:14px">
+      <div class="accentsq" style="width:10px;height:10px;background:var(--orange);border-radius:2px"></div>
+      <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
+    </div>
+    <h1 id="authTitle">Sign in</h1>
+    <p class="muted" id="authSub">Use your work email to access the shared DroCon workspace.</p>
+    <div class="field hidden" id="auNameField"><label>Full name</label><input id="auName" placeholder="Your name"></div>
+    <div class="field"><label>Email</label><input id="auEmail" type="email" placeholder="you@droconbharat.com"></div>
+    <div class="field"><label>Password</label><input id="auPass" type="password" placeholder="••••••••"></div>
+    <button class="btn green" id="auGo" style="width:100%">Sign in</button>
+    <div class="err" id="auErr"></div>
+    <p class="muted" style="margin-top:14px">
+      <span id="auToggleText">New to the workspace?</span>
+      <a href="#" id="auToggle">Create an account</a>
+    </p>
+    <p class="muted" id="auConfigWarn" style="color:#a3322a"></p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appView" class="hidden">
+  <div class="topbar">
+    <div class="accentsq"></div>
+    <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
+    <div class="spacer"></div>
+    <div id="bell" style="position:relative;cursor:pointer;font-size:20px;user-select:none" title="Notifications">🔔<span id="bellCount" style="position:absolute;top:-6px;right:-8px;background:var(--orange);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;display:none"></span></div>
+    <span class="pill-role" id="meRole">—</span>
+    <span class="muted" id="meEmail"></span>
+    <button class="btn sm" id="btnSignOut">Sign out</button>
+  </div>
+  <div class="sectionbar" id="sectionBar"></div>
+  <div class="nav" id="nav"></div>
+  <div class="wrap" id="main"></div>
+</div>
+
+<input type="file" id="jsonImport" accept="application/json" class="hidden">
+<input type="file" id="csvImport" accept=".csv,text/csv" class="hidden">
+
+<div id="notifPanel" class="hidden" style="position:fixed;top:54px;right:14px;width:340px;max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.18);z-index:50">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)">
+    <b>Notifications</b><button class="btn sm" id="notifMark">Mark all read</button>
+  </div>
+  <div id="notifList" style="padding:6px 0"></div>
+</div>
+
+<!-- libraries -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="config.js"></script>
+<!-- app core + document engine + modules -->
+<script src="app.js"></script>
+<script src="logo.js"></script>
+<script src="docgen.js"></script>
+<script src="agreement.js"></script>
+<script src="modules/_shared.js"></script>
+<script src="modules/clients.js"></script>
+<script src="modules/vendors.js"></script>
+<script src="modules/catalogues.js"></script>
+<script src="modules/inventory.js"></script>
+<script src="modules/bom.js"></script>
+<script src="modules/billing.js"></script>
+<script src="modules/receivables.js"></script>
+<script src="modules/farmer.js"></script>
+<script src="modules/acre.js"></script>
+</body>
+</html>
