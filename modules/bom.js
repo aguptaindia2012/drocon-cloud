@@ -72,7 +72,9 @@ function render(){
         ${design.id?'<button class="btn sm" id="bDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
       </div>
       <div class="err" id="bErr"></div>
-    </div>`;
+    </div>
+    <div id="bApproval"></div>`;
+  if(design.id && window.OPS.approvals){ sb().from("bom_designs").select("*").eq("id",design.id).single().then(({data})=>{ if(data) window.OPS.approvals.bar("bom_designs", data, $("bApproval"), ()=>render()); }); }
   $("bBack").addEventListener("click",listView); $("bCancel").addEventListener("click",listView);
   renderParts(); renderSummary();
   ["bName","bDesc"].forEach(id=>$(id).addEventListener("input",()=>{ design.name=$("bName").value; design.description=$("bDesc").value; }));

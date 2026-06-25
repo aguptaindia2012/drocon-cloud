@@ -97,7 +97,9 @@ function makeRegistry(cfg){
           ${rec?'<button class="btn sm" id="rqDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
         </div>
         <div class="err" id="rqErr"></div>
-      </div>`;
+      </div>
+      <div id="rqApproval"></div>`;
+    if(cfg.approvable && rec && window.OPS.approvals){ window.OPS.approvals.bar(cfg.table, rec, $("rqApproval"), ()=>{ sb().from(cfg.table).select("*").eq("id",rec.id).single().then(({data})=>form(data||rec)); }); }
     $("rqBack").addEventListener("click",list);
     $("rqCancel").addEventListener("click",list);
     $("rqSave").addEventListener("click",async()=>{

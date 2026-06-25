@@ -32,6 +32,7 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
   { key:"agreement",  label:"Agreement" },
+  { key:"reviews",    label:"Review / Approvals" },
   { key:"order",      label:"Order Management" },
   { key:"finance",    label:"Finance" },
   { key:"trackers",   label:"Trackers" },
@@ -44,8 +45,9 @@ const TOOLS = [
   // Agreement (existing studio)
   { key:"agreements", section:"agreement", label:"Agreements",      gate:"all" },
   { key:"new",        section:"agreement", label:"New agreement",   gate:"all" },
-  { key:"approvals",  section:"agreement", label:"Approvals",       gate:"approver" },
   { key:"templates",  section:"agreement", label:"Shared templates",gate:"approver" },
+  // Review / Approvals — consolidated queue; everyone sees only their assigned items
+  { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
   // Order Management — pools + sales documents
   { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
   { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },

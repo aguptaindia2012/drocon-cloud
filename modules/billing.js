@@ -134,8 +134,10 @@ function editor(){
         ${D.id?'<button class="btn sm" id="dDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
       </div>
       <div class="err" id="dErr"></div>
-    </div>`;
+    </div>
+    <div id="dApproval"></div>`;
 
+  if(D.id && window.OPS.approvals){ sb().from("documents").select("*").eq("id",D.id).single().then(({data})=>{ if(data) window.OPS.approvals.bar("documents", data, $("dApproval"), ()=>editor()); }); }
   $("dBack").addEventListener("click",()=>listView(TYPE));
   $("dNum").addEventListener("input",()=>D.number=$("dNum").value);
   $("dDate").addEventListener("input",()=>D.doc_date=$("dDate").value);

@@ -7,7 +7,7 @@
 const { esc, money } = window.OPS.helpers;
 
 window.OPS.routes.clients = window.OPS.makeRegistry({
-  tool:"clients", table:"clients", title:"Clients", eyebrow:"Order Management",
+  tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true,
   orderBy:"name",
   searchKeys:["name","firm_name","mobile","city","state","gstin"],
   listCols:[
