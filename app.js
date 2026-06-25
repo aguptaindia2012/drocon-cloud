@@ -62,6 +62,7 @@ const TOOLS = [
   { key:"inventory",     section:"finance", label:"Inventory",     gate:"perm" },
   { key:"catalogues",    section:"finance", label:"Catalogue",     gate:"perm" },
   // Trackers
+  { key:"daily_entry",   section:"trackers", label:"Daily Entry",           gate:"perm" },
   { key:"receivables",   section:"trackers", label:"Invoice & Receivables", gate:"perm" },
   { key:"acre",          section:"trackers", label:"Acre Tracking",         gate:"perm" },
   { key:"farmer",        section:"trackers", label:"Farmer Tracking",       gate:"perm" },
