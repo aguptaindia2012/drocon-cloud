@@ -136,7 +136,8 @@ function makeRegistry(cfg){
     } else if(f.type==="textarea"){
       inner=`<textarea id="f_${f.key}">${esc(v)}</textarea>`;
     } else {
-      inner=`<input id="f_${f.key}" type="${f.type==="number"?"number":"text"}" value="${esc(v)}" ${f.type==="number"?'step="any"':''}>`;
+      const itype = f.type==="number"?"number":f.type==="date"?"date":"text";
+      inner=`<input id="f_${f.key}" type="${itype}" value="${esc(v)}" ${f.type==="number"?'step="any"':''}>`;
     }
     return `<div class="${cls}"><label>${esc(f.label)}${f.required?' *':''}</label>${inner}</div>`;
   }
