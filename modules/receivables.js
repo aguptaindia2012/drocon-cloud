@@ -13,9 +13,22 @@ function bucket(age){ return age<=30?"0-30":age<=60?"31-60":age<=90?"61-90":">90
 
 async function view(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Administration</div><h1>Invoices &amp; Receivables</h1><div id="rHost" class="muted">Loading…</div>`;
+  m.innerHTML=`<div class="eyebrow">Trackers</div><h1>Invoices &amp; Receivables</h1>
+    <div class="row" style="margin:6px 0"><label style="margin:0">Entity</label>
+      <select id="rEntity" style="width:auto"><option value="">All</option><option>DCB</option><option>IBS</option></select>
+      <div class="spacer"></div><button class="btn sm" id="rImport">⬆ Import invoice tracker (CSV)</button></div>
+    <div id="rHost" class="muted">Loading…</div>`;
+  $("rImport").addEventListener("click",importInvoices);
+  $("rEntity").addEventListener("change",()=>{ window.OPS._recEntity=$("rEntity").value; load(); });
+  if(window.OPS._recEntity) $("rEntity").value=window.OPS._recEntity;
+  load();
+}
+async function load(){
+  const entity=window.OPS._recEntity||"";
+  let invQ=sb().from("documents").select("*").eq("doc_type","invoice").order("doc_date",{ascending:false});
+  if(entity) invQ=invQ.eq("entity",entity);
   const [{data:invs},{data:cns},{data:pays}]=await Promise.all([
-    sb().from("documents").select("*").eq("doc_type","invoice").order("doc_date",{ascending:false}),
+    invQ,
     sb().from("documents").select("id,number,related_doc_id,totals").eq("doc_type","credit_note"),
     sb().from("payments").select("*") ]);
   const paidByDoc={}, creditByInv={};
@@ -59,8 +72,8 @@ async function view(){
   function renderTable(){
     const q=($("rSearch").value||"").toLowerCase().trim(); const onlyDue=$("rOnlyDue").checked;
     let list=rows.filter(x=>(!onlyDue||x.balance>0) && (!q || x.r.number.toLowerCase().includes(q) || x.party.toLowerCase().includes(q)));
-    $("rTable").innerHTML = `<table><thead><tr><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Balance</th><th class="num">Age (d)</th><th>Status</th><th></th></tr></thead>
-      <tbody>${list.map(x=>`<tr><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td>
+    $("rTable").innerHTML = `<table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Balance</th><th class="num">Age (d)</th><th>Status</th><th></th></tr></thead>
+      <tbody>${list.map(x=>`<tr><td><span class="tag" style="background:${x.r.entity==='IBS'?'var(--blue)':'var(--green)'}">${esc(x.r.entity||'DCB')}</span></td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td>
         <td class="num">${money(x.gross)}</td><td class="num">${money(x.paid+x.credit)}</td>
         <td class="num" style="${x.balance>0?'font-weight:700':''}">${money(x.balance)}</td>
         <td class="num" style="${x.balance>0&&x.age>30?'color:#a3322a;font-weight:700':''}">${x.balance>0?x.age:'—'}</td>
@@ -99,6 +112,56 @@ function recordPayment(x){
     await sb().from("documents").update({ status: newBal<=0.01?"paid":"partial" }).eq("id",x.r.id);
     window.OPS.audit("payment","document",x.r.id,money(amt)+" via "+$("pMode").value);
     window.OPS.flashTop("Payment recorded ✓"); view();
+  });
+}
+
+/* ---------- import invoice tracker (DCB + IBS) ---------- */
+function importInvoices(){
+  window.OPS.csv.pickCSV(async rows=>{
+    if(!rows.length){ alert("No rows."); return; }
+    const g=(r,k)=>{ const kk=Object.keys(r).find(h=>h.toLowerCase().trim()===k); return kk?String(r[kk]).trim():""; };
+    const n=v=>{ v=String(v||"").replace(/[₹,%\s]/g,""); return v===""?0:(isNaN(+v)?0:+v); };
+    const fyOfNum=num0=>{ const m=String(num0).match(/(\d{2})-(\d{2})/); return m?(m[1]+"-"+m[2]):null; };
+    const docs=[], recvByNumber={};
+    rows.forEach(r=>{
+      const number=g(r,"invoice number"); if(!number) return;
+      const entity=g(r,"entity")||"DCB";
+      const billed=n(g(r,"billed acres")); const amount=n(g(r,"amount"));
+      const gstRate=n(g(r,"gst rate")); const gstAmt=n(g(r,"gst amount"));
+      const payable=n(g(r,"total payable"))|| (amount+gstAmt) || n(g(r,"total invoiced"));
+      const received=n(g(r,"amount received"));
+      const st=(g(r,"status")||"").toLowerCase();
+      const status= st.includes("paid")&&!st.includes("partial")&&!st.includes("un") ? "paid" : (received>0?"partial":"issued");
+      docs.push({
+        doc_type:"invoice", number, entity, fiscal_year: fyOfNum(number) || fyOfNum(g(r,"fy")),
+        doc_date: g(r,"date")||null, party_kind:"client", party_id:null,
+        party_snapshot:{ firmName:g(r,"party name"), gstin:g(r,"gst number"), state:g(r,"state"), district:g(r,"district"), clientRef:g(r,"client ref") },
+        line_items:[{ desc:"Aerial Spraying - Agriculture Services", hsn:g(r,"hsn/sac")||"9986", gst:gstRate, qty:billed||1, rate: billed?Math.round(amount/billed*100)/100:amount, per:billed?"Acre":"", disc:0 }],
+        totals:{ sub:amount, gstTotal:gstAmt, total:payable, invoiced:n(g(r,"total invoiced")), tds:n(g(r,"tds amount")), adjustment:n(g(r,"adjustment")) },
+        status, approval_status:"approved",
+        data:{ entity, acre_ref:g(r,"acre reference"), remarks:g(r,"remarks"), fy:g(r,"fy") },
+        created_by:window.OPS.me.id
+      });
+      if(received>0) recvByNumber[number]={ amount:received, date:g(r,"payment date")||g(r,"date")||todayISO() };
+    });
+    if(!docs.filter(d=>d.doc_date).length){ alert("No rows with a valid invoice date."); return; }
+    const valid=docs.filter(d=>d.doc_date);
+    if(!confirm("Import "+valid.length+" invoices (DCB + IBS)? Existing ones with the same number are updated.")) return;
+    // upsert documents in chunks, collect ids by number
+    const idByNumber={};
+    for(let i=0;i<valid.length;i+=200){
+      const { data, error }=await sb().from("documents").upsert(valid.slice(i,i+200),{onConflict:"doc_type,number"}).select("id,number");
+      if(error){ alert("Import failed: "+error.message); return; }
+      (data||[]).forEach(d=>idByNumber[d.number]=d.id);
+    }
+    // payments for received amounts (idempotent: clear prior tracker payments first)
+    const ids=Object.values(idByNumber);
+    if(ids.length){ await sb().from("payments").delete().in("document_id",ids).eq("mode","Tracker import"); }
+    const pays=[];
+    Object.keys(recvByNumber).forEach(numk=>{ const id=idByNumber[numk]; if(!id) return; const p=recvByNumber[numk];
+      pays.push({ document_id:id, amount:p.amount, paid_on:p.date, mode:"Tracker import", note:"historical", created_by:window.OPS.me.id }); });
+    for(let i=0;i<pays.length;i+=200){ const { error }=await sb().from("payments").insert(pays.slice(i,i+200)); if(error){ alert("Payments import failed: "+error.message); return; } }
+    window.OPS.flashTop("Imported "+valid.length+" invoices ✓"); view();
   });
 }
 

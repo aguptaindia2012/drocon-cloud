@@ -1345,3 +1345,17 @@ grant select, insert on public.access_log to authenticated;
 
 -- ('view_contacts' is a per-tool grant stored in app_permissions — no schema
 --  change needed; it is managed from the in-app Team & Access screen.)
+
+-- ####################################################################
+-- ## 12_invoice_entity.sql
+-- ####################################################################
+
+-- ============================================================================
+-- DroCon Cloud — billing entity on documents (DCB vs IBS)
+-- DroCon Bharat (DCB) and Innovative Business Solution (IBS) both raise
+-- invoices. This tags each document with its issuing entity so receivables and
+-- dashboards can be viewed per entity. Generated documents default to 'DCB'.
+-- Safe to re-run.
+-- ============================================================================
+alter table public.documents add column if not exists entity text not null default 'DCB';
+create index if not exists documents_entity_idx on public.documents(entity);
