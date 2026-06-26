@@ -128,7 +128,7 @@ async function bdDash(){
       <tbody>${up.map(x=>`<tr><td><b>${esc(x.o.client_name||'')}</b> ${x.d<=15?'<span class="chip rejected">now</span>':''}</td>
         <td>${esc([x.o.city,x.o.state].filter(Boolean).join(", "))}</td><td>${esc(x.o.crop||'')}</td>
         <td>${esc(x.o.start_month||fmtDate(x.sd))}</td><td class="num">${x.d}</td></tr>`).join("")}</tbody></table>`
-      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>'}</div>`;
+      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>'}</div>
     <div class="card"><h3>Quotations &amp; Purchase Orders</h3>
       ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Type</th><th>Number</th><th>Date</th><th>Party</th><th class="num">Total</th><th>Status</th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td>${r.doc_type==="quotation"?'<span class="chip in_review">Quotation</span>':'<span class="chip executed">PO</span>'}</td>
