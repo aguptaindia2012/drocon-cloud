@@ -290,6 +290,73 @@ window.OPS.refreshNotifs = refreshNotifs;
 (function(){ const b=$("bell"); if(b) b.addEventListener("click",toggleNotif);
   const mk=$("notifMark"); if(mk) mk.addEventListener("click",markAllRead); })();
 
+/* ===================== Top-bar utilities (Calculator / Calendar / Privacy) ===================== */
+function openCalc(){
+  const w=window.open("","dcbCalc","width=300,height=430");
+  if(!w){ alert("Allow pop-ups to open the calculator."); return; }
+  w.document.write(`<!doctype html><title>Calculator</title><style>
+    body{font-family:Lato,system-ui,Arial;margin:0;background:#282828}
+    #d{color:#fff;text-align:right;font-size:30px;padding:18px 14px;min-height:46px;word-break:break-all}
+    .g{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#444}
+    button{border:none;font-size:20px;padding:18px 0;background:#3a3a3a;color:#fff;cursor:pointer}
+    button:hover{background:#4a4a4a}.op{background:#F48A1C}.eq{background:#599533}.fn{background:#555}
+    </style><div id="d">0</div><div class="g" id="g"></div><script>
+    var e="";function p(v){if(v==="="){try{e=String(Function("return ("+e.replace(/[^-()\\d/*+.%]/g,"")+")")());}catch(_){e="Error";}}
+    else if(v==="C"){e="";}else if(v==="back"){e=e.slice(0,-1);}else{e+=v;}d.textContent=e||"0";}
+    var keys=["C","back","%","/","7","8","9","*","4","5","6","-","1","2","3","+","0",".","="];
+    var g=document.getElementById("g"),d=document.getElementById("d");
+    keys.forEach(function(k){var b=document.createElement("button");b.textContent=k==="back"?"⌫":k;
+      b.className=(["/","*","-","+"].indexOf(k)>=0?"op":k==="="?"eq":["C","back","%"].indexOf(k)>=0?"fn":"");
+      b.onclick=function(){p(k);};g.appendChild(b);});
+    document.addEventListener("keydown",function(ev){var k=ev.key;if(k==="Enter")p("=");else if(k==="Backspace")p("back");else if(k==="Escape")p("C");else if("0123456789.+-*/%".indexOf(k)>=0)p(k);});
+    <\/script>`);
+  w.document.close();
+}
+function openCalendar(){
+  const w=window.open("","dcbCal","width=340,height=360");
+  if(!w){ alert("Allow pop-ups to open the calendar."); return; }
+  const now=new Date();
+  w.document.write(`<!doctype html><title>Calendar</title><style>
+    body{font-family:Lato,system-ui,Arial;margin:0;padding:12px;color:#282828}
+    .hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}.hd b{flex:1;text-align:center;color:#599533;font-size:16px}
+    button{border:1px solid #e2e6df;background:#fff;border-radius:6px;cursor:pointer;padding:4px 9px}
+    table{width:100%;border-collapse:collapse}td,th{text-align:center;padding:7px 0;font-size:13px}
+    th{color:#7a8071;font-size:11px}td.t{background:#599533;color:#fff;border-radius:50%}
+    </style><div class="hd"><button onclick="m(-1)">‹</button><b id="lbl"></b><button onclick="m(1)">›</button></div>
+    <table><thead><tr><th>S</th><th>M</th><th>T</th><th>W</th><th>T</th><th>F</th><th>S</th></tr></thead><tbody id="b"></tbody></table>
+    <script>var y=${now.getFullYear()},mo=${now.getMonth()},td=${now.getDate()};
+    function m(d){mo+=d;if(mo<0){mo=11;y--;}if(mo>11){mo=0;y++;}r();}
+    function r(){var f=new Date(y,mo,1).getDay(),n=new Date(y,mo+1,0).getDate();
+      document.getElementById("lbl").textContent=new Date(y,mo,1).toLocaleString("en",{month:"long",year:"numeric"});
+      var h="<tr>",c=0,i;for(i=0;i<f;i++){h+="<td></td>";c++;}
+      for(var day=1;day<=n;day++){if(c%7===0&&c>0)h+="</tr><tr>";var t=(day===td&&mo===${now.getMonth()}&&y===${now.getFullYear()})?" class='t'":"";h+="<td"+t+">"+day+"</td>";c++;}
+      h+="</tr>";document.getElementById("b").innerHTML=h;}
+    r();<\/script>`);
+  w.document.close();
+}
+function openPrivacy(){
+  const b=$("privacyBody"); if(!b) return;
+  b.innerHTML=`<p class="muted">How DroCon Cloud protects your data.</p>
+    <div class="callout"><b>Encryption:</b> HTTPS in transit, AES-256 at rest (Supabase).</div>
+    <ul style="font-size:13px;line-height:1.7">
+      <li><b>Access:</b> not signed in = no access. Sign-up is restricted to approved company domains.</li>
+      <li><b>Row-Level Security</b> is enforced by the database — the browser cannot bypass it.</li>
+      <li><b>Sensitive data</b> (salaries, bank details, farmer phone numbers) is readable only by admins or staff you grant access in <b>Team &amp; Access</b>.</li>
+      <li><b>Phone numbers</b> are masked in lists unless you hold the “View contacts” grant.</li>
+      <li><b>Access log:</b> opening sensitive records is recorded (admins can review under Audit → Access Log).</li>
+      <li><b>Deletions</b> are restricted and recorded in the Audit log.</li>
+    </ul>
+    <p class="muted">You are signed in as <b>${esc((profile&&profile.email)||(me&&me.email)||"")}</b> · role <b>${esc((profile&&profile.role)||"")}</b>.</p>`;
+  $("privacyOverlay").classList.remove("hidden");
+}
+(function(){
+  const c=$("btnCalc"); if(c) c.addEventListener("click",openCalc);
+  const cal=$("btnCalendar"); if(cal) cal.addEventListener("click",openCalendar);
+  const p=$("btnPrivacy"); if(p) p.addEventListener("click",openPrivacy);
+  const pc=$("privClose"); if(pc) pc.addEventListener("click",()=>$("privacyOverlay").classList.add("hidden"));
+  const po=$("privacyOverlay"); if(po) po.addEventListener("click",e=>{ if(e.target.id==="privacyOverlay") po.classList.add("hidden"); });
+})();
+
 /* ===================== PWA install ===================== */
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.protocol==="http:")){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));

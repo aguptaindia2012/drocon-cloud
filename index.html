@@ -122,6 +122,9 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
     <div class="accentsq"></div>
     <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
     <div class="spacer"></div>
+    <button class="btn sm" id="btnCalc" title="Calculator (pop out)">🧮</button>
+    <button class="btn sm" id="btnCalendar" title="Calendar (pop out)">📅</button>
+    <button class="btn sm" id="btnPrivacy" title="Data &amp; Privacy">🛡</button>
     <div id="bell" style="position:relative;cursor:pointer;font-size:20px;user-select:none" title="Notifications">🔔<span id="bellCount" style="position:absolute;top:-6px;right:-8px;background:var(--orange);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;display:none"></span></div>
     <span class="pill-role" id="meRole">—</span>
     <span class="muted" id="meEmail"></span>
@@ -134,6 +137,13 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 
 <input type="file" id="jsonImport" accept="application/json" class="hidden">
 <input type="file" id="csvImport" accept=".csv,text/csv" class="hidden">
+
+<div id="privacyOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:60;display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;max-width:560px;width:92%;max-height:84vh;overflow:auto;border-radius:14px;border-top:5px solid var(--green);padding:22px">
+    <div class="row"><h2 style="margin:0">🛡 Data &amp; Privacy</h2><div class="spacer"></div><button class="btn sm" id="privClose">Close</button></div>
+    <div id="privacyBody" style="margin-top:10px"></div>
+  </div>
+</div>
 
 <div id="notifPanel" class="hidden" style="position:fixed;top:54px;right:14px;width:340px;max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.18);z-index:50">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)">
