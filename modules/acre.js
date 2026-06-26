@@ -15,7 +15,7 @@ async function loadLocations(){ const { data }=await sb().from("spray_locations"
 async function view(){
   await loadLocations();
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Administration · Field Ops</div><h1>Acre Tracker</h1>
+  m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Acre Tracker</h1>
     <div class="row" style="margin:10px 0">
       <button class="btn sm ${tab==='dashboard'?'green':''}" data-t="dashboard">Dashboard</button>
       <button class="btn sm ${tab==='entry'?'green':''}" data-t="entry">Daily Entry</button>

@@ -107,17 +107,28 @@ async function bdDash(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Business Development</h1>
     <p class="muted">All quotations and purchase orders generated and sent.</p><div id="bdBody" class="muted">Loading…</div>`;
-  const { data }=await sb().from("documents").select("doc_type,number,doc_date,party_snapshot,totals,status").in("doc_type",["quotation","purchase_order"]).order("doc_date",{ascending:false});
+  const [{ data }, { data:ord }]=await Promise.all([
+    sb().from("documents").select("doc_type,number,doc_date,party_snapshot,totals,status").in("doc_type",["quotation","purchase_order"]).order("doc_date",{ascending:false}),
+    sb().from("potential_orders").select("*") ]);
   const rows=data||[];
   const q=rows.filter(r=>r.doc_type==="quotation"), po=rows.filter(r=>r.doc_type==="purchase_order");
   const sum=a=>a.reduce((s,r)=>s+num((r.totals||{}).total),0);
+  const oh=window.OPS._orderHelpers||{toDate:()=>null,daysTo:()=>null};
+  const up=(ord||[]).map(o=>{ const sd=o.start_date||oh.toDate(o.start_month); return {o,sd,d:oh.daysTo(sd)}; })
+    .filter(x=>x.d!=null && x.d>=-3 && (x.o.status||"").toLowerCase()!=="work completed").sort((a,b)=>a.d-b.d).slice(0,12);
   $("bdBody").innerHTML=`
     <div class="statrow">
       <div class="stat"><div class="n">${q.length}</div><div class="l">Quotations</div></div>
       <div class="stat"><div class="n">${money(sum(q))}</div><div class="l">Quoted value</div></div>
       <div class="stat"><div class="n">${po.length}</div><div class="l">Purchase Orders</div></div>
-      <div class="stat"><div class="n">${money(sum(po))}</div><div class="l">PO value</div></div>
+      <div class="stat"><div class="n">${up.length}</div><div class="l">Upcoming orders</div></div>
     </div>
+    <div class="card"><h3>Upcoming orders — follow up</h3>
+      ${up.length?`<table><thead><tr><th>Client</th><th>Region</th><th>Crop</th><th>Starts</th><th class="num">Days</th></tr></thead>
+      <tbody>${up.map(x=>`<tr><td><b>${esc(x.o.client_name||'')}</b> ${x.d<=15?'<span class="chip rejected">now</span>':''}</td>
+        <td>${esc([x.o.city,x.o.state].filter(Boolean).join(", "))}</td><td>${esc(x.o.crop||'')}</td>
+        <td>${esc(x.o.start_month||fmtDate(x.sd))}</td><td class="num">${x.d}</td></tr>`).join("")}</tbody></table>`
+      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>'}</div>`;
     <div class="card"><h3>Quotations &amp; Purchase Orders</h3>
       ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Type</th><th>Number</th><th>Date</th><th>Party</th><th class="num">Total</th><th>Status</th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td>${r.doc_type==="quotation"?'<span class="chip in_review">Quotation</span>':'<span class="chip executed">PO</span>'}</td>

@@ -31,11 +31,11 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
 /* ---------- sections + tools registry ----------
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
+  { key:"trackers",   label:"Daily Spray Entry" },
   { key:"agreement",  label:"Agreement" },
   { key:"reviews",    label:"Review / Approvals" },
-  { key:"order",      label:"Order Management" },
+  { key:"order",      label:"Business Development" },
   { key:"finance",    label:"Finance" },
-  { key:"trackers",   label:"Trackers" },
   { key:"dashboards", label:"Dashboards" },
   { key:"hr",         label:"HR" },
   { key:"team",       label:"Team & Access" },
@@ -48,7 +48,9 @@ const TOOLS = [
   { key:"templates",  section:"agreement", label:"Shared templates",gate:"approver" },
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
-  // Order Management — pools + sales documents
+  // Daily Spray Entry (its own section, made the landing tab)
+  { key:"daily_entry",   section:"trackers", label:"Daily Spray Entry",     gate:"perm" },
+  // Business Development — pools + sales documents
   { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
   { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },
   { key:"quotation",     section:"order", label:"Quotation",           gate:"perm" },
@@ -61,15 +63,12 @@ const TOOLS = [
   { key:"vendors",       section:"finance", label:"Vendors",       gate:"perm" },
   { key:"inventory",     section:"finance", label:"Inventory",     gate:"perm" },
   { key:"catalogues",    section:"finance", label:"Catalogue",     gate:"perm" },
-  // Trackers
-  { key:"daily_entry",   section:"trackers", label:"Daily Entry",           gate:"perm" },
-  { key:"receivables",   section:"trackers", label:"Invoice & Receivables", gate:"perm" },
-  { key:"acre",          section:"trackers", label:"Acre Tracking",         gate:"perm" },
-  { key:"farmer",        section:"trackers", label:"Farmer Tracking",       gate:"perm" },
-  // Dashboards
-  { key:"dashboards",          section:"dashboards", label:"Current",                   gate:"perm" },
-  { key:"agreement_dashboard", section:"dashboards", label:"Agreement Dashboard",       gate:"perm" },
-  { key:"bd_dashboard",        section:"dashboards", label:"Business Development",       gate:"perm" },
+  // Dashboards (Acre & Farmer trackers are dashboards now; receivables consolidated here)
+  { key:"receivables",         section:"dashboards", label:"Invoice & Receivables", gate:"perm" },
+  { key:"acre",                section:"dashboards", label:"Acre Tracking",         gate:"perm" },
+  { key:"farmer",              section:"dashboards", label:"Farmer Tracking",       gate:"perm" },
+  { key:"agreement_dashboard", section:"dashboards", label:"Agreement Dashboard",   gate:"perm" },
+  { key:"bd_dashboard",        section:"dashboards", label:"Ongoing Sales",         gate:"perm" },
   // HR
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",       gate:"perm" },
   { key:"hr_employees",  section:"hr", label:"Employees & Consultants",  gate:"perm" },
@@ -131,9 +130,13 @@ async function afterLogin(){
 function applyProfile(){
   $("meEmail").textContent = profile.email || me.email;
   $("meRole").textContent = (profile.role||"drafter").toUpperCase();
-  // pick a valid landing tool
-  if(!canSee(toolByKey(window.OPS.currentTool))) window.OPS.currentTool="agreements";
-  window.OPS.currentSection = (toolByKey(window.OPS.currentTool)||{}).section || "agreement";
+  // pick a valid landing tool — default to the first visible tool (Daily Spray Entry)
+  if(!canSee(toolByKey(window.OPS.currentTool))){
+    const firstSec = SECTIONS.find(s=>TOOLS.some(t=>t.section===s.key && canSee(t)));
+    const firstTool = firstSec && TOOLS.find(t=>t.section===firstSec.key && canSee(t));
+    window.OPS.currentTool = firstTool ? firstTool.key : "agreements";
+  }
+  window.OPS.currentSection = (toolByKey(window.OPS.currentTool)||{}).section || "trackers";
   renderNav();
   openTool(window.OPS.currentTool);
   refreshNotifs();

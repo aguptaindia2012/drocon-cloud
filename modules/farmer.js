@@ -10,7 +10,7 @@ const sb = ()=>window.OPS.sb;
 
 async function view(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Administration · Field Ops</div><h1>Farmer Tracker</h1>
+  m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Farmer Tracker</h1>
     <div class="row wrap" style="margin:10px 0">
       <input id="fSearch" placeholder="Search farmer / village / pilot…" style="max-width:280px">
       <div class="spacer"></div>

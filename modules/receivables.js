@@ -13,7 +13,7 @@ function bucket(age){ return age<=30?"0-30":age<=60?"31-60":age<=90?"61-90":">90
 
 async function view(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Trackers</div><h1>Invoices &amp; Receivables</h1>
+  m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Invoices &amp; Receivables</h1>
     <div class="row" style="margin:6px 0"><label style="margin:0">Entity</label>
       <select id="rEntity" style="width:auto"><option value="">All</option><option>DCB</option><option>IBS</option></select>
       <div class="spacer"></div><button class="btn sm" id="rImport">⬆ Import invoice tracker (CSV)</button></div>
