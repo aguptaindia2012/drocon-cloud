@@ -42,9 +42,44 @@ function compute(d){
   return { bomExcl, bomGst, bomIncl:bomExcl+bomGst, ovh, costExcl, profit, sellingExcl, sellingGst, sellingIncl, commission };
 }
 
+const STANDARD_BOM=[
+  {part:"Frame",qty:1,rate_excl:33999,gst_rate:5},{part:"Flight Controller",qty:1,rate_excl:30499,gst_rate:5},
+  {part:"Remote controller",qty:1,rate_excl:17500,gst_rate:5},{part:"Motor",qty:6,rate_excl:8950,gst_rate:5},
+  {part:"Battery",qty:0,rate_excl:27874,gst_rate:18},{part:"Propellor",qty:6,rate_excl:600,gst_rate:5},
+  {part:"Propellor Hub",qty:6,rate_excl:402,gst_rate:5},{part:"Centrifugal Nozzle",qty:0,rate_excl:5999,gst_rate:5},
+  {part:"Nozzle",qty:4,rate_excl:989,gst_rate:5},{part:"Spraying Kit",qty:1,rate_excl:891.45,gst_rate:5},
+  {part:"Terrain Radar",qty:0,rate_excl:14999,gst_rate:5},{part:"Optical Radar",qty:0,rate_excl:15299,gst_rate:5},
+  {part:"CAN hub",qty:0,rate_excl:6500,gst_rate:5},{part:"Pump",qty:1,rate_excl:5000,gst_rate:5},
+  {part:"Charger",qty:0,rate_excl:17500,gst_rate:18}
+];
+const LABOUR_LINES=[{part:"Labour",qty:1,rate_excl:0,gst_rate:18},{part:"Logistics",qty:1,rate_excl:0,gst_rate:18}];
+
 function edit(rec){
-  design = rec ? JSON.parse(JSON.stringify(rec)) : { name:"", description:"", parts:[{part:"",qty:1,rate_excl:0,gst_rate:5}], overhead_pct:15, profit_pct:10, commission_pct:2 };
-  render();
+  if(rec){ design=JSON.parse(JSON.stringify(rec)); render(); return; }
+  newIntro();   // new design → ask context first
+}
+function newIntro(){
+  const m=$("main");
+  m.innerHTML=`<button class="btn sm" id="iBack">← Back to designs</button>
+    <div class="card" style="margin-top:12px"><h1>New design</h1>
+      <p class="muted">Capture the client &amp; delivery location (for logistics), then choose the design type.</p>
+      <div class="fgrid">
+        <div class="field full"><label>Potential client</label><input id="iClient" placeholder="client / company name"></div>
+        <div class="field"><label>Delivery State</label>${window.OPS.geoUI.stateSelect("iState","")}</div>
+        <div class="field"><label>Delivery District</label>${window.OPS.geoUI.districtSelect("iDistrict","","")}</div>
+      </div>
+      <div class="callout">Is this an <b>agriculture</b> drone design? Agriculture loads the standard BOM (edit as needed); other gives a blank parts template. Both include <b>Labour</b> and <b>Logistics</b> line items.</div>
+      <div class="row"><button class="btn green" id="iAgri">Agriculture (load standard BOM)</button>
+        <button class="btn" id="iOther">Other (blank template)</button></div>
+    </div>`;
+  $("iBack").addEventListener("click",listView);
+  window.OPS.geoUI.wire("iState","iDistrict");
+  const start=(type)=>{ design={ name:"", description:"", client_name:$("iClient").value.trim()||null,
+      delivery_state:$("iState").value||null, delivery_district:$("iDistrict").value||null, design_type:type,
+      parts: (type==="agriculture"?STANDARD_BOM:[{part:"",qty:1,rate_excl:0,gst_rate:18}]).map(p=>({...p})).concat(LABOUR_LINES.map(p=>({...p}))),
+      overhead_pct:15, profit_pct:10, commission_pct:2 }; render(); };
+  $("iAgri").addEventListener("click",()=>start("agriculture"));
+  $("iOther").addEventListener("click",()=>start("other"));
 }
 
 function render(){
@@ -53,9 +88,13 @@ function render(){
     <div class="card" style="margin-top:12px">
       <div class="fgrid">
         <div class="field full"><label>Design name *</label><input id="bName" value="${esc(design.name||'')}" placeholder="e.g. 10L Agri Drone with Sensor"></div>
+        <div class="field"><label>Potential client</label><input id="bClient" value="${esc(design.client_name||'')}"></div>
+        <div class="field"><label>Design type</label><select id="bType"><option value="agriculture" ${design.design_type!=='other'?'selected':''}>Agriculture</option><option value="other" ${design.design_type==='other'?'selected':''}>Other</option></select></div>
+        <div class="field"><label>Delivery State</label>${window.OPS.geoUI.stateSelect("bState",design.delivery_state||"")}</div>
+        <div class="field"><label>Delivery District</label>${window.OPS.geoUI.districtSelect("bDistrict",design.delivery_district||"",design.delivery_state||"")}</div>
         <div class="field full"><label>Description</label><input id="bDesc" value="${esc(design.description||'')}"></div>
       </div>
-      <h3>Parts</h3>
+      <h3>Parts <span class="muted" style="font-weight:400">(includes Labour &amp; Logistics line items)</span></h3>
       <table class="linetable" id="bParts"><thead><tr><th style="width:34%">Part</th><th class="num">Qty</th><th class="num">Rate excl. GST</th><th class="num">GST%</th><th class="num">Amount</th><th class="num">Total incl.</th><th></th></tr></thead><tbody></tbody></table>
       <button class="btn sm" id="bAddPart">+ Add part</button>
       <div class="fgrid three" style="margin-top:16px">
@@ -77,7 +116,9 @@ function render(){
   if(design.id && window.OPS.approvals){ sb().from("bom_designs").select("*").eq("id",design.id).single().then(({data})=>{ if(data) window.OPS.approvals.bar("bom_designs", data, $("bApproval"), ()=>render()); }); }
   $("bBack").addEventListener("click",listView); $("bCancel").addEventListener("click",listView);
   renderParts(); renderSummary();
+  window.OPS.geoUI.wire("bState","bDistrict");
   ["bName","bDesc"].forEach(id=>$(id).addEventListener("input",()=>{ design.name=$("bName").value; design.description=$("bDesc").value; }));
+  ["bClient","bType","bState","bDistrict"].forEach(id=>$(id).addEventListener("input",()=>{ design.client_name=$("bClient").value; design.design_type=$("bType").value; design.delivery_state=$("bState").value; design.delivery_district=$("bDistrict").value; }));
   ["bOvh","bProfit","bComm"].forEach(id=>$(id).addEventListener("input",()=>{ design.overhead_pct=num($("bOvh").value); design.profit_pct=num($("bProfit").value); design.commission_pct=num($("bComm").value); renderSummary(); }));
   $("bAddPart").addEventListener("click",()=>{ design.parts.push({part:"",qty:1,rate_excl:0,gst_rate:5}); renderParts(); renderSummary(); });
   $("bSave").addEventListener("click",save);
@@ -126,7 +167,9 @@ async function save(){
   design.name=$("bName").value.trim();
   if(!design.name){ $("bErr").textContent="Design name is required."; return; }
   const rec={ name:design.name, description:$("bDesc").value||null, parts:design.parts,
-    overhead_pct:num($("bOvh").value), profit_pct:num($("bProfit").value), commission_pct:num($("bComm").value) };
+    overhead_pct:num($("bOvh").value), profit_pct:num($("bProfit").value), commission_pct:num($("bComm").value),
+    client_name:$("bClient").value||null, design_type:$("bType").value||null,
+    delivery_state:$("bState").value||null, delivery_district:$("bDistrict").value||null };
   if(design.id){ const { error }=await sb().from("bom_designs").update(rec).eq("id",design.id); if(error){ $("bErr").textContent=error.message; return; } }
   else { rec.created_by=window.OPS.me.id; const { data:ins, error }=await sb().from("bom_designs").insert(rec).select().single(); if(error){ $("bErr").textContent=error.message; return; } design.id=ins.id; }
   window.OPS.flashTop("Design saved ✓"); listView();

@@ -158,8 +158,10 @@ async function viewTeam(){
   const m=$("main"); m.innerHTML=`<div class="eyebrow">Administration</div><h1>Team &amp; access</h1>
     <div class="callout">The first person to sign up is the <b>admin</b>. Assign roles, then grant each person access to the specific <b>Administration</b> tools they need.</div>
     <h3>Roles</h3><div id="teamHost" class="muted">Loading…</div>
-    <h3 style="margin-top:22px">Tool access (Administration)</h3>
-    <p class="muted">Tick the tools each member may use. Admins always have full access.</p>
+    <h3 style="margin-top:22px">Tool access</h3>
+    <p class="muted">Pick a section, tick the tools each member may use, then <b>Save changes</b>. Changes across sections are saved together. Admins always have full access.</p>
+    <div class="row wrap" style="margin-bottom:8px"><label style="margin:0">Section</label><select id="permSection" style="width:auto"></select>
+      <div class="spacer"></div><button class="btn green sm" id="permSave">Save changes</button><span id="permStatus" class="muted"></span></div>
     <div id="permHost" class="muted">Loading…</div>`;
   const ps=await listProfiles();
   $("teamHost").innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead><tbody>
@@ -173,19 +175,38 @@ async function viewTeam(){
     if(error) alert(error.message); else { s.style.borderColor="var(--green)"; }
   }));
 
-  // permission matrix (tools + capabilities like "view_contacts")
-  const tools = window.OPS.PERMISSIONED_TOOLS.concat(window.OPS.CAPABILITIES||[]);
+  // ----- Tool access: select a section, edit locally, then Save -----
+  const PT=window.OPS.PERMISSIONED_TOOLS, CAPS=window.OPS.CAPABILITIES||[];
+  const groups=window.OPS.SECTIONS.filter(s=>PT.some(t=>t.section===s.key)).map(s=>({key:s.key,label:s.label,tools:PT.filter(t=>t.section===s.key)}));
+  groups.push({key:"_caps",label:"Capabilities",tools:CAPS});
+  const members=ps.filter(p=>p.role!=="admin");
   const { data:permRows }=await sb.from("app_permissions").select("user_id,tool_key");
-  const granted = new Set((permRows||[]).map(r=>r.user_id+"|"+r.tool_key));
-  const members = ps.filter(p=>p.role!=="admin");
-  $("permHost").innerHTML = members.length ? `<div style="overflow:auto"><table><thead><tr><th>Member</th>${tools.map(t=>`<th style="text-align:center">${esc(t.label)}</th>`).join("")}</tr></thead>
-    <tbody>${members.map(p=>`<tr><td><b>${esc(p.full_name||p.email)}</b><br><span class="muted">${esc(p.role)}</span></td>
-      ${tools.map(t=>`<td style="text-align:center"><input type="checkbox" style="width:auto" data-u="${p.id}" data-t="${t.key}" ${granted.has(p.id+"|"+t.key)?"checked":""}></td>`).join("")}
-    </tr>`).join("")}</tbody></table></div>` : '<div class="muted">No non-admin members yet.</div>';
-  $("permHost").querySelectorAll("input[type=checkbox]").forEach(cb=>cb.addEventListener("change",async()=>{
-    const { error }=await sb.rpc("admin_set_permission",{ target:cb.getAttribute("data-u"), p_tool:cb.getAttribute("data-t"), p_grant:cb.checked });
-    if(error){ alert(error.message); cb.checked=!cb.checked; }
-  }));
+  let granted=new Set((permRows||[]).map(r=>r.user_id+"|"+r.tool_key));
+  let working=new Set(granted);
+  $("permSection").innerHTML=groups.map(g=>`<option value="${g.key}">${esc(g.label)}</option>`).join("");
+  function renderPerm(){
+    if(!members.length){ $("permHost").innerHTML='<div class="muted">No non-admin members yet.</div>'; return; }
+    const g=groups.find(x=>x.key===$("permSection").value)||groups[0];
+    $("permHost").innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Member</th>${g.tools.map(t=>`<th style="text-align:center">${esc(t.label)}</th>`).join("")}</tr></thead>
+      <tbody>${members.map(p=>`<tr><td><b>${esc(p.full_name||p.email)}</b><br><span class="muted">${esc(p.role)}</span></td>
+        ${g.tools.map(t=>`<td style="text-align:center"><input type="checkbox" style="width:auto" data-u="${p.id}" data-t="${t.key}" ${working.has(p.id+"|"+t.key)?"checked":""}></td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    $("permHost").querySelectorAll("input[type=checkbox]").forEach(cb=>cb.addEventListener("change",()=>{
+      const k=cb.getAttribute("data-u")+"|"+cb.getAttribute("data-t");
+      if(cb.checked) working.add(k); else working.delete(k);
+      $("permStatus").textContent=" unsaved changes…"; $("permStatus").style.color="var(--orange)";
+    }));
+  }
+  $("permSection").addEventListener("change",renderPerm);
+  $("permSave").addEventListener("click",async()=>{
+    const all=new Set([...granted,...working]); const changes=[];
+    all.forEach(k=>{ if(working.has(k)!==granted.has(k)){ const i=k.indexOf("|"); changes.push({u:k.slice(0,i),t:k.slice(i+1),grant:working.has(k)}); } });
+    if(!changes.length){ $("permStatus").textContent=" nothing to save"; $("permStatus").style.color="var(--muted)"; return; }
+    $("permSave").disabled=true; $("permStatus").textContent=" saving…";
+    for(const c of changes){ const { error }=await sb.rpc("admin_set_permission",{ target:c.u, p_tool:c.t, p_grant:c.grant }); if(error){ alert(error.message); } }
+    granted=new Set(working); $("permSave").disabled=false;
+    $("permStatus").textContent=" ✓ saved "+changes.length+" change(s)"; $("permStatus").style.color="var(--green)";
+  });
+  renderPerm();
 }
 
 async function viewTemplates(){
