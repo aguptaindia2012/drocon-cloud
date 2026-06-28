@@ -23,26 +23,50 @@ function parseISO(s){ return s?new Date(s+"T00:00:00Z"):null; }
 
 /* ============================ Employees ============================ */
 window.OPS.routes.hr_employees = window.OPS.makeRegistry({
-  tool:"hr_employees", table:"employees", title:"Employees & Consultants", eyebrow:"HR", logView:true,
-  orderBy:"name",
-  searchKeys:["name","designation","emp_type","phone","email"],
+  tool:"hr_employees", table:"employees", title:"Employees", eyebrow:"HR", logView:true,
+  orderBy:"name", filter:{col:"emp_type",val:"employee"},
+  searchKeys:["name","designation","phone","email"],
   listCols:[
     {key:"name",label:"Name"},
     {key:"designation",label:"Designation"},
-    {key:"emp_type",label:"Type"},
     {key:"monthly_salary",label:"Monthly Salary",num:true,fmt:v=>v==null?"":money(v)},
     {key:"status",label:"Status"},
   ],
   fields:[
     {key:"name",label:"Name",full:true,required:true},
     {key:"designation",label:"Designation"},
-    {key:"emp_type",label:"Type",type:"select",options:["employee","consultant"]},
     {key:"monthly_salary",label:"Monthly Salary (₹)",type:"number"},
     {key:"doj",label:"Date of Joining",type:"date"},
     {key:"dol",label:"Date of Leaving (blank = active)",type:"date"},
     {key:"status",label:"Status",type:"select",options:["active","inactive"]},
     {key:"phone",label:"Phone"},
     {key:"email",label:"Email"},
+    {key:"bank_details",label:"Bank details",type:"textarea",full:true},
+    {key:"notes",label:"Notes",type:"textarea",full:true},
+  ],
+});
+
+/* ============================ Consultants (Consultancy section) ============================ */
+window.OPS.routes.consultants = window.OPS.makeRegistry({
+  tool:"consultants", table:"employees", title:"Consultants", eyebrow:"Consultancy", logView:true,
+  orderBy:"name", filter:{col:"emp_type",val:"consultant"},
+  searchKeys:["name","designation","phone","email"],
+  listCols:[
+    {key:"name",label:"Name"},
+    {key:"designation",label:"Role"},
+    {key:"monthly_salary",label:"Rate / Retainer",num:true,fmt:v=>v==null?"":money(v)},
+    {key:"status",label:"Status"},
+  ],
+  fields:[
+    {key:"name",label:"Name",full:true,required:true},
+    {key:"designation",label:"Role (Consultant / PM / Technician)"},
+    {key:"monthly_salary",label:"Rate / Monthly Retainer (₹)",type:"number"},
+    {key:"doj",label:"Engagement Start",type:"date"},
+    {key:"dol",label:"Engagement End (blank = active)",type:"date"},
+    {key:"status",label:"Status",type:"select",options:["active","inactive"]},
+    {key:"phone",label:"Phone"},
+    {key:"email",label:"Email"},
+    {key:"agreement_link",label:"Signed agreement link (drive URL — upload rarely)",full:true},
     {key:"bank_details",label:"Bank details",type:"textarea",full:true},
     {key:"notes",label:"Notes",type:"textarea",full:true},
   ],
@@ -65,7 +89,7 @@ async function salaryCalc(){
   $("scSave").addEventListener("click",saveMonth);
   const mb=monthBounds(ym);
   const [{data:emps},{data:runs}]=await Promise.all([
-    sb().from("employees").select("*").eq("status","active").order("name"),
+    sb().from("employees").select("*").eq("status","active").eq("emp_type","employee").order("name"),
     sb().from("salary_runs").select("*").eq("period_month",ym) ]);
   const runByEmp={}; (runs||[]).forEach(r=>runByEmp[r.employee_id]=r);
   // who is engaged this month

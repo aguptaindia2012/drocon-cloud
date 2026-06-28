@@ -77,7 +77,9 @@ function makeRegistry(cfg){
       <div id="rqList" class="muted">Loading…</div>`;
     (cfg.extraActions||[]).forEach((a,i)=>{ const b=$("main").querySelector(`[data-extra="${i}"]`); if(b) b.addEventListener("click",a.fn); });
     let all=[];
-    const { data, error } = await sb().from(cfg.table).select("*").order(cfg.orderBy||"created_at",{ascending:false});
+    let lq=sb().from(cfg.table).select("*").order(cfg.orderBy||"created_at",{ascending:false});
+    if(cfg.filter) lq=lq.eq(cfg.filter.col, cfg.filter.val);
+    const { data, error } = await lq;
     if(error){ $("rqList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
     all=data||[];
     if(cfg.summary && $("rqSummary")){ try{ $("rqSummary").innerHTML=cfg.summary(all); }catch(e){} }
@@ -148,6 +150,7 @@ function makeRegistry(cfg){
         window.OPS.audit("edited",cfg.table,rec.id,out[cfg.fields[0].key]); window.OPS.flashTop("Saved ✓"); list();
       }else{
         out.created_by=window.OPS.me.id;
+        if(cfg.filter) out[cfg.filter.col]=cfg.filter.val;
         const { data:ins, error }=await sb().from(cfg.table).insert(out).select().single();
         if(error){ $("rqErr").textContent=error.message; return; }
         window.OPS.audit("created",cfg.table,ins.id,out[cfg.fields[0].key]); window.OPS.flashTop("Created ✓"); list();
@@ -190,6 +193,7 @@ function makeRegistry(cfg){
       const headerOf={}; cfg.fields.forEach(f=>{ headerOf[f.label.toLowerCase()]=f.key; headerOf[f.key.toLowerCase()]=f.key; });
       const recs=rows.map(r=>{
         const o={created_by:window.OPS.me.id};
+        if(cfg.filter) o[cfg.filter.col]=cfg.filter.val;
         Object.keys(r).forEach(h=>{ const k=headerOf[h.toLowerCase().trim()]; if(k){ const f=cfg.fields.find(x=>x.key===k);
           let val=r[h]; if(f&&f.type==="number") val=val===""?null:Number(val.replace(/[₹,]/g,"")); o[k]=val===""?null:val; } });
         return o;

@@ -38,6 +38,8 @@ const SECTIONS = [
   { key:"finance",    label:"Finance" },
   { key:"dashboards", label:"Dashboards" },
   { key:"hr",         label:"HR" },
+  { key:"consultancy",label:"Consultancy" },
+  { key:"resources",  label:"Resources" },
   { key:"team",       label:"Team & Access" },
   { key:"audit",      label:"Audit" },
 ];
@@ -71,8 +73,12 @@ const TOOLS = [
   { key:"bd_dashboard",        section:"dashboards", label:"Ongoing Sales",         gate:"perm" },
   // HR
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",       gate:"perm" },
-  { key:"hr_employees",  section:"hr", label:"Employees & Consultants",  gate:"perm" },
+  { key:"hr_employees",  section:"hr", label:"Employees",               gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",           gate:"perm" },
+  // Consultancy
+  { key:"consultants",   section:"consultancy", label:"Consultants",    gate:"perm" },
+  // Resources (policies & shared documents)
+  { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
   // Team & Access + Audit (now top-level, admin-only)
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
