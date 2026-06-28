@@ -268,11 +268,27 @@ async function save(){
     line_items:D.items, totals:t, terms:D.terms, status:D.status||"draft",
     related_doc_id:D.related_doc_id||null, data:{ copyLabel:D.copyLabel } };
   let savedId=D.id;
-  if(D.id){ const { error }=await sb().from("documents").update(rec).eq("id",D.id); if(error){ $("dErr").textContent=error.message; return; } }
+  let reverted=false, reviewerId=null;   // #13: a non-admin editing an APPROVED doc sends it back to review
+  if(D.id){
+    if(!window.OPS.isAdmin()){
+      const { data:cur }=await sb().from("documents").select("approval_status,assigned_approver").eq("id",D.id).single();
+      if(cur && cur.approval_status==="approved"){
+        rec.approval_status="submitted"; rec.submitted_by=window.OPS.me.id; rec.submitted_at=new Date().toISOString(); rec.reject_note=null;
+        reverted=true; reviewerId=cur.assigned_approver||null;
+      }
+    }
+    const { error }=await sb().from("documents").update(rec).eq("id",D.id); if(error){ $("dErr").textContent=error.message; return; }
+  }
   else { rec.created_by=window.OPS.me.id; const { data:ins, error }=await sb().from("documents").insert(rec).select().single();
     if(error){ $("dErr").textContent=(error.code==="23505")?"That number already exists for this type — change it.":error.message; return; }
     D.id=ins.id; savedId=ins.id; }
   window.OPS.audit(D.id&&savedId?"saved":"created","document",savedId,TYPE+" "+D.number);
+  if(reverted){
+    window.OPS.audit("edit_reapproval","document",savedId,TYPE+" "+D.number+" reverted to review after edit");
+    try{ if(reviewerId) await sb().from("notifications").insert({ user_id:reviewerId, message:"Re-review needed: "+TYPE+" "+D.number+" was edited after approval." }); }catch(e){}
+    window.OPS.refreshNotifs && window.OPS.refreshNotifs();
+    window.OPS.flashTop("Saved — sent back for re-approval (edited after approval)"); editor(); return;
+  }
   // optional inventory decrement for invoice spare lines
   if(TYPE==="invoice" && $("dStock") && $("dStock").checked){
     for(const it of D.items){ if(it._spareId && num(it.qty)>0){

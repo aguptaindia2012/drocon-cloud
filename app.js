@@ -38,10 +38,11 @@ const SECTIONS = [
   { key:"finance",    label:"Finance" },
   { key:"dashboards", label:"Dashboards" },
   { key:"hr",         label:"HR" },
-  { key:"consultancy",label:"Consultancy" },
+  { key:"partners",   label:"Partners" },
   { key:"resources",  label:"Resources" },
   { key:"team",       label:"Team & Access" },
   { key:"audit",      label:"Audit" },
+  { key:"portal",     label:"Partner Portal" },   // external (invite-only) logins only
 ];
 const TOOLS = [
   // Agreement (existing studio)
@@ -51,7 +52,8 @@ const TOOLS = [
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
   // Daily Spray Entry (its own section, made the landing tab)
-  { key:"daily_entry",   section:"trackers", label:"Daily Spray Entry",     gate:"perm" },
+  { key:"daily_entry",     section:"trackers", label:"Daily Spray Entry", gate:"perm" },
+  { key:"daily_approvals", section:"trackers", label:"Daily Approvals",   gate:"perm" },
   // Business Development — pools + sales documents
   { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
   { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },
@@ -76,14 +78,19 @@ const TOOLS = [
   { key:"hr_employees",  section:"hr", label:"Employees",               gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",           gate:"perm" },
   { key:"hr_payslips",   section:"hr", label:"Payslips",                 gate:"perm" },
-  // Consultancy
-  { key:"consultants",   section:"consultancy", label:"Consultants",    gate:"perm" },
+  // Partners (was Consultancy) — Consultant + Authorized Partner rates + invoice approvals
+  { key:"consultants",      section:"partners", label:"Consultant",        gate:"perm" },
+  { key:"ap_rates",         section:"partners", label:"Authorized Partner", gate:"perm" },
+  { key:"partner_invoices", section:"partners", label:"Invoice Approvals",   gate:"perm" },
   // Resources (policies & shared documents)
   { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
   // Team & Access + Audit (now top-level, admin-only)
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
   { key:"access_log", section:"audit", label:"Access Log",    gate:"admin" },
+  // Partner Portal — visible ONLY to external (invite-only) partner logins
+  { key:"portal_submit", section:"portal", label:"Submit Invoice", gate:"external" },
+  { key:"portal_mine",   section:"portal", label:"My Invoices",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)
@@ -183,8 +190,10 @@ $("btnSignOut").addEventListener("click", async ()=>{ await sb.auth.signOut(); }
 (function(){ const r=$("meRole"); if(r){ r.style.cursor="pointer"; r.title="Click to refresh your role & access"; r.addEventListener("click", ()=>{ if(me) refreshRole(); }); } })();
 
 // ---------- role + permission helpers ----------
-const isAdmin    = ()=> profile && profile.role==="admin";
-const isApprover = ()=> profile && (profile.role==="admin"||profile.role==="approver");
+const isAdmin    = ()=> profile && profile.role==="admin" && !profile.is_external;
+const isApprover = ()=> profile && !profile.is_external && (profile.role==="admin"||profile.role==="approver");
+const isExternal = ()=> profile && profile.is_external===true;
+window.OPS.isExternal = isExternal;
 const canViewContacts = ()=> isAdmin() || window.OPS.perms.has("view_contacts");
 const canExport = ()=> isAdmin() || window.OPS.perms.has("can_export");
 const canDelete = ()=> isAdmin() || window.OPS.perms.has("can_delete");
@@ -195,6 +204,9 @@ window.OPS.canViewContacts=canViewContacts; window.OPS.helpers.maskPhone=maskPho
 function toolByKey(k){ return TOOLS.find(t=>t.key===k); }
 function canSee(tool){
   if(!tool) return false;
+  // External (invite-only) partner logins are sandboxed to the Partner Portal only.
+  if(isExternal()) return tool.gate==="external";
+  if(tool.gate==="external") return false;
   if(tool.gate==="admin")    return isAdmin();
   if(tool.gate==="approver") return isApprover();
   if(tool.gate==="perm")     return isAdmin() || window.OPS.perms.has(tool.key);

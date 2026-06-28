@@ -49,7 +49,7 @@ window.OPS.routes.hr_employees = window.OPS.makeRegistry({
 
 /* ============================ Consultants (Consultancy section) ============================ */
 window.OPS.routes.consultants = window.OPS.makeRegistry({
-  tool:"consultants", table:"employees", title:"Consultants", eyebrow:"Consultancy", logView:true,
+  tool:"consultants", table:"employees", title:"Consultants", eyebrow:"Partners · Consultancy", logView:true,
   orderBy:"name", filter:{col:"emp_type",val:"consultant"},
   searchKeys:["name","designation","phone","email"],
   listCols:[
