@@ -75,7 +75,10 @@ async function reviewQueue(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Review / Approvals</div><h1>My review queue</h1>
     <p class="muted">Items submitted for your review. ${window.OPS.isAdmin()?"As an admin you also see everything pending.":""}</p>
-    <div id="rvBody" class="muted">Loading…</div>`;
+    <div id="rvBody" class="muted">Loading…</div>
+    <div id="rvDaily"></div>`;
+  // Daily spray submissions are surfaced here too (no separate tab).
+  if(window.OPS.renderDailyApprovals){ try{ window.OPS.renderDailyApprovals($("rvDaily")); }catch(e){} }
   const admin=window.OPS.isAdmin();
   const ps=await listProfilesCached();
   async function pending(table, extraCols){

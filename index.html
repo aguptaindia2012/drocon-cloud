@@ -37,7 +37,9 @@ label{font-size:12px;font-weight:700;display:block;margin-bottom:4px}
 .row{display:flex;gap:10px;align-items:center}
 .row.wrap{flex-wrap:wrap}
 .spacer{flex:1}
-.topbar{display:flex;align-items:center;gap:12px;padding:12px 22px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+/* whole header block (top bar + section bar + sub-tabs) freezes on scroll */
+.appheader{position:sticky;top:0;z-index:40;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 22px;background:#fff;border-bottom:1px solid var(--line)}
 .topbar .accentsq{width:9px;height:9px;background:var(--orange);border-radius:2px}
 .brand b{color:var(--green);font-weight:900;letter-spacing:.3px}
 .brand span{display:block;font-size:10px;color:var(--orange);font-weight:700;text-transform:uppercase;letter-spacing:2px}
@@ -118,20 +120,22 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 
 <!-- ============ APP ============ -->
 <div id="appView" class="hidden">
-  <div class="topbar">
-    <div class="accentsq"></div>
-    <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
-    <div class="spacer"></div>
-    <button class="btn sm" id="btnCalc" title="Calculator (pop out)">🧮</button>
-    <button class="btn sm" id="btnCalendar" title="Calendar (pop out)">📅</button>
-    <button class="btn sm" id="btnPrivacy" title="Data &amp; Privacy">🛡</button>
-    <div id="bell" style="position:relative;cursor:pointer;font-size:20px;user-select:none" title="Notifications">🔔<span id="bellCount" style="position:absolute;top:-6px;right:-8px;background:var(--orange);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;display:none"></span></div>
-    <span class="pill-role" id="meRole">—</span>
-    <span class="muted" id="meEmail"></span>
-    <button class="btn sm" id="btnSignOut">Sign out</button>
+  <div class="appheader">
+    <div class="topbar">
+      <div class="accentsq"></div>
+      <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
+      <div class="spacer"></div>
+      <button class="btn sm" id="btnCalc" title="Calculator (pop out)">🧮</button>
+      <button class="btn sm" id="btnCalendar" title="Calendar (pop out)">📅</button>
+      <button class="btn sm" id="btnPrivacy" title="Data &amp; Privacy">🛡</button>
+      <div id="bell" style="position:relative;cursor:pointer;font-size:20px;user-select:none" title="Notifications">🔔<span id="bellCount" style="position:absolute;top:-6px;right:-8px;background:var(--orange);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;display:none"></span></div>
+      <span class="pill-role" id="meRole">—</span>
+      <span class="muted" id="meEmail"></span>
+      <button class="btn sm" id="btnSignOut">Sign out</button>
+    </div>
+    <div class="sectionbar" id="sectionBar"></div>
+    <div class="nav" id="nav"></div>
   </div>
-  <div class="sectionbar" id="sectionBar"></div>
-  <div class="nav" id="nav"></div>
   <div class="wrap" id="main"></div>
 </div>
 

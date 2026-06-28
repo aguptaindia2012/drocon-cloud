@@ -52,8 +52,8 @@ const TOOLS = [
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
   // Daily Spray Entry (its own section, made the landing tab)
+  // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
   { key:"daily_entry",     section:"trackers", label:"Daily Spray Entry", gate:"perm" },
-  { key:"daily_approvals", section:"trackers", label:"Daily Approvals",   gate:"perm" },
   // Business Development — pools + sales documents
   { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
   { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },

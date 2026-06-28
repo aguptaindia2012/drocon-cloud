@@ -18,9 +18,11 @@ window.OPS.routes.ap_rates = window.OPS.makeRegistry({
   tool:"ap_rates", table:"partner_rates", title:"Authorized Partner", eyebrow:"Partners · Service rates",
   orderBy:"rate_upto", filter:{col:"party_type",val:"authorized_partner"},
   searchKeys:["slab"],
-  summary: ()=>`<div class="callout">These slabs mirror the <b>Billing Rates annexure</b> of the Authorized Partner agreement.
-    The partner keeps the <b>Partner %</b> of the per-acre rate; DroCon Bharat retains the <b>DroCon %</b> as commission.
-    They drive the commission auto-calculated on each partner invoice.</div>`,
+  summary: ()=>`<div class="callout">These are <b>universal commission slabs that apply to every Authorized Partner</b> — not a per-partner rate card.
+    Field rates are variable (the farmer's per-acre rate differs by contract/crop), so on each invoice the partner enters the
+    <b>actual rate received from the farmer</b> per row; the matching slab then sets the split — the partner keeps the
+    <b>Partner %</b> and DroCon Bharat retains the <b>DroCon %</b> as commission (auto-calculated, overridable).
+    These slabs mirror the Billing Rates annexure of the Authorized Partner agreement.</div>`,
   listCols:[
     {key:"slab",label:"Slab"},
     {key:"rate_upto",label:"Rate up to (₹/acre)",num:true,fmt:v=>v==null?"₹451 & above":("≤ ₹"+v)},
@@ -131,6 +133,7 @@ async function portalSubmit(){
         <div class="field"><label>Period</label><input id="piPeriod" placeholder="e.g. Jun 2026"></div>
       </div>
       <h3 style="margin:14px 0 4px">${kind==="consultant"?"Timesheet lines":"Acres sprayed"}</h3>
+      ${kind==="authorized_partner"?'<div class="muted" style="margin-bottom:6px">Enter the <b>actual per-acre rate you received from the farmer</b> on each row. The commission % is filled automatically from the standard slabs (you can override it if your contract differs).</div>':''}
       <div id="piRows"></div>
       <div class="row" style="margin-top:12px;gap:24px;flex-wrap:wrap">
         <div><div class="eyebrow">Gross</div><b id="piGross">₹0</b></div>

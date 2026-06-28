@@ -116,16 +116,18 @@ async function save(){
   window.OPS.audit(editingId?"daily_resubmitted":"daily_submitted","daily_submissions",editingId||locName,locName+" · "+valid.length+" spray(s)");
   window.OPS.refreshNotifs && window.OPS.refreshNotifs();
   window.OPS.flashTop("Submitted "+valid.length+" spray(s) for approval ✓");
-  window.OPS.openTool("daily_approvals");
+  window.OPS.openTool("reviews");
 }
 window.OPS.routes.daily_entry = ()=>view(null);
 
 /* ============================ Daily Approvals ============================ */
+/* Rendered inside the consolidated Review / Approvals tab (host passed in), or
+   standalone if called with no host. */
 function subChip(s){ const map={submitted:"warn",approved:"ok",rejected:"err",draft:""}; return `<span class="chip ${map[s]||""}">${esc(s)}</span>`; }
 
-async function approvals(){
-  const m=$("main"); const admin=window.OPS.isAdmin();
-  m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>Daily Approvals</h1>
+async function approvals(host){
+  const embedded=!!host; const m=host||$("main"); const admin=window.OPS.isAdmin();
+  m.innerHTML=`${embedded?'<h3 style="margin-top:22px">Daily spray submissions</h3>':'<div class="eyebrow">Daily Spray Entry</div><h1>Daily Approvals</h1>'}
     <div class="row wrap" style="margin:8px 0">
       <select id="daFilter" style="max-width:220px">
         <option value="submitted">Pending my review</option>
@@ -208,5 +210,6 @@ async function approvals(){
   }
   load();
 }
-window.OPS.routes.daily_approvals = approvals;
+window.OPS.routes.daily_approvals = ()=>approvals();      // fallback (not in nav)
+window.OPS.renderDailyApprovals = (host)=>approvals(host); // embedded in Review/Approvals
 })();
