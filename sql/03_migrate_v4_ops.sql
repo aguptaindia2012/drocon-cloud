@@ -185,7 +185,9 @@ create table if not exists public.documents (
 );
 create index if not exists documents_type_idx on public.documents(doc_type);
 create index if not exists documents_party_idx on public.documents(party_id);
-create unique index if not exists documents_number_uniq on public.documents(doc_type, number);
+-- NOTE: uniqueness on document numbers is created in migrate 13 as
+-- (doc_type, entity, number), because DCB and IBS reuse the same number series.
+-- (No plain (doc_type, number) unique here — it would reject valid cross-entity duplicates.)
 
 drop trigger if exists documents_touch on public.documents;
 create trigger documents_touch before update on public.documents
