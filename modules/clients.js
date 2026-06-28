@@ -6,6 +6,17 @@
 (function(){
 const { esc, money } = window.OPS.helpers;
 
+const MSA_RESPONSIBILITIES = [
+"Authorized Partner responsibilities (as per the Master Service Agreement):",
+"1. Provide airworthy, DGCA-compliant drones with valid UIN and third-party liability insurance.",
+"2. Deploy trained pilots holding valid Remote Pilot Certificates (RPC).",
+"3. Mobilise to assigned locations on time and adhere to the agreed spray schedule.",
+"4. Keep drones, batteries and spares in serviceable condition; carry adequate backups.",
+"5. Record daily acreage and farmer data and share GPS-tagged proof of every spray.",
+"6. Follow all safety, regulatory and DroCon Bharat operational guidelines.",
+"7. Bill at the agreed rate; DroCon Bharat's fee/commission applies as per the MSA."
+].join("\n");
+
 window.OPS.routes.clients = window.OPS.makeRegistry({
   tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"firm_name",
@@ -36,16 +47,26 @@ window.OPS.routes.clients = window.OPS.makeRegistry({
 });
 
 window.OPS.routes.partners = window.OPS.makeRegistry({
-  tool:"partners", table:"authorized_partners", title:"Authorized Partners", eyebrow:"Order Management", logView:true,
+  tool:"partners", table:"authorized_partners", title:"Authorized Partners", eyebrow:"Business Development", logView:true,
   orderBy:"name",
   extraActions:[{ label:"🔎 Pilot Finder", fn:()=>{ if(window.OPS.partnerFinder) window.OPS.partnerFinder(); } }],
   searchKeys:["name","company","phone","home_state","home_district","drone_model"],
+  defaults:{ responsibilities:MSA_RESPONSIBILITIES },
+  summary:(rows)=>{ const drones=rows.reduce((s,r)=>s+(Number(r.drones_provided)||0),0);
+    const cap=rows.reduce((s,r)=>s+(Number(r.capacity_acres_day)||0),0);
+    const cos=rows.filter(r=>r.company).length;
+    return `<div class="statrow">
+      <div class="stat"><div class="n">${rows.length}</div><div class="l">Partners / pilots</div></div>
+      <div class="stat"><div class="n">${drones}</div><div class="l">Drones provided</div></div>
+      <div class="stat"><div class="n">${cap}</div><div class="l">Capacity (acres/day)</div></div>
+      <div class="stat"><div class="n">${cos}</div><div class="l">Drone-owning companies</div></div>
+    </div>`; },
   listCols:[
     {key:"name", label:"Pilot / Partner"},
     {key:"company", label:"Company"},
     {key:"phone", label:"Phone", mask:true},
     {key:"home_district", label:"Home District"},
-    {key:"home_state", label:"Home State"},
+    {key:"drones_provided", label:"Drones", num:true},
     {key:"capacity_acres_day", label:"Acres/Day", num:true},
   ],
   fields:[
@@ -55,11 +76,13 @@ window.OPS.routes.partners = window.OPS.makeRegistry({
     {key:"email", label:"Email"},
     {key:"home_state", label:"Home State", type:"state"},
     {key:"home_district", label:"Home District", type:"district", dependsOn:"home_state"},
-    {key:"home_lat", label:"Home Latitude", type:"number"},
-    {key:"home_lng", label:"Home Longitude", type:"number"},
+    {key:"drones_provided", label:"No. of Drones Provided", type:"number"},
     {key:"drone_model", label:"Drone Model"},
     {key:"battery", label:"Battery Sets"},
     {key:"capacity_acres_day", label:"Capacity (Acres/Day)", type:"number"},
+    {key:"home_lat", label:"Home Latitude", type:"number"},
+    {key:"home_lng", label:"Home Longitude", type:"number"},
+    {key:"responsibilities", label:"Responsibilities (as per MSA)", type:"textarea", full:true},
     {key:"notes", label:"Notes", type:"textarea", full:true},
   ],
 });

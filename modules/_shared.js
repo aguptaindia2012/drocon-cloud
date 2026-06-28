@@ -73,12 +73,14 @@ function makeRegistry(cfg){
         ${window.OPS.isAdmin()?'<button class="btn sm" id="rqClear" style="color:#a3322a;border-color:#e4b4b4">Clear all</button>':''}
         <button class="btn green sm" id="rqNew">+ New</button>
       </div>
+      <div id="rqSummary"></div>
       <div id="rqList" class="muted">Loading…</div>`;
     (cfg.extraActions||[]).forEach((a,i)=>{ const b=$("main").querySelector(`[data-extra="${i}"]`); if(b) b.addEventListener("click",a.fn); });
     let all=[];
     const { data, error } = await sb().from(cfg.table).select("*").order(cfg.orderBy||"created_at",{ascending:false});
     if(error){ $("rqList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
     all=data||[];
+    if(cfg.summary && $("rqSummary")){ try{ $("rqSummary").innerHTML=cfg.summary(all); }catch(e){} }
     function render(rows){
       $("rqList").innerHTML = rows.length ? `<table><thead><tr>${cfg.listCols.map(c=>`<th class="${c.num?'num':''}">${esc(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.listCols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.key],r):(c.mask?esc(window.OPS.helpers.maskPhone(r[c.key])):esc(r[c.key]==null?"":r[c.key]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`
