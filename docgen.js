@@ -234,5 +234,48 @@ function generateWord(doc){
   }).catch(e=>{ alert("Word error: "+e); });
 }
 
-window.OPS.docgen = { generateWord, downloadJson, amountInWords, computeTotals, DCB, fileBase };
+/* ============================================================================
+   WORD REPORT (dashboards) — title + sections (heading / chart image / table),
+   DroCon letterhead repeating on every page.
+   opts = { title, subtitle?, sections:[{heading?, note?, image?(pngDataUrl), imgW?, imgH?, table?:{headers,rows}}] }
+   ============================================================================ */
+function generateReport(opts){
+  if(typeof docx==="undefined"){ alert("Word library not loaded."); return; }
+  const D=docx;
+  const GREEN="599533", ORANGE="F48A1C", BLUE="0A6496", CHAR="282828", GREY="F5F5F5", LINE="CFD8C9";
+  const border={style:D.BorderStyle.SINGLE,size:1,color:LINE};
+  function run(t,o){ o=o||{}; return new D.TextRun({text:safe(t),bold:o.bold,italics:o.italics,color:o.color||CHAR,size:o.size||18}); }
+  function cell(t,o){ o=o||{}; return new D.TableCell({ width:o.w?{size:o.w,type:D.WidthType.DXA}:undefined,
+    borders:{top:border,bottom:border,left:border,right:border}, shading:o.fill?{fill:o.fill,type:D.ShadingType.CLEAR}:undefined,
+    margins:{top:50,bottom:50,left:80,right:80}, children:[new D.Paragraph({children:[run(t,o)]})] }); }
+  function dataTable(headers, rows){ const w=Math.floor(9360/headers.length);
+    const head=new D.TableRow({tableHeader:true,children:headers.map(h=>cell(h,{bold:true,color:"FFFFFF",fill:GREEN,w,size:17}))});
+    const body=rows.map((r,ri)=>new D.TableRow({children:r.map(c=>cell(c==null?"":String(c),{w,fill:ri%2?GREY:undefined,size:17}))}));
+    return new D.Table({width:{size:9360,type:D.WidthType.DXA},columnWidths:headers.map(()=>w),rows:[head,...body]}); }
+  const children=[];
+  children.push(new D.Paragraph({alignment:D.AlignmentType.CENTER,spacing:{after:opts.subtitle?20:140},children:[run(opts.title||"Report",{bold:true,color:GREEN,size:30})]}));
+  if(opts.subtitle) children.push(new D.Paragraph({alignment:D.AlignmentType.CENTER,spacing:{after:140},children:[run(opts.subtitle,{italics:true,color:BLUE,size:19})]}));
+  children.push(new D.Paragraph({alignment:D.AlignmentType.RIGHT,spacing:{after:120},children:[run("Generated "+new Date().toLocaleString(),{size:15,color:"7a8071"})]}));
+  (opts.sections||[]).forEach(s=>{
+    if(s.heading) children.push(new D.Paragraph({spacing:{before:200,after:60},border:{bottom:{style:D.BorderStyle.SINGLE,size:4,color:"D9E8CC",space:2}},children:[run(s.heading,{bold:true,color:GREEN,size:24})]}));
+    if(s.note) children.push(new D.Paragraph({spacing:{after:60},children:[run(s.note,{size:17,color:"7a8071"})]}));
+    if(s.image){ try{ children.push(new D.Paragraph({spacing:{after:80},children:[new D.ImageRun({type:"png",data:b64ToBytes(s.image),transformation:{width:s.imgW||520,height:s.imgH||240}})]})); }catch(e){} }
+    if(s.table && s.table.rows && s.table.rows.length) children.push(dataTable(s.table.headers, s.table.rows));
+  });
+  const headerChildren = DCB_LOGO ? [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[new D.ImageRun({type:"png",data:b64ToBytes(DCB_LOGO),transformation:{width:120,height:52}})]}) ]
+    : [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(DCB.legalName,{bold:true,color:GREEN,size:20})]}) ];
+  const doc=new D.Document({ styles:{default:{document:{run:{font:"Lato",size:18,color:CHAR}}}},
+    sections:[{ properties:{page:{size:{width:12240,height:15840},margin:{top:1180,bottom:1100,left:900,right:900,header:520,footer:430}}},
+      headers:{default:new D.Header({children:headerChildren})},
+      footers:{default:new D.Footer({children:[
+        new D.Paragraph({alignment:D.AlignmentType.CENTER,border:{top:{style:D.BorderStyle.SINGLE,size:6,color:ORANGE,space:4}},children:[run(DCB.legalName+", "+DCB.shortAddress+"  ·  "+DCB.mobile,{color:ORANGE,size:13,bold:true})]}),
+        new D.Paragraph({spacing:{before:30},border:{bottom:{style:D.BorderStyle.SINGLE,size:16,color:GREEN,space:1}},children:[run("",{size:2})]})
+      ]})}, children }]
+  });
+  const fname=(opts.title||"Report").replace(/[\\\/:*?"<>|]+/g,"").replace(/\s+/g,"_")+"_"+new Date().toISOString().slice(0,10);
+  D.Packer.toBlob(doc).then(blob=>{ window.OPS.saveBlob(blob, fname+".docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",".docx"); })
+    .catch(e=>alert("Report error: "+e));
+}
+
+window.OPS.docgen = { generateWord, generateReport, downloadJson, amountInWords, computeTotals, DCB, fileBase };
 })();

@@ -156,6 +156,10 @@ async function dashboard(){
       <div class="stat"><div class="n">${monthA.toFixed(0)}</div><div class="l">Acres this month</div></div>
       <div class="stat"><div class="n">${money(monthR)}</div><div class="l">Revenue this month</div></div>
     </div>
+    <div class="row" id="acreReport" style="margin-bottom:10px"></div>
+    <div class="card"><h3>Charts</h3><div class="fgrid">
+      <div>${window.OPS.report.canvas("acMonthly",560,240)}</div>
+      <div>${window.OPS.report.canvas("acLoc",560,240)}</div></div></div>
     <div class="card"><h3>Last 7 days — acres by location</h3>
       ${dayList.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
       <tbody>${Object.keys(byDayLoc).map(k=>{ const tot=dayList.reduce((s,d)=>s+(byDayLoc[k][d]||0),0); return `<tr><td><b>${esc(k)}</b></td>${dayList.map(d=>`<td class="num">${byDayLoc[k][d]?byDayLoc[k][d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`; }).join("")}</tbody></table></div>`
@@ -165,6 +169,15 @@ async function dashboard(){
     <div class="card"><h3>Location-wise totals</h3><table><thead><tr><th>Location</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
       <tbody>${locs.map(l=>`<tr><td><b>${esc(l.k)}</b></td><td class="num">${l.a.toFixed(1)}</td><td class="num">${money(l.r)}</td></tr>`).join("")}</tbody></table>
       <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>`;
+  const cm=months.slice().reverse();
+  window.OPS.report.line("acMonthly", cm, cm.map(k=>byM[k].a), "Acres / month", "#599533");
+  const topL=locs.slice(0,10);
+  window.OPS.report.bar("acLoc", topL.map(l=>l.k), topL.map(l=>l.r), "Revenue by location", "#0A6496");
+  window.OPS.report.wordButton("acreReport","Acre Tracker Report", ()=>([
+    {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total acres",totA.toFixed(1)],["Total revenue",money(totR)],["Acres this month",monthA.toFixed(1)],["Revenue this month",money(monthR)]]}},
+    {heading:"Monthly work", image:window.OPS.report.img("acMonthly"), table:{headers:["Month","Acres","Revenue"], rows:cm.map(k=>[k,byM[k].a.toFixed(1),money(byM[k].r)])}},
+    {heading:"Location-wise totals", image:window.OPS.report.img("acLoc"), table:{headers:["Location","Acres","Revenue"], rows:locs.map(l=>[l.k,l.a.toFixed(1),money(l.r)])}},
+  ]));
 }
 
 /* ---------- CSV import (Date,Location,Pilot,Acres,Rate[,State,District,Crop]) ---------- */

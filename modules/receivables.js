@@ -64,6 +64,8 @@ async function load(){
         <td style="${buckets[">90"]>0?'color:#a3322a;font-weight:700':''}">${money(buckets[">90"])}</td>
       </tr></tbody></table>
     </div>
+    <div class="row" id="recReport" style="margin-bottom:8px"></div>
+    <div class="card"><h3>Aging chart</h3>${window.OPS.report.canvas("recAging",560,240)}</div>
     <div class="row" style="margin:8px 0"><input id="rSearch" placeholder="Search invoice / client…" style="max-width:280px">
       <div class="spacer"></div>
       <label class="muted" style="display:inline"><input type="checkbox" id="rOnlyDue" style="width:auto"> only with balance</label></div>
@@ -84,6 +86,13 @@ async function load(){
   renderTable();
   $("rSearch").addEventListener("input",renderTable);
   $("rOnlyDue").addEventListener("change",renderTable);
+  window.OPS.report.bar("recAging", ["0–30","31–60","61–90",">90"], [buckets["0-30"],buckets["31-60"],buckets["61-90"],buckets[">90"]], "Receivable (₹)", "#F48A1C");
+  const due=rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age);
+  window.OPS.report.wordButton("recReport","Invoices & Receivables Report"+(entity?(" — "+entity):""), ()=>([
+    {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total receivable",money(totReceivable)],["Total invoiced",money(totInvoiced)],["Invoices",rows.length],["Overdue >30d",overdue]]}},
+    {heading:"Receivables aging", image:window.OPS.report.img("recAging"), table:{headers:["0–30","31–60","61–90",">90"], rows:[[money(buckets["0-30"]),money(buckets["31-60"]),money(buckets["61-90"]),money(buckets[">90"])]]}},
+    {heading:"Outstanding invoices", table:{headers:["Entity","Invoice","Date","Client","Balance","Age (d)"], rows:due.map(x=>[x.r.entity||"DCB",x.r.number,fmtDate(x.r.doc_date),x.party,money(x.balance),x.age])}},
+  ]));
 }
 
 function recordPayment(x){

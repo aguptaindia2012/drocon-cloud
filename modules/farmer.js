@@ -126,9 +126,16 @@ async function snapshot(){
   const byV={};
   all.forEach(r=>{ const v=r.village||"(unknown)"; byV[v]=byV[v]||{tot:0,n:0}; byV[v].tot+=num(r.acre); byV[v].n++; });
   const list=Object.entries(byV).map(([v,o])=>({v,tot:o.tot,n:o.n,avg:o.tot/o.n})).sort((a,b)=>b.tot-a.tot).slice(0,15);
-  $("sHost").innerHTML=`<div class="card"><h3>Top villages by acres sprayed</h3>
+  $("sHost").innerHTML=`<div class="row" id="fmReport" style="margin-bottom:10px"></div>
+    <div class="card"><h3>Top villages by acres</h3>${window.OPS.report.canvas("fmVillages",560,260)}</div>
+    <div class="card"><h3>Top villages by acres sprayed</h3>
     <table><thead><tr><th>Village</th><th class="num">Sprays</th><th class="num">Total acres</th><th class="num">Avg acres/spray</th></tr></thead>
     <tbody>${list.map(x=>`<tr><td><b>${esc(x.v)}</b></td><td class="num">${x.n}</td><td class="num">${x.tot.toFixed(1)}</td><td class="num">${x.avg.toFixed(2)}</td></tr>`).join("")}</tbody></table></div>`;
+  const top=list.slice(0,10);
+  window.OPS.report.bar("fmVillages", top.map(x=>x.v), top.map(x=>x.tot), "Total acres", "#599533");
+  window.OPS.report.wordButton("fmReport","Farmer Snapshot Report", ()=>([
+    {heading:"Top villages by acres", image:window.OPS.report.img("fmVillages"), table:{headers:["Village","Sprays","Total acres","Avg/spray"], rows:list.map(x=>[x.v,x.n,x.tot.toFixed(1),x.avg.toFixed(2)])}},
+  ]));
 }
 
 function importCSV(){
