@@ -75,6 +75,7 @@ const TOOLS = [
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",       gate:"perm" },
   { key:"hr_employees",  section:"hr", label:"Employees",               gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",           gate:"perm" },
+  { key:"hr_payslips",   section:"hr", label:"Payslips",                 gate:"perm" },
   // Consultancy
   { key:"consultants",   section:"consultancy", label:"Consultants",    gate:"perm" },
   // Resources (policies & shared documents)

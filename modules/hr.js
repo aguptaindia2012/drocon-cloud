@@ -41,6 +41,7 @@ window.OPS.routes.hr_employees = window.OPS.makeRegistry({
     {key:"status",label:"Status",type:"select",options:["active","inactive"]},
     {key:"phone",label:"Phone"},
     {key:"email",label:"Email"},
+    {key:"deductions_text",label:"Payslip deductions (one per line, e.g. PPF=12% or TDS=5% or Advance=2000)",type:"textarea",full:true},
     {key:"bank_details",label:"Bank details",type:"textarea",full:true},
     {key:"notes",label:"Notes",type:"textarea",full:true},
   ],
@@ -221,6 +222,63 @@ async function ledger(){
     :'<div class="card muted">No accounting entries yet. Post a salary run to create them.</div>';
 }
 
+/* ============================ Payslips (#11) ============================ */
+function parseDeductions(text, base){
+  const out=[];
+  (text||"").split("\n").forEach(line=>{ line=line.trim(); if(!line) return; const i=line.indexOf("="); if(i<0) return;
+    const name=line.slice(0,i).trim(); const v=line.slice(i+1).trim(); if(!name) return;
+    let amt = /%\s*$/.test(v) ? base*(parseFloat(v)||0)/100 : (parseFloat(String(v).replace(/[₹,]/g,""))||0);
+    amt=Math.round(amt*100)/100; if(amt) out.push({name, amount:amt}); });
+  return out;
+}
+async function payslips(){
+  const ym=(window.OPS._hrMonth)||todayISO().slice(0,7);
+  const admin=window.OPS.isAdmin();
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">HR</div><h1>Payslips</h1>
+    <div class="callout">Generated from the month's salary run; deductions come from each employee's setup. ${admin?"Generate, then Approve, then download.":"Only an admin can generate/approve payslips."}</div>
+    <div class="row" style="margin:10px 0"><label style="margin:0">Month</label><input id="psMonth" type="month" value="${ym}" style="width:auto">
+      <div class="spacer"></div>${admin?'<button class="btn green sm" id="psGen">Generate for month</button>':''}</div>
+    <div id="psBody" class="muted">Loading…</div>`;
+  $("psMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("psMonth").value; payslips(); });
+  const [{data:runs},{data:slips}]=await Promise.all([
+    sb().from("salary_runs").select("*, emp:employee_id(name,designation,emp_type,deductions_text)").eq("period_month",ym),
+    sb().from("payslips").select("*").eq("period_month",ym) ]);
+  const empRuns=(runs||[]).filter(r=>!r.emp || r.emp.emp_type!=="consultant");
+  const slipBy={}; (slips||[]).forEach(s=>slipBy[s.employee_id]=s);
+  if($("psGen")) $("psGen").addEventListener("click",async()=>{
+    const recs=empRuns.map(r=>{ const base=num(r.net_payable); const ded=parseDeductions(r.emp&&r.emp.deductions_text, base);
+      const net=base-ded.reduce((s,d)=>s+d.amount,0);
+      return { employee_id:r.employee_id, period_month:ym, base, deductions:ded, net, status:(slipBy[r.employee_id]&&slipBy[r.employee_id].status)||"draft", created_by:window.OPS.me.id }; });
+    if(!recs.length){ alert("No salary runs for "+ym+". Calculate salaries first."); return; }
+    const { error }=await sb().from("payslips").upsert(recs,{onConflict:"employee_id,period_month"});
+    if(error){ alert("Generate failed: "+error.message); return; }
+    window.OPS.audit("generated","payslips",ym,recs.length+" payslips"); window.OPS.flashTop("Generated "+recs.length+" payslip(s) ✓"); payslips();
+  });
+  const rows=empRuns.map(r=>({ r, slip:slipBy[r.employee_id] })).filter(x=>x.r.emp);
+  $("psBody").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Employee</th><th class="num">Base</th><th class="num">Deductions</th><th class="num">Net</th><th>Status</th><th></th></tr></thead>
+    <tbody>${rows.map(x=>{ const s=x.slip; const ded=s?(s.deductions||[]).reduce((a,d)=>a+num(d.amount),0):0;
+      return `<tr><td><b>${esc(x.r.emp.name)}</b><br><span class="muted">${esc(x.r.emp.designation||'')}</span></td>
+        <td class="num">${money(s?s.base:x.r.net_payable)}</td><td class="num">${s?money(ded):'—'}</td><td class="num">${s?money(s.net):'—'}</td>
+        <td>${s?window.OPS.statusChip(s.status==='approved'?'approved':'draft'):'<span class="muted">not generated</span>'}</td>
+        <td>${s&&admin&&s.status!=='approved'?`<button class="btn green sm" data-appr="${s.id}">Approve</button> `:''}${s&&s.status==='approved'?`<button class="btn blue sm" data-word="${x.r.employee_id}">Word</button>`:''}</td></tr>`; }).join("")}</tbody></table></div>`
+    : '<div class="card muted">No employee salary runs for this month. Use Salary Calculator first.</div>';
+  $("psBody").querySelectorAll("[data-appr]").forEach(b=>b.addEventListener("click",async()=>{
+    const { error }=await sb().from("payslips").update({status:"approved",approved_by:window.OPS.me.id,approved_at:new Date().toISOString()}).eq("id",b.getAttribute("data-appr"));
+    if(error){ alert(error.message); return; } window.OPS.audit("approved","payslip",b.getAttribute("data-appr"),""); window.OPS.flashTop("Approved ✓"); payslips();
+  }));
+  $("psBody").querySelectorAll("[data-word]").forEach(b=>b.addEventListener("click",()=>{
+    const x=rows.find(z=>z.r.employee_id===b.getAttribute("data-word")); const s=x.slip; if(!s) return;
+    const ded=(s.deductions||[]);
+    window.OPS.docgen.generateReport({ title:"Payslip — "+x.r.emp.name+" — "+ym, sections:[
+      {heading:"Employee", table:{headers:["Field","Value"], rows:[["Name",x.r.emp.name],["Designation",x.r.emp.designation||""],["Pay period",ym]]}},
+      {heading:"Pay details", table:{headers:["Component","Amount (₹)"], rows:[["Earned (base)", money(s.base)], ...ded.map(d=>["Less: "+d.name, "-"+money(d.amount)]), ["Net Pay", money(s.net)]]},
+        note: window.OPS.docgen.amountInWords(s.net)},
+    ]});
+  }));
+}
+
 window.OPS.routes.hr_salary = salaryCalc;
 window.OPS.routes.hr_records = records;
+window.OPS.routes.hr_payslips = payslips;
 })();
