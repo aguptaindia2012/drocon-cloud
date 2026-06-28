@@ -12,38 +12,86 @@ const num = v => { const n=Number(String(v==null?"":v).replace(/[₹,\s]/g,""));
 const todayISO = ()=> new Date().toISOString().slice(0,10);
 
 /* ---------------------------------------------------------------------------
-   Authorized-Partner rate slabs (admin-managed registry)
+   Authorized-Partner rate cards — PER PARTNER (admin-managed).
+   Pick a partner (or the Standard/default card), edit their commission slabs.
+   Rows with partner_id = null are the Standard card (fallback for any partner
+   without their own). Field rates are variable, so the partner enters the actual
+   per-acre rate on each invoice and the matching slab sets the commission split.
    --------------------------------------------------------------------------- */
-window.OPS.routes.ap_rates = window.OPS.makeRegistry({
-  tool:"ap_rates", table:"partner_rates", title:"Authorized Partner", eyebrow:"Partners · Service rates",
-  orderBy:"rate_upto", filter:{col:"party_type",val:"authorized_partner"},
-  searchKeys:["slab"],
-  summary: ()=>`<div class="callout">These are <b>universal commission slabs that apply to every Authorized Partner</b> — not a per-partner rate card.
-    Field rates are variable (the farmer's per-acre rate differs by contract/crop), so on each invoice the partner enters the
-    <b>actual rate received from the farmer</b> per row; the matching slab then sets the split — the partner keeps the
-    <b>Partner %</b> and DroCon Bharat retains the <b>DroCon %</b> as commission (auto-calculated, overridable).
-    These slabs mirror the Billing Rates annexure of the Authorized Partner agreement.</div>`,
-  listCols:[
-    {key:"slab",label:"Slab"},
-    {key:"rate_upto",label:"Rate up to (₹/acre)",num:true,fmt:v=>v==null?"₹451 & above":("≤ ₹"+v)},
-    {key:"partner_pct",label:"Partner %",num:true,fmt:v=>v==null?"":v+"%"},
-    {key:"drocon_pct",label:"DroCon %",num:true,fmt:v=>v==null?"":v+"%"},
-  ],
-  fields:[
-    {key:"slab",label:"Slab label",full:true,required:true},
-    {key:"rate_upto",label:"Rate up to (₹/acre) — blank = top open slab",type:"number"},
-    {key:"partner_pct",label:"Partner share %",type:"number"},
-    {key:"drocon_pct",label:"DroCon commission %",type:"number"},
-    {key:"note",label:"Note",type:"textarea",full:true},
-  ],
-});
+async function apRates(){
+  const m=$("main"); const admin=window.OPS.isAdmin();
+  m.innerHTML=`<div class="eyebrow">Partners · Authorized Partner</div><h1>Authorized Partner rate cards</h1>
+    <div class="callout">Each authorized partner can have their <b>own commission rate card</b>. Choose a partner below (or the
+      <b>Standard card</b> used as the default). On each invoice the partner enters the <b>actual per-acre rate received from the
+      farmer</b>; the matching slab then splits it — partner keeps <b>Partner %</b>, DroCon Bharat retains <b>DroCon %</b> (overridable).</div>
+    <div class="row wrap" style="margin:8px 0;align-items:flex-end">
+      <div class="field" style="max-width:340px;margin:0"><label>Rate card for</label>
+        <select id="arPartner"><option value="">— Standard (default) card —</option></select></div>
+      ${admin?'<button class="btn sm" id="arSeed" title="Replace this card with the standard slabs">Copy standard slabs</button>':''}
+    </div>
+    <div id="arBody" class="muted">Loading…</div>
+    ${admin?'<div class="row" style="margin-top:10px"><button class="btn green" id="arSave">Save rate card</button><div class="spacer"></div><div class="err" id="arErr"></div></div>':'<div class="muted">Read-only — only an admin can edit rate cards.</div>'}`;
+  // partner picker
+  const { data:partners }=await sb().from("authorized_partners").select("id,name,company").order("name");
+  $("arPartner").innerHTML='<option value="">— Standard (default) card —</option>'+(partners||[]).map(p=>`<option value="${p.id}">${esc(p.name||p.company||"(unnamed)")}${p.company&&p.name?(" · "+esc(p.company)):""}</option>`).join("");
+  let slabs=[];
+  const STD=[ {slab:"Up to ₹350/- per acre",rate_upto:350,partner_pct:95,drocon_pct:5},
+              {slab:"Up to ₹400/- per acre",rate_upto:400,partner_pct:93,drocon_pct:7},
+              {slab:"Up to ₹450/- per acre",rate_upto:450,partner_pct:90,drocon_pct:10},
+              {slab:"₹451/- & above per acre",rate_upto:null,partner_pct:85,drocon_pct:15} ];
+  function draw(){
+    const body=slabs.map((s,i)=>`<tr data-i="${i}">
+      <td><input data-k="slab" value="${esc(s.slab||"")}" ${admin?"":"disabled"} style="min-width:180px"></td>
+      <td class="num"><input data-k="rate_upto" type="number" step="any" value="${esc(s.rate_upto==null?"":s.rate_upto)}" ${admin?"":"disabled"} style="width:110px" placeholder="(top)"></td>
+      <td class="num"><input data-k="partner_pct" type="number" step="any" value="${esc(s.partner_pct==null?"":s.partner_pct)}" ${admin?"":"disabled"} style="width:80px"></td>
+      <td class="num"><input data-k="drocon_pct" type="number" step="any" value="${esc(s.drocon_pct==null?"":s.drocon_pct)}" ${admin?"":"disabled"} style="width:80px"></td>
+      ${admin?`<td><button class="btn sm" data-del="${i}">✕</button></td>`:""}</tr>`).join("");
+    $("arBody").innerHTML=`<table class="tight"><thead><tr><th>Slab</th><th class="num">Rate up to ₹/acre</th><th class="num">Partner %</th><th class="num">DroCon %</th>${admin?"<th></th>":""}</tr></thead><tbody>${body||""}</tbody></table>
+      ${admin?'<div class="row" style="margin-top:8px"><button class="btn sm" id="arAdd">+ Add slab</button></div>':''}`;
+    $("arBody").querySelectorAll("input[data-k]").forEach(inp=>inp.addEventListener("input",()=>{
+      const i=+inp.closest("tr").getAttribute("data-i"); const k=inp.getAttribute("data-k");
+      slabs[i][k] = (k==="slab") ? inp.value : (inp.value===""?null:Number(inp.value));
+    }));
+    $("arBody").querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ slabs.splice(+b.getAttribute("data-del"),1); draw(); }));
+    if($("arAdd")) $("arAdd").addEventListener("click",()=>{ slabs.push({slab:"",rate_upto:null,partner_pct:null,drocon_pct:null}); draw(); });
+  }
+  async function loadCard(){
+    const pid=$("arPartner").value;
+    let q=sb().from("partner_rates").select("*").eq("party_type","authorized_partner").order("rate_upto",{nullsFirst:false});
+    q = pid ? q.eq("partner_id",pid) : q.is("partner_id",null);
+    const { data }=await q; slabs=(data||[]).map(r=>({id:r.id,slab:r.slab,rate_upto:r.rate_upto,partner_pct:r.partner_pct,drocon_pct:r.drocon_pct}));
+    if(!slabs.length && pid){ $("arBody").innerHTML=''; draw(); $("arBody").insertAdjacentHTML("afterbegin",'<div class="muted" style="margin-bottom:6px">No custom card yet — this partner currently uses the Standard card. Add slabs (or “Copy standard slabs”) to give them their own.</div>'); return; }
+    draw();
+  }
+  $("arPartner").addEventListener("change",loadCard);
+  if($("arSeed")) $("arSeed").addEventListener("click",()=>{ slabs=STD.map(s=>Object.assign({},s)); draw(); });
+  if($("arSave")) $("arSave").addEventListener("click",async()=>{
+    const pid=$("arPartner").value||null;
+    // replace this card: delete existing rows for this partner_id, insert current
+    let dq=sb().from("partner_rates").delete().eq("party_type","authorized_partner");
+    dq = pid ? dq.eq("partner_id",pid) : dq.is("partner_id",null);
+    const del=await dq; if(del.error){ $("arErr").textContent=del.error.message; return; }
+    const recs=slabs.filter(s=>String(s.slab||"").trim()).map(s=>({ party_type:"authorized_partner", partner_id:pid,
+      slab:s.slab, rate_upto:s.rate_upto, partner_pct:s.partner_pct, drocon_pct:s.drocon_pct, created_by:window.OPS.me.id }));
+    if(recs.length){ const ins=await sb().from("partner_rates").insert(recs); if(ins.error){ $("arErr").textContent=ins.error.message; return; } }
+    window.OPS.audit("partner_rate_card","partner_rates",pid||"standard",recs.length+" slab(s)");
+    window.OPS.flashTop("Rate card saved ✓");
+  });
+  loadCard();
+}
+window.OPS.routes.ap_rates = apRates;
 
 /* ---------------------------------------------------------------------------
-   Shared: load AP slabs and resolve a per-acre rate -> commission %
+   Shared: load a partner's AP slabs (own card, else the Standard card) and
+   resolve a per-acre rate -> commission %
    --------------------------------------------------------------------------- */
-async function loadSlabs(){
-  const { data } = await sb().from("partner_rates").select("*").eq("party_type","authorized_partner").order("rate_upto",{nullsFirst:false});
-  return data||[];
+async function loadSlabs(partnerId){
+  if(partnerId){
+    const { data } = await sb().from("partner_rates").select("*").eq("party_type","authorized_partner").eq("partner_id",partnerId);
+    if(data && data.length) return data;
+  }
+  const { data:std } = await sb().from("partner_rates").select("*").eq("party_type","authorized_partner").is("partner_id",null);
+  return std||[];
 }
 function resolveCommission(rate, slabs){
   // find the first slab whose rate_upto >= rate (ascending); fall back to the open top slab
@@ -147,7 +195,7 @@ async function portalSubmit(){
       </div>
       ${kind==="consultant"?'<div class="muted" style="margin-top:8px">All fees are exclusive of GST. TDS is deducted at source per the Income-tax Act, 1961 at the time of payment.</div>':''}
     </div>`;
-  const slabs = kind==="authorized_partner" ? await loadSlabs() : [];
+  const slabs = kind==="authorized_partner" ? await loadSlabs(p.party_id) : [];
   const rows = [blankRow(kind)];
   const ed = lineEditor($("piRows"), kind, rows, slabs, t=>{
     $("piGross").textContent=money(t.gross);
