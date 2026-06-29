@@ -11,18 +11,17 @@ const sb = ()=>window.OPS.sb;
 async function view(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Farmer Tracker</h1>
+    <div class="callout">Summary view. New sprays are logged in <b>Daily Spray Entry</b>; raw editable rows live under <b>Daily Spray Entry → Entries</b>.</div>
     <div class="row wrap" style="margin:10px 0">
       <input id="fSearch" placeholder="Search farmer / village / pilot…" style="max-width:280px">
       <div class="spacer"></div>
       <button class="btn sm" id="fSnap">Snapshot</button>
-      <button class="btn sm" id="fImport">⬆ Import CSV</button>
-      <button class="btn green sm" id="fNew">+ New entry (multi-spray)</button>
+      ${window.OPS.isAdmin()?'<button class="btn sm" id="fImport">⬆ Import history (CSV)</button>':''}
     </div>
     <div id="fStats"></div>
     <div id="fList" class="muted">Loading…</div>`;
-  $("fNew").addEventListener("click",()=>entry());
   $("fSnap").addEventListener("click",snapshot);
-  $("fImport").addEventListener("click",importCSV);
+  if($("fImport")) $("fImport").addEventListener("click",importCSV);
   const { data }=await sb().from("farmer_sprays").select("*").order("spray_date",{ascending:false}).limit(500);
   const all=data||[];
   const totAcre=all.reduce((s,r)=>s+num(r.acre),0);
@@ -42,78 +41,6 @@ async function view(){
   render(all.slice(0,200));
   $("fSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
     render((!q?all:all.filter(r=>[r.farmer_name,r.village,r.pilot_name,r.crop,r.city].some(v=>String(v||"").toLowerCase().includes(q)))).slice(0,200)); });
-}
-
-let rows=[];
-function blankRow(){ return { farmer_name:"", contact_no:"", village:"", crop:"", chemical_company:"", acre:"", rate:"", gps:false }; }
-function entry(){
-  rows=[blankRow(),blankRow()];
-  const m=$("main");
-  m.innerHTML=`<button class="btn sm" id="eBack">← Back to Farmer Tracker</button>
-    <div class="card" style="margin-top:12px">
-      <h1>New spraying entry</h1>
-      <div class="callout warn">Tick <b>GPS</b> for every spray where the pilot sent a GPS-tagged image.</div>
-      <div class="fgrid three">
-        <div class="field"><label>Date</label><input id="eDate" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Pilot name</label><input id="ePilot" placeholder="applies to all rows"></div>
-        <div class="field"><label>Client name</label><input id="eClient"></div>
-      </div>
-      <div class="fgrid three">
-        <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("eState","")}</div>
-        <div class="field"><label>District</label>${window.OPS.geoUI.districtSelect("eDistrict","","")}</div>
-        <div class="field"><label>City / Tehsil</label><input id="eCity"></div>
-      </div>
-      <div class="fgrid three">
-        <div class="field"><label>Default rate (₹/acre)</label><input id="eRate" type="number" step="any" placeholder="optional"></div>
-      </div>
-      <h3>Sprays</h3>
-      <div style="overflow:auto"><table class="linetable" id="eRows"><thead><tr>
-        <th style="min-width:130px">Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acre</th><th class="num">Rate</th><th>GPS</th><th></th>
-      </tr></thead><tbody></tbody></table></div>
-      <button class="btn sm" id="eAdd">+ Add spray</button>
-      <div class="row" style="margin-top:14px"><button class="btn green" id="eSave">Save all sprays</button>
-        <button class="btn" id="eCancel">Cancel</button></div>
-      <div class="err" id="eErr"></div>
-    </div>`;
-  $("eBack").addEventListener("click",view); $("eCancel").addEventListener("click",view);
-  $("eAdd").addEventListener("click",()=>{ rows.push(blankRow()); renderRows(); });
-  $("eSave").addEventListener("click",save);
-  window.OPS.geoUI.wire("eState","eDistrict");
-  renderRows();
-}
-function renderRows(){
-  const tb=$("eRows").querySelector("tbody");
-  tb.innerHTML=rows.map((r,i)=>`<tr>
-    <td><input data-i="${i}" data-k="farmer_name" value="${esc(r.farmer_name)}"></td>
-    <td><input data-i="${i}" data-k="contact_no" value="${esc(r.contact_no)}" style="width:110px"></td>
-    <td><input data-i="${i}" data-k="village" value="${esc(r.village)}"></td>
-    <td><input data-i="${i}" data-k="crop" value="${esc(r.crop)}" style="width:90px"></td>
-    <td><input data-i="${i}" data-k="chemical_company" value="${esc(r.chemical_company)}" style="width:110px"></td>
-    <td><input data-i="${i}" data-k="acre" type="number" step="any" value="${esc(r.acre)}" style="width:70px;text-align:right"></td>
-    <td><input data-i="${i}" data-k="rate" type="number" step="any" value="${esc(r.rate)}" style="width:80px;text-align:right"></td>
-    <td style="text-align:center"><input data-i="${i}" data-k="gps" type="checkbox" style="width:auto" ${r.gps?'checked':''}></td>
-    <td class="x" data-del="${i}">✕</td></tr>`).join("");
-  tb.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
-    const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
-    rows[i][k]= k==="gps"?inp.checked : inp.value;
-  }));
-  tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ rows.splice(+x.getAttribute("data-del"),1); if(!rows.length) rows.push(blankRow()); renderRows(); }));
-}
-async function save(){
-  const date=$("eDate").value||todayISO();
-  const pilot=$("ePilot").value.trim(), client=$("eClient").value.trim();
-  const state=$("eState").value.trim(), district=$("eDistrict").value.trim(), city=$("eCity").value.trim(), defRate=num($("eRate").value);
-  const recs=rows.filter(r=>String(r.farmer_name).trim()||num(r.acre)>0).map(r=>{
-    const rate=num(r.rate)||defRate; const acre=num(r.acre);
-    return { spray_date:date, pilot_name:pilot||null, client_name:client||null, farmer_name:r.farmer_name||null,
-      contact_no:r.contact_no||null, village:r.village||null, city:city||null, state:state||null, district:district||null,
-      chemical_company:r.chemical_company||null, crop:r.crop||null, acre:acre||null, rate:rate||null,
-      amount:(acre*rate)||null, gps_image_present:!!r.gps, created_by:window.OPS.me.id };
-  });
-  if(!recs.length){ $("eErr").textContent="Add at least one spray (farmer name or acres)."; return; }
-  const { error }=await sb().from("farmer_sprays").insert(recs);
-  if(error){ $("eErr").textContent=error.message; return; }
-  window.OPS.flashTop("Saved "+recs.length+" spray(s) ✓"); view();
 }
 
 async function snapshot(){

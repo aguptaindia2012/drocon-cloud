@@ -23,7 +23,8 @@ async function apRates(){
   m.innerHTML=`<div class="eyebrow">Partners · Authorized Partner</div><h1>Authorized Partner rate cards</h1>
     <div class="callout">Each authorized partner can have their <b>own commission rate card</b>. Choose a partner below (or the
       <b>Standard card</b> used as the default). On each invoice the partner enters the <b>actual per-acre rate received from the
-      farmer</b>; the matching slab then splits it — partner keeps <b>Partner %</b>, DroCon Bharat retains <b>DroCon %</b> (overridable).</div>
+      farmer</b>; the matching slab then splits it — partner keeps <b>Partner %</b>, DroCon Bharat retains <b>DroCon %</b> (overridable).
+      Partners are onboarded and listed in <b>Business Development → Authorized Partners</b>.</div>
     <div class="row wrap" style="margin:8px 0;align-items:flex-end">
       <div class="field" style="max-width:340px;margin:0"><label>Rate card for</label>
         <select id="arPartner"><option value="">— Standard (default) card —</option></select></div>

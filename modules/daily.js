@@ -115,6 +115,7 @@ async function save(){
   if(err){ $("dErr").textContent=err.message; return; }
   window.OPS.audit(editingId?"daily_resubmitted":"daily_submitted","daily_submissions",editingId||locName,locName+" · "+valid.length+" spray(s)");
   window.OPS.refreshNotifs && window.OPS.refreshNotifs();
+  window.OPS.refreshReviewCount && window.OPS.refreshReviewCount();
   window.OPS.flashTop("Submitted "+valid.length+" spray(s) for approval ✓");
   window.OPS.openTool("reviews");
 }
@@ -190,6 +191,7 @@ async function approvals(host){
         const { error }=await sb().rpc("post_daily_submission",{ p_id:r.id });
         if(error){ alert(error.message); b.disabled=false; return; }
         window.OPS.audit("daily_approved","daily_submissions",r.id,r.location_name||"");
+        window.OPS.refreshReviewCount && window.OPS.refreshReviewCount();
         window.OPS.flashTop("Approved & posted ✓"); load();
       }
       if(act==="reject"){
@@ -197,7 +199,7 @@ async function approvals(host){
         b.disabled=true;
         const { error }=await sb().from("daily_submissions").update({ approval_status:"rejected", reject_note:n||null, approved_by:window.OPS.me.id, approved_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq("id",r.id);
         if(error){ alert(error.message); b.disabled=false; return; }
-        window.OPS.audit("daily_rejected","daily_submissions",r.id,n||""); window.OPS.flashTop("Rejected"); load();
+        window.OPS.audit("daily_rejected","daily_submissions",r.id,n||""); window.OPS.refreshReviewCount && window.OPS.refreshReviewCount(); window.OPS.flashTop("Rejected"); load();
       }
       if(act==="reopen"){
         if(!confirm("Reopen this posted day? This DELETES its rows from the Farmer & Acre trackers so it can be edited and re-approved.")) return;

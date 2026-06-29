@@ -54,9 +54,11 @@ const TOOLS = [
   // Daily Spray Entry (its own section, made the landing tab)
   // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
   { key:"daily_entry",     section:"trackers", label:"Daily Spray Entry", gate:"perm" },
+  { key:"entries",         section:"trackers", label:"Entries",           gate:"perm" },
+  { key:"locations",       section:"trackers", label:"Locations",         gate:"perm" },
   // Business Development — pools + sales documents
-  { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
   { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },
+  { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
   { key:"quotation",     section:"order", label:"Quotation",           gate:"perm" },
   { key:"bom",           section:"order", label:"BOM Calculator",      gate:"perm" },
   { key:"purchase_order",section:"order", label:"Purchase Order",      gate:"perm" },
@@ -153,8 +155,8 @@ function applyProfile(){
   window.OPS.currentSection = (toolByKey(window.OPS.currentTool)||{}).section || "trackers";
   renderNav();
   openTool(window.OPS.currentTool);
-  refreshNotifs();
-  if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me) refreshNotifs(); }, 30000);
+  refreshNotifs(); refreshReviewCount();
+  if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); } }, 30000);
 }
 async function refreshRole(){
   const data = await loadProfile();
@@ -221,8 +223,10 @@ function visibleSections(){
 function renderNav(){
   // top section bar
   const secs = visibleSections();
-  $("sectionBar").innerHTML = secs.map(s=>
-    `<button data-sec="${s.key}" class="${s.key===window.OPS.currentSection?'active':''}">${esc(s.label)}</button>`).join("");
+  $("sectionBar").innerHTML = secs.map(s=>{
+    const badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
+    return `<button data-sec="${s.key}" class="${s.key===window.OPS.currentSection?'active':''}">${esc(s.label)}${badge}</button>`;
+  }).join("");
   $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>openSection(b.getAttribute("data-sec"))));
   // sub-tabs for the active section
   const tools = TOOLS.filter(t=>t.section===window.OPS.currentSection && canSee(t));
@@ -306,6 +310,28 @@ function renderNotifs(){
 function toggleNotif(){ const p=$("notifPanel"); if(p.classList.contains("hidden")){ renderNotifs(); p.classList.remove("hidden"); } else p.classList.add("hidden"); }
 async function markAllRead(){ await sb.from("notifications").update({is_read:true}).eq("user_id",me.id).eq("is_read",false); refreshNotifs(); renderNotifs(); }
 window.OPS.refreshNotifs = refreshNotifs;
+
+// ---------- pending-approval counter (badge on the Review / Approvals tab) ----------
+async function refreshReviewCount(){
+  if(!me || isExternal()){ window.OPS.reviewCount=0; return; }
+  const admin=isAdmin();
+  async function cnt(table, col, val){
+    try{ let q=sb.from(table).select("id",{count:"exact",head:true}).eq(col,val);
+      if(!admin) q=q.eq("assigned_approver",me.id);
+      const { count }=await q; return count||0; }catch(e){ return 0; }
+  }
+  const parts=await Promise.all([
+    cnt("documents","approval_status","submitted"),
+    cnt("clients","approval_status","submitted"),
+    cnt("vendors","approval_status","submitted"),
+    cnt("bom_designs","approval_status","submitted"),
+    cnt("agreements","status","in_review"),
+    cnt("daily_submissions","approval_status","submitted"),
+  ]);
+  window.OPS.reviewCount = parts.reduce((a,b)=>a+b,0);
+  renderNav();
+}
+window.OPS.refreshReviewCount = refreshReviewCount;
 (function(){ const b=$("bell"); if(b) b.addEventListener("click",toggleNotif);
   const mk=$("notifMark"); if(mk) mk.addEventListener("click",markAllRead); })();
 

@@ -55,7 +55,8 @@ window.OPS.routes.partners = window.OPS.makeRegistry({
   summary:(rows)=>{ const drones=rows.reduce((s,r)=>s+(Number(r.drones_provided)||0),0);
     const cap=rows.reduce((s,r)=>s+(Number(r.capacity_acres_day)||0),0);
     const cos=rows.filter(r=>r.company).length;
-    return `<div class="statrow">
+    return `<div class="callout">This is the <b>home of all contracted Authorized Partners</b> — onboard and list every partner here. Their commission <b>rate cards</b> live in <b>Partners → Authorized Partner</b>, and you create their portal <b>login + review their invoices</b> in <b>Partners → Invoice Approvals</b>. Link each partner's signed agreement below.</div>
+    <div class="statrow">
       <div class="stat"><div class="n">${rows.length}</div><div class="l">Partners / pilots</div></div>
       <div class="stat"><div class="n">${drones}</div><div class="l">Drones provided</div></div>
       <div class="stat"><div class="n">${cap}</div><div class="l">Capacity (acres/day)</div></div>
@@ -82,6 +83,7 @@ window.OPS.routes.partners = window.OPS.makeRegistry({
     {key:"capacity_acres_day", label:"Capacity (Acres/Day)", type:"number"},
     {key:"home_lat", label:"Home Latitude", type:"number"},
     {key:"home_lng", label:"Home Longitude", type:"number"},
+    {key:"agreement_link", label:"Signed agreement link (drive URL)", full:true},
     {key:"responsibilities", label:"Responsibilities (as per MSA)", type:"textarea", full:true},
     {key:"notes", label:"Notes", type:"textarea", full:true},
   ],

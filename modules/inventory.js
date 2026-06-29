@@ -8,58 +8,58 @@
 const { $, esc, num, money, fmtDate, todayISO } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 
+let pending={};   // { spareId: {purchased, sold} } — survives search re-render
 async function view(){
+  pending={};
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Administration</div><h1>Inventory</h1>
-    <div class="row" style="margin:10px 0">
-      <input id="iSearch" placeholder="Search spare…" style="max-width:260px">
+  m.innerHTML=`<div class="eyebrow">Finance</div><h1>Inventory</h1>
+    <div class="callout">Enter quantities <b>Purchased</b> (adds stock) and/or <b>Sold/Issued</b> (subtracts stock) against any spares, then click <b>Save changes</b>. You can update many rows at once.</div>
+    <div class="row wrap" style="margin:10px 0;align-items:flex-end">
+      <input id="iSearch" placeholder="Search spare…" style="max-width:240px">
+      <div class="field" style="margin:0;max-width:170px"><label>Movement date</label><input id="iDate" type="date" value="${todayISO()}"></div>
       <div class="spacer"></div>
       <button class="btn sm" id="iMoves">Recent moves</button>
+      <button class="btn green" id="iSave">Save changes</button>
     </div>
-    <div id="iList" class="muted">Loading…</div>`;
+    <div id="iList" class="muted">Loading…</div>
+    <div class="err" id="iErr"></div>`;
   const { data }=await sb().from("spare_catalogue").select("*").order("name");
   const all=data||[];
+  function newStock(r){ const p=pending[r.id]||{}; return num(r.current_stock)+num(p.purchased)-num(p.sold); }
   function render(rows){
     let low=0;
-    $("iList").innerHTML = `<table><thead><tr><th>Spare</th><th>HSN</th><th>Unit</th><th class="num">In Stock</th><th></th></tr></thead>
-      <tbody>${rows.map(r=>{ if(num(r.current_stock)<=0) low++; return `<tr>
+    $("iList").innerHTML = `<div style="overflow:auto"><table><thead><tr><th>Spare</th><th>HSN</th><th>Unit</th><th class="num">In Stock</th><th class="num">Purchased +</th><th class="num">Sold −</th><th class="num">New stock</th></tr></thead>
+      <tbody>${rows.map(r=>{ if(num(r.current_stock)<=0) low++; const p=pending[r.id]||{}; return `<tr data-row="${r.id}">
         <td><b>${esc(r.name)}</b></td><td>${esc(r.hsn_code||'')}</td><td>${esc(r.unit||'')}</td>
         <td class="num" style="${num(r.current_stock)<=0?'color:#a3322a;font-weight:700':''}">${num(r.current_stock)}</td>
-        <td><button class="btn sm" data-in="${r.id}">+ In</button> <button class="btn sm" data-out="${r.id}">− Out</button></td>
-      </tr>`; }).join("")}</tbody></table>
+        <td class="num"><input data-id="${r.id}" data-k="purchased" type="number" step="any" min="0" value="${p.purchased!=null?esc(p.purchased):''}" style="width:84px;text-align:right" placeholder="0"></td>
+        <td class="num"><input data-id="${r.id}" data-k="sold" type="number" step="any" min="0" value="${p.sold!=null?esc(p.sold):''}" style="width:84px;text-align:right" placeholder="0"></td>
+        <td class="num" data-new="${r.id}"><b>${newStock(r)}</b></td>
+      </tr>`; }).join("")}</tbody></table></div>
       <p class="muted">${rows.length} spares · ${low} at/below zero.</p>`;
-    $("iList").querySelectorAll("[data-in]").forEach(b=>b.addEventListener("click",()=>move(all.find(x=>x.id===b.getAttribute("data-in")),"in")));
-    $("iList").querySelectorAll("[data-out]").forEach(b=>b.addEventListener("click",()=>move(all.find(x=>x.id===b.getAttribute("data-out")),"out")));
+    $("iList").querySelectorAll("input[data-k]").forEach(inp=>inp.addEventListener("input",()=>{
+      const id=inp.getAttribute("data-id"), k=inp.getAttribute("data-k");
+      pending[id]=pending[id]||{}; pending[id][k]=inp.value;
+      const r=all.find(x=>x.id===id); const cell=$("iList").querySelector(`[data-new="${id}"]`); if(cell) cell.innerHTML="<b>"+newStock(r)+"</b>";
+    }));
   }
-  render(all);
-  $("iSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
-    render(!q?all:all.filter(r=>String(r.name||"").toLowerCase().includes(q))); });
+  function applyFilter(){ const q=($("iSearch").value||"").toLowerCase().trim(); render(!q?all:all.filter(r=>String(r.name||"").toLowerCase().includes(q))); }
+  applyFilter();
+  $("iSearch").addEventListener("input",applyFilter);
   $("iMoves").addEventListener("click",recentMoves);
-}
-
-function move(spare, dir){
-  const m=$("main");
-  m.innerHTML=`<button class="btn sm" id="mBack">← Back to Inventory</button>
-    <div class="card" style="margin-top:12px;max-width:480px">
-      <h1>${dir==="in"?"Stock In":"Stock Out"} — ${esc(spare.name)}</h1>
-      <p class="muted">Current stock: <b>${num(spare.current_stock)}</b> ${esc(spare.unit||'')}</p>
-      <div class="fgrid">
-        <div class="field"><label>Quantity *</label><input id="mQty" type="number" step="any" value="1"></div>
-        <div class="field"><label>Date</label><input id="mDate" type="date" value="${todayISO()}"></div>
-        <div class="field full"><label>Reason</label><input id="mReason" value="${dir==='in'?'purchase':'issue'}"></div>
-      </div>
-      <div class="row"><button class="btn green" id="mSave">Record ${dir==="in"?"receipt":"issue"}</button>
-        <button class="btn" id="mCancel">Cancel</button></div>
-      <div class="err" id="mErr"></div>
-    </div>`;
-  $("mBack").addEventListener("click",view); $("mCancel").addEventListener("click",view);
-  $("mSave").addEventListener("click",async()=>{
-    const qty=num($("mQty").value); if(qty<=0){ $("mErr").textContent="Enter a positive quantity."; return; }
-    const { error }=await sb().from("inventory_moves").insert({
-      spare_id:spare.id, qty, direction:dir, reason:$("mReason").value||null,
-      moved_on:$("mDate").value||todayISO(), created_by:window.OPS.me.id });
-    if(error){ $("mErr").textContent=error.message; return; }
-    window.OPS.flashTop("Stock updated ✓"); view();
+  $("iSave").addEventListener("click",async()=>{
+    const date=$("iDate").value||todayISO(); const moves=[];
+    Object.keys(pending).forEach(id=>{ const p=pending[id];
+      if(num(p.purchased)>0) moves.push({ spare_id:id, qty:num(p.purchased), direction:"in",  reason:"purchase", moved_on:date, created_by:window.OPS.me.id });
+      if(num(p.sold)>0)      moves.push({ spare_id:id, qty:num(p.sold),      direction:"out", reason:"issue",    moved_on:date, created_by:window.OPS.me.id });
+    });
+    if(!moves.length){ $("iErr").textContent="Enter a Purchased or Sold quantity on at least one spare."; return; }
+    $("iSave").disabled=true;
+    const { error }=await sb().from("inventory_moves").insert(moves);
+    $("iSave").disabled=false;
+    if(error){ $("iErr").textContent=error.message; return; }
+    window.OPS.audit("inventory_adjust","inventory_moves","batch",moves.length+" move(s)");
+    window.OPS.flashTop("Saved "+moves.length+" stock movement(s) ✓"); view();
   });
 }
 

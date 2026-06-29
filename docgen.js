@@ -212,7 +212,7 @@ function generateWord(doc){
 
   // ---- Document ----
   const headerChildren = DCB_LOGO ? [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[
-      new D.ImageRun({type:"png",data:b64ToBytes(DCB_LOGO),transformation:{width:120,height:52}})]}) ]
+      new D.ImageRun({type:"png",data:b64ToBytes(DCB_LOGO),transformation:{width:124,height:61}})]}) ]
     : [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(DCB.legalName,{bold:true,color:GREEN,size:20})]}) ];
 
   const docx_doc=new D.Document({
@@ -262,7 +262,7 @@ function generateReport(opts){
     if(s.image){ try{ children.push(new D.Paragraph({spacing:{after:80},children:[new D.ImageRun({type:"png",data:b64ToBytes(s.image),transformation:{width:s.imgW||520,height:s.imgH||240}})]})); }catch(e){} }
     if(s.table && s.table.rows && s.table.rows.length) children.push(dataTable(s.table.headers, s.table.rows));
   });
-  const headerChildren = DCB_LOGO ? [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[new D.ImageRun({type:"png",data:b64ToBytes(DCB_LOGO),transformation:{width:120,height:52}})]}) ]
+  const headerChildren = DCB_LOGO ? [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[new D.ImageRun({type:"png",data:b64ToBytes(DCB_LOGO),transformation:{width:124,height:61}})]}) ]
     : [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(DCB.legalName,{bold:true,color:GREEN,size:20})]}) ];
   const doc=new D.Document({ styles:{default:{document:{run:{font:"Lato",size:18,color:CHAR}}}},
     sections:[{ properties:{page:{size:{width:12240,height:15840},margin:{top:1180,bottom:1100,left:900,right:900,header:520,footer:430}}},

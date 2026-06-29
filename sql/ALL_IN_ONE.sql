@@ -1995,3 +1995,14 @@ create policy partner_rates_write on public.partner_rates for all to authenticat
 -- Standard card), edit their slabs, save. Invoices resolve commission from the
 -- partner's own card, falling back to the Standard card.
 -- ============================================================================
+
+
+-- ############################################################################
+-- ## 26_partner_agreement_link.sql  (Authorized Partner -> signed agreement link)
+-- ############################################################################
+-- ============================================================================
+-- DroCon Cloud — link each Authorized Partner to their signed agreement
+-- Lets the Authorized Partners home (Business Development) reference the partner's
+-- agreement (a drive URL), connecting the pool to the Agreements tab. Safe to re-run.
+-- ============================================================================
+alter table public.authorized_partners add column if not exists agreement_link text;

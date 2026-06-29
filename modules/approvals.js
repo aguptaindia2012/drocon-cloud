@@ -30,17 +30,17 @@ async function submit(table, id, approverId, title){
   if(error){ alert(error.message); return false; }
   window.OPS.audit("submitted",table,id,title||"");
   await notify(approverId, "Review requested: "+labelOf(table,{})+" "+(title||""));
-  window.OPS.refreshNotifs(); return true;
+  window.OPS.refreshNotifs(); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
 async function approve(table, id, title){
   if(table==="agreements"){ const { error }=await sb().rpc("approve_agreement",{p_id:id,p_note:null}); if(error){ alert(error.message); return false; } }
   else { const { error }=await sb().from(table).update({ approval_status:"approved", approved_by:me().id, approved_at:new Date().toISOString() }).eq("id",id); if(error){ alert(error.message); return false; } }
-  window.OPS.audit("approved",table,id,title||""); window.OPS.flashTop("Approved ✓"); return true;
+  window.OPS.audit("approved",table,id,title||""); window.OPS.flashTop("Approved ✓"); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
 async function reject(table, id, note, title){
   if(table==="agreements"){ const { error }=await sb().rpc("reject_agreement",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
   else { const { error }=await sb().from(table).update({ approval_status:"rejected", approved_by:me().id, approved_at:new Date().toISOString(), reject_note:note||null }).eq("id",id); if(error){ alert(error.message); return false; } }
-  window.OPS.audit("rejected",table,id,note||""); window.OPS.flashTop("Rejected"); return true;
+  window.OPS.audit("rejected",table,id,note||""); window.OPS.flashTop("Rejected"); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
 
 /* ---------- embeddable approval bar ---------- */
