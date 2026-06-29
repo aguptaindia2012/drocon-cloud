@@ -32,36 +32,45 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
   { key:"trackers",   label:"Daily Spray Entry" },
-  { key:"agreement",  label:"Agreement" },
   { key:"reviews",    label:"Review / Approvals" },
+  { key:"dashboards", label:"Dashboards" },
+  { key:"resources",  label:"Resources" },
   { key:"order",      label:"Business Development" },
   { key:"finance",    label:"Finance" },
-  { key:"dashboards", label:"Dashboards" },
   { key:"hr",         label:"HR" },
-  { key:"partners",   label:"Partners" },
-  { key:"resources",  label:"Resources" },
   { key:"team",       label:"Team & Access" },
   { key:"audit",      label:"Audit" },
   { key:"portal",     label:"Partner Portal" },   // external (invite-only) logins only
 ];
 const TOOLS = [
-  // Agreement (existing studio)
-  { key:"agreements", section:"agreement", label:"Agreements",      gate:"all" },
-  { key:"new",        section:"agreement", label:"New agreement",   gate:"all" },
-  { key:"templates",  section:"agreement", label:"Shared templates",gate:"approver" },
-  // Review / Approvals — consolidated queue; everyone sees only their assigned items
-  { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
-  // Daily Spray Entry (its own section, made the landing tab)
+  // Daily Spray Entry (its own section, the landing tab)
   // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
   { key:"daily_entry",     section:"trackers", label:"Daily Spray Entry", gate:"perm" },
   { key:"entries",         section:"trackers", label:"Entries",           gate:"perm" },
   { key:"locations",       section:"trackers", label:"Locations",         gate:"perm" },
-  // Business Development — pools + sales documents
-  { key:"partners",      section:"order", label:"Authorized Partners", gate:"all" },
-  { key:"orders",        section:"order", label:"Order Tracker",       gate:"all" },
-  { key:"quotation",     section:"order", label:"Quotation",           gate:"perm" },
-  { key:"bom",           section:"order", label:"BOM Calculator",      gate:"perm" },
-  { key:"purchase_order",section:"order", label:"Purchase Order",      gate:"perm" },
+  // Review / Approvals — consolidated queue; everyone sees only their assigned items
+  { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
+  // Dashboards (Acre & Farmer trackers are dashboards now; receivables consolidated here)
+  { key:"receivables",         section:"dashboards", label:"Invoice & Receivables", gate:"perm" },
+  { key:"acre",                section:"dashboards", label:"Acre Tracking",         gate:"perm" },
+  { key:"farmer",              section:"dashboards", label:"Farmer Tracking",       gate:"perm" },
+  { key:"agreement_dashboard", section:"dashboards", label:"Agreement Dashboard",   gate:"perm" },
+  { key:"bd_dashboard",        section:"dashboards", label:"Ongoing Sales",         gate:"perm" },
+  // Resources (policies, manual & FAQs)
+  { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
+  { key:"manual",        section:"resources",   label:"User Manual",    gate:"all" },
+  { key:"faqs",          section:"resources",   label:"FAQs",           gate:"all" },
+  // Business Development — Authorized Partners home, agreements + sales documents
+  { key:"partners",         section:"order", label:"Authorized Partners",      gate:"all" },
+  { key:"ap_rates",         section:"order", label:"Authorized Partner Rates", gate:"perm" },
+  { key:"partner_invoices", section:"order", label:"Partner Invoices",         gate:"perm" },
+  { key:"agreements",       section:"order", label:"Agreements",      gate:"all" },
+  { key:"new",              section:"order", label:"New agreement",   gate:"all" },
+  { key:"templates",        section:"order", label:"Shared templates",gate:"approver" },
+  { key:"orders",           section:"order", label:"Order Tracker",   gate:"all" },
+  { key:"quotation",        section:"order", label:"Quotation",       gate:"perm" },
+  { key:"bom",              section:"order", label:"BOM Calculator",  gate:"perm" },
+  { key:"purchase_order",   section:"order", label:"Purchase Order",  gate:"perm" },
   // Finance
   { key:"invoice",       section:"finance", label:"Invoice",       gate:"perm" },
   { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
@@ -69,30 +78,20 @@ const TOOLS = [
   { key:"vendors",       section:"finance", label:"Vendors",       gate:"perm" },
   { key:"inventory",     section:"finance", label:"Inventory",     gate:"perm" },
   { key:"catalogues",    section:"finance", label:"Catalogue",     gate:"perm" },
-  // Dashboards (Acre & Farmer trackers are dashboards now; receivables consolidated here)
-  { key:"receivables",         section:"dashboards", label:"Invoice & Receivables", gate:"perm" },
-  { key:"acre",                section:"dashboards", label:"Acre Tracking",         gate:"perm" },
-  { key:"farmer",              section:"dashboards", label:"Farmer Tracking",       gate:"perm" },
-  { key:"agreement_dashboard", section:"dashboards", label:"Agreement Dashboard",   gate:"perm" },
-  { key:"bd_dashboard",        section:"dashboards", label:"Ongoing Sales",         gate:"perm" },
-  // HR
-  { key:"hr_salary",     section:"hr", label:"Salary Calculator",       gate:"perm" },
-  { key:"hr_employees",  section:"hr", label:"Employees",               gate:"perm" },
-  { key:"hr_records",    section:"hr", label:"Salary Records",           gate:"perm" },
-  { key:"hr_payslips",   section:"hr", label:"Payslips",                 gate:"perm" },
-  // Partners (was Consultancy) — Consultant + Authorized Partner rates + invoice approvals
-  { key:"consultants",      section:"partners", label:"Consultant",        gate:"perm" },
-  { key:"ap_rates",         section:"partners", label:"Authorized Partner", gate:"perm" },
-  { key:"partner_invoices", section:"partners", label:"Invoice Approvals",   gate:"perm" },
-  // Resources (policies & shared documents)
-  { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
-  // Team & Access + Audit (now top-level, admin-only)
+  // HR (consultants are people records here; their portal invoicing is in Business Development)
+  { key:"hr_salary",     section:"hr", label:"Salary Calculator",  gate:"perm" },
+  { key:"hr_employees",  section:"hr", label:"Employees",          gate:"perm" },
+  { key:"consultants",   section:"hr", label:"Consultants",        gate:"perm" },
+  { key:"hr_records",    section:"hr", label:"Salary Records",     gate:"perm" },
+  { key:"hr_payslips",   section:"hr", label:"Payslips",           gate:"perm" },
+  // Team & Access + Audit (admin-only)
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
   { key:"access_log", section:"audit", label:"Access Log",    gate:"admin" },
   // Partner Portal — visible ONLY to external (invite-only) partner logins
   { key:"portal_submit", section:"portal", label:"Submit Invoice", gate:"external" },
   { key:"portal_mine",   section:"portal", label:"My Invoices",    gate:"external" },
+  { key:"portal_help",   section:"portal", label:"Help & FAQs",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)
@@ -145,16 +144,14 @@ async function afterLogin(){
 }
 function applyProfile(){
   $("meEmail").textContent = profile.email || me.email;
-  $("meRole").textContent = (profile.role||"drafter").toUpperCase();
-  // pick a valid landing tool — default to the first visible tool (Daily Spray Entry)
-  if(!canSee(toolByKey(window.OPS.currentTool))){
-    const firstSec = SECTIONS.find(s=>TOOLS.some(t=>t.section===s.key && canSee(t)));
-    const firstTool = firstSec && TOOLS.find(t=>t.section===firstSec.key && canSee(t));
-    window.OPS.currentTool = firstTool ? firstTool.key : "agreements";
+  $("meRole").textContent = isExternal() ? "PARTNER" : (profile.role||"drafter").toUpperCase();
+  // land on the home page; if the user was already on a valid tab, keep them there
+  if(window.OPS.currentTool && window.OPS.currentTool!=="home" && canSee(toolByKey(window.OPS.currentTool))){
+    window.OPS.currentSection = (toolByKey(window.OPS.currentTool)||{}).section || null;
+    renderNav(); openTool(window.OPS.currentTool);
+  } else {
+    goHome();
   }
-  window.OPS.currentSection = (toolByKey(window.OPS.currentTool)||{}).section || "trackers";
-  renderNav();
-  openTool(window.OPS.currentTool);
   refreshNotifs(); refreshReviewCount();
   if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); } }, 30000);
 }
@@ -255,6 +252,36 @@ function comingSoon(tool){
   return `<div class="eyebrow">${esc(SECTIONS.find(s=>s.key===tool.section).label)}</div><h1>${esc(tool.label)}</h1>
     <div class="callout warn">This module is being built — its navigation slot is in place and it will appear here once ready.</div>`;
 }
+
+// ---------- post-login landing page ----------
+function renderHome(){
+  window.OPS.currentTool="home"; window.OPS.currentSection=null;
+  const ext=isExternal();
+  const name=esc((profile&&(profile.full_name||profile.email))||(me&&me.email)||"");
+  const secs=visibleSections();
+  let cards="";
+  secs.forEach(s=>{
+    const tools=TOOLS.filter(t=>t.section===s.key && canSee(t));
+    if(!tools.length) return;
+    cards+=`<div class="card" style="margin:0">
+      <div class="eyebrow">${esc(s.label)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+        ${tools.map(t=>`<button class="btn sm" data-go="${t.key}">${esc(t.label)}</button>`).join("")}
+      </div></div>`;
+  });
+  const helpBtns = ext
+    ? `<button class="btn sm green" data-go="portal_help">💬 Help &amp; FAQs</button>`
+    : `<button class="btn sm green" data-go="manual">📖 User Manual</button> <button class="btn sm" data-go="faqs">❓ FAQs</button>`;
+  $("main").innerHTML=`
+    <h1 style="margin-bottom:2px">Welcome${name?(", "+name):""} 👋</h1>
+    <p class="muted">Jump to any area you have access to. Return here anytime with the 🏠 Home button in the header.</p>
+    <div class="card" style="background:var(--soft-green);border:none"><b>Getting started:</b> ${helpBtns}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:12px">${cards}</div>`;
+  $("main").querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-go"))));
+  renderNav();
+}
+function goHome(){ renderHome(); }
+window.OPS.goHome=goHome; window.OPS.routes.home=renderHome;
 
 // ---------- shared data helpers ----------
 async function audit(action, entity, entity_id, note){
@@ -381,20 +408,37 @@ function openCalendar(){
 }
 function openPrivacy(){
   const b=$("privacyBody"); if(!b) return;
-  b.innerHTML=`<p class="muted">How DroCon Cloud protects your data.</p>
-    <div class="callout"><b>Encryption:</b> HTTPS in transit, AES-256 at rest (Supabase).</div>
-    <ul style="font-size:13px;line-height:1.7">
-      <li><b>Access:</b> not signed in = no access. Sign-up is restricted to approved company domains.</li>
-      <li><b>Row-Level Security</b> is enforced by the database — the browser cannot bypass it.</li>
-      <li><b>Sensitive data</b> (salaries, bank details, farmer phone numbers) is readable only by admins or staff you grant access in <b>Team &amp; Access</b>.</li>
-      <li><b>Phone numbers</b> are masked in lists unless you hold the “View contacts” grant.</li>
-      <li><b>Access log:</b> opening sensitive records is recorded (admins can review under Audit → Access Log).</li>
-      <li><b>Deletions</b> are restricted and recorded in the Audit log.</li>
-    </ul>
-    <p class="muted">You are signed in as <b>${esc((profile&&profile.email)||(me&&me.email)||"")}</b> · role <b>${esc((profile&&profile.role)||"")}</b>.</p>`;
+  const who=`<p class="muted">You are signed in as <b>${esc((profile&&profile.email)||(me&&me.email)||"")}</b> · role <b>${esc(isExternal()?"Authorized Partner / Consultant":((profile&&profile.role)||""))}</b>.</p>`;
+  if(isExternal()){
+    // Partner-facing privacy notice — about THEIR data and any farmer data they enter
+    b.innerHTML=`<p class="muted">How DroCon Cloud protects your information and the farmer data you submit.</p>
+      <div class="callout"><b>Encryption:</b> all traffic is HTTPS in transit and data is stored encrypted at rest (AES-256, Supabase).</div>
+      <ul style="font-size:13px;line-height:1.7">
+        <li><b>Your portal is private to you.</b> Your login can see <b>only</b> your own invoices, your rate card and this portal — never DroCon's internal records or any other partner's data. This is enforced by the database (Row-Level Security), not just the screen.</li>
+        <li><b>Your details</b> (contact, bank/payment details on invoices) are visible only to you and DroCon Bharat's authorised finance/management team for processing your payments.</li>
+        <li><b>Farmer data you enter</b> (farmer name, mobile, village, acres) is collected only to bill and document the spraying service. Please enter it accurately and only with the farmer's awareness, and do not share it outside DroCon Bharat.</li>
+        <li><b>Farmer phone numbers</b> you submit are treated as sensitive — they are masked in shared views and access to them is restricted.</li>
+        <li><b>You are responsible</b> for keeping your login confidential. Everything submitted from your account is recorded with your identity and time.</li>
+        <li><b>Data ownership:</b> service and farmer records generated under your engagement belong to DroCon Bharat per your agreement. You may request a copy or correction of your own submissions at any time.</li>
+      </ul>
+      <p class="muted">Questions about your data? Email <a href="mailto:info@droconbharat.com">info@droconbharat.com</a>.</p>${who}`;
+  } else {
+    b.innerHTML=`<p class="muted">How DroCon Cloud protects your data.</p>
+      <div class="callout"><b>Encryption:</b> HTTPS in transit, AES-256 at rest (Supabase).</div>
+      <ul style="font-size:13px;line-height:1.7">
+        <li><b>Access:</b> not signed in = no access. Sign-up is restricted to approved company domains (partners are invite-only).</li>
+        <li><b>Row-Level Security</b> is enforced by the database — the browser cannot bypass it.</li>
+        <li><b>Sensitive data</b> (salaries, bank details, farmer phone numbers) is readable only by admins or staff you grant access in <b>Team &amp; Access</b>.</li>
+        <li><b>Phone numbers</b> are masked in lists unless you hold the “View contacts” grant.</li>
+        <li><b>External partners</b> are sandboxed to their own portal and cannot read any internal data.</li>
+        <li><b>Access log:</b> opening sensitive records is recorded (admins can review under Audit → Access Log).</li>
+        <li><b>Deletions</b> are restricted and recorded in the Audit log.</li>
+      </ul>${who}`;
+  }
   $("privacyOverlay").classList.remove("hidden");
 }
 (function(){
+  const h=$("btnHome"); if(h) h.addEventListener("click",goHome);
   const c=$("btnCalc"); if(c) c.addEventListener("click",openCalc);
   const cal=$("btnCalendar"); if(cal) cal.addEventListener("click",openCalendar);
   const p=$("btnPrivacy"); if(p) p.addEventListener("click",openPrivacy);

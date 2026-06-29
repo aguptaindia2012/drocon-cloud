@@ -136,6 +136,7 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
       <div class="accentsq"></div>
       <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
       <div class="spacer"></div>
+      <button class="btn sm" id="btnHome" title="Home (landing page)">🏠</button>
       <button class="btn sm" id="btnCalc" title="Calculator (pop out)">🧮</button>
       <button class="btn sm" id="btnCalendar" title="Calendar (pop out)">📅</button>
       <button class="btn sm" id="btnPrivacy" title="Data &amp; Privacy">🛡</button>
@@ -148,7 +149,8 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
     <div class="nav" id="nav"></div>
   </div>
   <div class="wrap" id="main"></div>
-  <footer class="appfooter" id="appFooter">
+</div>
+<footer class="appfooter" id="appFooter">
     <div class="footinner">
       <div class="footsocial">
         <a href="https://www.droconbharat.com" target="_blank" rel="noopener" title="Website — droconbharat.com"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.93 6h-2.95a15.6 15.6 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.93 8zM12 4c.83 1.2 1.48 2.53 1.91 4h-3.82c.43-1.47 1.08-2.8 1.91-4zM4.26 14a7.96 7.96 0 0 1 0-4h3.38a16.6 16.6 0 0 0 0 4H4.26zm.81 2h2.95c.32 1.25.78 2.45 1.38 3.56A8.03 8.03 0 0 1 5.07 16zm2.95-8H5.07a8.03 8.03 0 0 1 4.33-3.56A15.6 15.6 0 0 0 8.02 8zM12 20c-.83-1.2-1.48-2.53-1.91-4h3.82c-.43 1.47-1.08 2.8-1.91 4zm2.34-6H9.66a14.7 14.7 0 0 1 0-4h4.68a14.7 14.7 0 0 1 0 4zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56zM16.36 14a16.6 16.6 0 0 0 0-4h3.38a7.96 7.96 0 0 1 0 4h-3.38z"/></svg></a>
@@ -167,7 +169,6 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
         <b>DroCon Cloud</b> is proprietary software of DroCon Bharat Private Limited. All rights reserved. Unauthorised access, use, reproduction or distribution is prohibited.</div>
     </div>
   </footer>
-</div>
 <script>(function(){var y=document.getElementById('footYear'); if(y) y.textContent=new Date().getFullYear();})();</script>
 
 <input type="file" id="jsonImport" accept="application/json" class="hidden">
@@ -220,5 +221,6 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 <script src="modules/dashboards.js"></script>
 <script src="modules/hr.js"></script>
 <script src="modules/portal.js"></script>
+<script src="modules/manual.js"></script>
 </body>
 </html>
