@@ -147,7 +147,11 @@ function editor(){
     $("p_"+k).addEventListener("input",()=>D.party[k]=$("p_"+k).value));
   $("dAddItem").addEventListener("click",()=>{ D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); });
   $("dSave").addEventListener("click",save);
-  $("dWord").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.generateWord(toDocgen()); });
+  $("dWord").addEventListener("click",async()=>{ syncTerms();
+    const g=toDocgen();
+    if(D.id){ try{ const {data}=await sb().from("documents").select("approval_status").eq("id",D.id).single(); g.systemApproved = !!(data && data.approval_status==="approved"); }catch(e){} }
+    window.OPS.docgen.generateWord(g);
+  });
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
   if($("dDel")) $("dDel").addEventListener("click",async()=>{ if(!confirm("Delete this document?"))return; await sb().from("documents").delete().eq("id",D.id); listView(TYPE); });

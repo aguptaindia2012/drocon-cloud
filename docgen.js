@@ -206,9 +206,19 @@ function generateWord(doc){
     }
   });
 
-  // ---- Signature ----
-  children.push(new D.Paragraph({spacing:{before:240},alignment:D.AlignmentType.RIGHT,children:[run("For "+DCB.legalName,{bold:true,size:18})]}));
-  children.push(new D.Paragraph({spacing:{before:340},alignment:D.AlignmentType.RIGHT,children:[run("Authorised Signatory",{size:17})]}));
+  // ---- Signature / system-approval ----
+  // Quotation & Purchase Order, once approved in the system, are valid without a
+  // physical signature. Invoice & Credit Note are always signed after printing.
+  const sysApprovable = (doc.doc_type==="quotation" || doc.doc_type==="purchase_order");
+  if(sysApprovable && doc.systemApproved){
+    children.push(new D.Paragraph({spacing:{before:240,after:30},border:{top:{style:D.BorderStyle.SINGLE,size:4,color:GREEN,space:4}},
+      children:[run("✓ System-approved",{bold:true,color:GREEN,size:18})]}));
+    children.push(new D.Paragraph({spacing:{after:20},children:[run("This "+(doc.doc_type==="quotation"?"quotation":"purchase order")+" was reviewed and approved in DroCon Cloud. It is electronically authorised and "+"does not require a physical signature.",{italics:true,size:16})]}));
+    children.push(new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run("For "+DCB.legalName+" — system-approved",{bold:true,size:16,color:GREEN})]}));
+  } else {
+    children.push(new D.Paragraph({spacing:{before:240},alignment:D.AlignmentType.RIGHT,children:[run("For "+DCB.legalName,{bold:true,size:18})]}));
+    children.push(new D.Paragraph({spacing:{before:340},alignment:D.AlignmentType.RIGHT,children:[run("Authorised Signatory",{size:17})]}));
+  }
 
   // ---- Document ----
   const headerChildren = DCB_LOGO ? [ new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[
