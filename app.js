@@ -74,9 +74,10 @@ const TOOLS = [
   { key:"new",              section:"agreement", label:"New agreement",   gate:"all" },
   { key:"templates",        section:"agreement", label:"Shared templates",gate:"approver" },
   // Finance
-  { key:"invoice",       section:"finance", label:"Invoice",       gate:"perm" },
-  { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
-  { key:"clients",       section:"finance", label:"Client",        gate:"perm" },
+  { key:"invoice",       section:"finance", label:"Invoice",        gate:"perm" },
+  { key:"credit_note",   section:"finance", label:"Credit Note",     gate:"perm" },
+  { key:"payment_status",section:"finance", label:"Payment Status",  gate:"perm" },
+  { key:"clients",       section:"finance", label:"Client",         gate:"perm" },
   { key:"vendors",       section:"finance", label:"Vendors",       gate:"perm" },
   { key:"inventory",     section:"finance", label:"Inventory",     gate:"perm" },
   { key:"catalogues",    section:"finance", label:"Catalogue",     gate:"perm" },
@@ -114,9 +115,22 @@ window.OPS.CAPABILITIES = CAPABILITIES;
   }
   sb = supabase.createClient(window.DCB_CONFIG.SUPABASE_URL, window.DCB_CONFIG.SUPABASE_ANON_KEY);
   window.OPS.sb = sb;
-  sb.auth.onAuthStateChange((_e, session)=>{ me = session ? session.user : null; window.OPS.me=me; if(me) afterLogin(); else showAuth(); });
-  sb.auth.getSession().then(({data})=>{ me = data.session ? data.session.user : null; window.OPS.me=me; if(me) afterLogin(); else showAuth(); });
+  // IMPORTANT: only (re)initialise the app when the *logged-in user* actually changes.
+  // Supabase fires onAuthStateChange for TOKEN_REFRESHED / focus / etc.; re-running
+  // afterLogin() on those would re-render the screen and wipe whatever you're typing.
+  sb.auth.onAuthStateChange((_e, session)=>{ handleSession(session); });
+  sb.auth.getSession().then(({data})=>{ handleSession(data.session); });
 })();
+
+let _authedUserId = null;
+function handleSession(session){
+  const u = session ? session.user : null;
+  me = u; window.OPS.me = u;
+  if(!u){ _authedUserId = null; showAuth(); return; }
+  if(_authedUserId === u.id) return;   // already initialised for this user — ignore repeat events
+  _authedUserId = u.id;
+  afterLogin();
+}
 
 function showAuth(){ $("appView").classList.add("hidden"); $("authView").classList.remove("hidden"); }
 

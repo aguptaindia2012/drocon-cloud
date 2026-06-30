@@ -826,6 +826,8 @@ const WORKORDER_CLAUSES = [
 <p>The {{CP}} shall deploy the Supplied Drone(s) and pilot(s) detailed in this WO to perform the agricultural drone spraying Services in the operational area and for the period specified in the Work Order Details below, in accordance with the obligations, standards and reporting requirements of the MSA.</p>` },
   { id:"wo_rates", title:"Rates and Payment", on:true, body:`
 <p>The rates applicable to this WO are set out in the Work Order Details below and are subject to the billing, invoicing and payment terms of the MSA. DroCon Bharat's obligation to pay the {{CP}}'s share is conditional upon DroCon Bharat's collection of the corresponding amount from the end client, as provided in the MSA.</p>` },
+  { id:"wo_payment_timeline", title:"Payment Timeline", on:true, body:`
+<p>The payment timeline under this WO shall broadly align with the payment terms of the corresponding work order or purchase order issued by the end client. Without prejudice to the foregoing and to the collection condition above, DroCon Bharat shall <b>process and release the {{CP}}'s undisputed payment within one (1) to two (2) business days of receipt of the corresponding amount from the end client</b>. Disputed amounts shall be paid within the same period after resolution.</p>` },
   { id:"wo_term", title:"Term, Deployment and Withdrawal", on:true, body:`
 <p>The {{CP}} shall deploy within the timeline stated in the MSA. This WO remains in effect for the period stated in the Work Order Details unless withdrawn or terminated in accordance with the MSA. Failure to deploy or perform may lead to withdrawal of this WO, which DroCon Bharat may reissue to another supplier at its sole discretion.</p>` },
   { id:"wo_acceptance", title:"Acceptance", on:true, body:`
@@ -1374,6 +1376,13 @@ function panelParties(){
         <div class="field"><label>End date</label><input type="date" data-f="endDate" value="${F('endDate')}"></div>
         <div class="field"><label>Estimated work scope (acres/day)</label><input type="text" data-f="woScope" value="${F('woScope')}"></div>
         <div class="field"><label>Number of drones</label><input type="text" data-f="droneCount" value="${F('droneCount')}"></div>
+      </div></fieldset>
+
+      <fieldset class="fieldset"><legend>Client site contact (point of contact)</legend>
+      <div class="fgrid">
+        <div class="field"><label>POC name</label><input type="text" data-f="woPocName" value="${F('woPocName')}" placeholder="Contact person at the client location"></div>
+        <div class="field"><label>POC phone</label><input type="text" data-f="woPocPhone" value="${F('woPocPhone')}" placeholder="+91 …"></div>
+        <div class="field"><label>POC designation</label><input type="text" data-f="woPocDesignation" value="${F('woPocDesignation')}" placeholder="e.g. Field Manager"></div>
       </div></fieldset>
 
       <fieldset class="fieldset"><legend>Rates (₹ / acre)</legend>
@@ -2035,6 +2044,7 @@ function woDetailsHTML(){
     <tr><td style="width:38%"><b>Work Order No.</b></td><td>${f.woNumber?esc(f.woNumber):"WO-________"}</td></tr>
     <tr><td><b>Issued under MSA dated</b></td><td>${f.woMsaDate?fmtDate(f.woMsaDate):"____________"}</td></tr>
     <tr><td><b>Operational Area / Location</b></td><td>${v(f.woArea)}</td></tr>
+    <tr><td><b>Client Site Contact (POC)</b></td><td>${v(f.woPocName)} &nbsp;·&nbsp; ${v(f.woPocDesignation)} &nbsp;·&nbsp; ${v(f.woPocPhone)}</td></tr>
     <tr><td><b>Start Date / End Date</b></td><td>${f.startDate?fmtDate(f.startDate):"____________"} &nbsp;to&nbsp; ${f.endDate?fmtDate(f.endDate):"____________"}</td></tr>
     <tr><td><b>Estimated Work Scope</b></td><td>${v(f.woScope," ")}Acres / Day</td></tr>
     <tr><td><b>Gross Collection Rate</b></td><td>₹ ${v(f.woGrossRate)} / acre</td></tr>
@@ -2371,6 +2381,7 @@ function exportWord(){
       ["Work Order No.", f.woNumber||"WO-________"],
       ["Issued under MSA dated", f.woMsaDate?fmtDate(f.woMsaDate):"____________"],
       ["Operational Area / Location", f.woArea||"____________"],
+      ["Client Site Contact (POC)", (f.woPocName||"____________")+" · "+(f.woPocDesignation||"____________")+" · "+(f.woPocPhone||"____________")],
       ["Start / End Date", (f.startDate?fmtDate(f.startDate):"____________")+" to "+(f.endDate?fmtDate(f.endDate):"____________")],
       ["Estimated Work Scope", (f.woScope||"____")+" Acres / Day"],
       ["Gross Collection Rate", "₹ "+(f.woGrossRate||"____")+" / acre"],
