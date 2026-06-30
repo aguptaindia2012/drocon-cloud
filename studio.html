@@ -1294,8 +1294,9 @@ function migrateDraft(d){
   return d;
 }
 
-function openTemplate(key){
-  const existing = migrateDraft(loadLocal(key));
+function openTemplate(key, forceNew){
+  if(forceNew){ try{ localStorage.removeItem(lsKey(key)); }catch(e){} }   // start a clean new draft
+  const existing = forceNew ? null : migrateDraft(loadLocal(key));
   draft = existing || newDraft(key);
   // re-sync structural fields in case template definitions changed
   const t = tmpl(key);
@@ -1775,11 +1776,12 @@ function renderDashboard(){
       <h3>${esc(t.label)}</h3>
       <p>${esc(t.desc)}</p>
       ${resumed?'<div class="small-note" style="margin-bottom:8px">● You have a saved draft in progress</div>':''}
-      <div class="row"><button class="btn ${t.cat==='vendor'?'blue':(t.cat==='module'?'blue':'')}" data-open="${t.key}">${resumed?'Resume draft':verb}</button></div>`;
+      <div class="row" style="gap:6px"><button class="btn ${t.cat==='vendor'?'blue':(t.cat==='module'?'blue':'')}" data-new="${t.key}">${verb}</button>${resumed?`<button class="btn" data-open="${t.key}">Resume draft</button>`:''}</div>`;
     const grid = t.cat==="vendor"?vg:(t.cat==="module"?(mg||cg):cg);
     grid.appendChild(card);
   });
   document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>openTemplate(b.getAttribute("data-open"))));
+  document.querySelectorAll("[data-new]").forEach(b=>b.addEventListener("click",()=>openTemplate(b.getAttribute("data-new"), true)));
 }
 
 function goDashboard(){ showView("dashboard"); $("crumb").innerHTML=""; renderDashboard(); window.scrollTo(0,0); }

@@ -13,6 +13,7 @@ async function listAgreements(filter){
   let q = sb.from("agreements").select("*, creator:created_by(full_name,email), approver:assigned_approver(full_name,email)").order("updated_at",{ascending:false});
   if(filter==="mine") q=q.eq("created_by", me.id);
   if(filter==="review") q=q.eq("status","in_review");
+  if(filter==="draft") q=q.eq("status","draft");
   const { data, error } = await q;
   if(error){ console.error(error); return []; }
   return data||[];
@@ -21,6 +22,7 @@ async function listAgreements(filter){
 async function viewAgreements(){
   const m=$("main"); m.innerHTML=`<div class="eyebrow">Agreement</div><h1>Agreements</h1>
     <div class="row" style="margin:10px 0"><button class="btn sm" data-f="all">All</button>
+    <button class="btn sm" data-f="draft">Drafts</button>
     <button class="btn sm" data-f="mine">Mine</button>
     <button class="btn sm" data-f="review">In review</button>
     <div class="spacer"></div><button class="btn green sm" id="newBtn">+ New agreement</button></div>
