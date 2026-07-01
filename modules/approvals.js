@@ -6,7 +6,7 @@
    Also exports OPS.approvals.bar(...) to embed approval controls in any form.
    ============================================================================ */
 (function(){
-const { $, esc, fmt, fmtDate, money } = window.OPS.helpers;
+const { $, esc, fmt, fmtDate, money, num } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const me = ()=>window.OPS.me;
 
@@ -108,8 +108,74 @@ async function reviewQueue(){
     const it=items[+b.getAttribute("data-i")]; const act=b.getAttribute("data-act");
     if(act==="approve"){ if(await approve(it.table,it.r.id,titleOf(it.table,it.r))) reviewQueue(); }
     else if(act==="reject"){ const n=prompt("Reason for rejection:"); if(n===null)return; if(await reject(it.table,it.r.id,n,titleOf(it.table,it.r))) reviewQueue(); }
-    else { openItem(it); }
+    else { reviewDetail(it); }
   }));
+}
+
+/* ---------- review detail: show WHAT is being approved + recent changes ----------
+   Opening a queue item lands here (not on the raw list/sheet): a quick summary of
+   the record and its recent change history, with Approve/Reject in place. Applies
+   to every type awaiting approval. "Open full record" still jumps to the editor. */
+function kv(k,v){ return (v!==undefined&&v!==null&&v!=="")?`<div><span class="muted">${esc(k)}:</span> <b>${esc(v)}</b></div>`:''; }
+function summaryHTML(it){
+  const r=it.r;
+  if(it.table==="documents"){
+    const p=r.party_snapshot||{}, t=r.totals||{}, items=r.line_items||[];
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">
+        ${kv("Number",r.number)}${kv("Date",fmtDate(r.doc_date))}
+        ${kv("Party",p.firmName||p.name)}${kv("GSTIN",p.gstin)}
+        ${kv("Line items",String(items.length))}${kv("Total",money(t.total))}
+        ${r.data&&r.data.fromQuotation?kv("From quotation",r.data.fromQuotation):""}</div>
+      ${items.length?`<table class="tight" style="margin-top:8px"><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+        <tbody>${items.slice(0,15).map(li=>`<tr><td>${esc(li.desc||'')}</td><td class="num">${esc(li.qty??'')}</td><td class="num">${money(li.rate)}</td><td class="num">${money(num(li.qty)*num(li.rate)*(1-num(li.disc)/100))}</td></tr>`).join("")}</tbody></table>`:''}`;
+  }
+  if(it.table==="clients"||it.table==="vendors")
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">${kv("Firm",r.firm_name)}${kv("Contact",r.name)}${kv("Mobile",r.mobile)}${kv("Email",r.email)}${kv("GSTIN",r.gstin)}${kv("City",r.city)}${kv("State",r.state)}</div>`;
+  if(it.table==="bom_designs"){ const parts=r.parts||[];
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">${kv("Name",r.name)}${kv("Parts",String(parts.length))}${kv("Overhead %",r.overhead_pct)}${kv("Profit %",r.profit_pct)}${kv("Commission %",r.commission_pct)}</div>`; }
+  if(it.table==="agreements")
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">${kv("Title",r.title)}${kv("Category",r.category)}${kv("Counterparty",r.counterparty_name||r.counterparty)}${kv("Status",r.status)}</div>`;
+  return '<p class="muted">No summary available.</p>';
+}
+async function loadChanges(it){
+  const host=$("rdChanges"); if(!host) return;
+  const variants=({ documents:["document","documents"], agreements:["agreement","agreements"],
+    clients:["client","clients"], vendors:["vendor","vendors"], bom_designs:["bom_design","bom_designs","bom"] }[it.table])||[it.table];
+  const { data }=await sb().from("audit_log").select("*").in("entity",variants).eq("entity_id",String(it.r.id)).order("created_at",{ascending:false}).limit(8);
+  const rows=data||[]; if(!rows.length){ host.innerHTML=""; return; }
+  const ps=await listProfilesCached();
+  host.innerHTML=`<h3 style="margin-top:16px">Recent changes</h3>
+    <table class="tight"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
+    <tbody>${rows.map(a=>`<tr><td>${fmt(a.created_at)}</td><td>${esc(nameOf(ps,a.actor))}</td><td>${esc(String(a.action||"").replace(/_/g," "))}</td><td>${esc(a.note||"")}</td></tr>`).join("")}</tbody></table>`;
+}
+async function reviewDetail(it){
+  const { table, r }=it; const m=$("main"); const ps=await listProfilesCached();
+  const lbl=table==="agreements"?"Agreement":labelOf(table,r);
+  const title=table==="agreements"?(r.title||""):TYPES[table].title(r);
+  const submittedBy=nameOf(ps, table==="agreements"?r.created_by:r.submitted_by);
+  const st=table==="agreements"?(r.status||"draft"):(r.approval_status||"draft");
+  const amApprover=(r.assigned_approver===me().id)||window.OPS.isAdmin();
+  m.innerHTML=`<button class="btn sm" id="rdBack">← Back to review queue</button>
+    <div class="card" style="margin-top:12px">
+      <div class="eyebrow">Review / Approvals · ${esc(lbl)}</div>
+      <h1 style="margin:2px 0">${esc(title)}</h1>
+      <div>${window.OPS.statusChip(st==="submitted"?"in_review":st)} <span class="muted">· submitted by <b>${esc(submittedBy||"—")}</b>${r.submitted_at?(" · "+fmt(r.submitted_at)):""}</span></div>
+      ${r.reject_note?`<div class="muted" style="color:#a3322a;margin-top:6px">Earlier rejection note: ${esc(r.reject_note)}</div>`:''}
+      <h3 style="margin-top:14px">What you're approving</h3>
+      ${summaryHTML(it)}
+      <div id="rdChanges"><p class="muted" style="margin-top:12px">Loading change history…</p></div>
+      <div class="row wrap" style="margin-top:16px">
+        ${amApprover?`<button class="btn green" id="rdApprove">Approve</button>
+          <button class="btn" id="rdReject" style="color:#a3322a;border-color:#e4b4b4">Reject…</button>`:'<span class="muted">You are not the assigned reviewer for this item.</span>'}
+        <div class="spacer"></div>
+        <button class="btn sm" id="rdOpen">Open full record ↗</button>
+      </div>
+    </div>`;
+  $("rdBack").addEventListener("click",reviewQueue);
+  $("rdOpen").addEventListener("click",()=>openItem(it));
+  if($("rdApprove")) $("rdApprove").addEventListener("click",async()=>{ if(await approve(table,r.id,title)) reviewQueue(); });
+  if($("rdReject"))  $("rdReject").addEventListener("click",async()=>{ const n=prompt("Reason for rejection:"); if(n===null)return; if(await reject(table,r.id,n,title)) reviewQueue(); });
+  loadChanges(it);
 }
 function openItem(it){
   if(it.table==="agreements"){ window.OPS.openTool("agreements"); window.OPS.routes.viewAgreementDetail(it.r.id); }

@@ -49,7 +49,7 @@ async function listView(type){
     $("dList").innerHTML = rows.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>${esc(cfg.partyLabel.split(" ")[0])}</th><th class="num">Total</th><th>Status</th></tr></thead>
       <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}"><td><b>${esc(r.number)}</b></td><td>${fmtDate(r.doc_date)}</td>
         <td>${esc(((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"")}</td>
-        <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(r.status||"draft")}</td></tr>`).join("")}</tbody></table>`
+        <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(dispStatus(r))}</td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No documents yet.</div>';
     $("dList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>openExisting(all.find(x=>x.id===tr.getAttribute("data-id")))));
   }
@@ -59,6 +59,18 @@ async function listView(type){
 }
 
 function blankParty(){ return { firmName:"", name:"", mobile:"", email:"", gstin:"", address:"", city:"", state:"", stateCode:"", pincode:"" }; }
+
+// what chip to show in the list: payment lifecycle wins once money moves,
+// otherwise reflect the approval state (so an approved doc reads "Approved",
+// not "Draft"), falling back to the lifecycle status.
+function dispStatus(r){
+  if(r.status==="paid"||r.status==="partial") return r.status;
+  const a=r.approval_status;
+  if(a==="approved") return "approved";
+  if(a==="submitted") return "in_review";
+  if(a==="rejected")  return "rejected";
+  return r.status||"draft";
+}
 
 async function startNew(type){
   const cfg=CONFIG[type]; const fy=fyOf(todayISO());

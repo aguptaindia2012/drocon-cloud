@@ -26,7 +26,7 @@ window.OPS = { sb:null, me:null, profile:null, perms:new Set(),
   helpers:{ $, esc, fmt, fmtDate, todayISO, money, num, fyOf } };
 
 let sb=null, me=null, profile=null, signupMode=false;
-const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended",approved:"Approved",rejected:"Rejected",executed:"Executed"};
+const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended",approved:"Approved",rejected:"Rejected",executed:"Executed",issued:"Issued",partial:"Part paid",paid:"Paid"};
 
 /* ---------- sections + tools registry ----------
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
