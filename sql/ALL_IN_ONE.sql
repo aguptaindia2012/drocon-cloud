@@ -693,6 +693,7 @@ create table if not exists public.acre_entries (
   rate        numeric,
   amount      numeric,
   crop        text,
+  chemical    text,
   created_by  uuid references public.profiles(id),
   created_at  timestamptz not null default now()
 );
@@ -1908,10 +1909,10 @@ begin
     sids := array_append(sids, sid::text);
 
     insert into public.acre_entries
-      (entry_date, location_id, pilot_name, acres, rate, client_rate, farmer_rate, amount, crop, source_id, created_by)
+      (entry_date, location_id, pilot_name, acres, rate, client_rate, farmer_rate, amount, crop, chemical, source_id, created_by)
     values
       (s.entry_date, loc, nullif(r->>'pilot',''), acres, nullif(cr+fr,0), nullif(cr,0), nullif(fr,0),
-       nullif(amt,0), nullif(r->>'crop',''), sid, s.submitted_by);
+       nullif(amt,0), nullif(r->>'crop',''), nullif(r->>'chemical',''), sid, s.submitted_by);
 
     insert into public.farmer_sprays
       (spray_date, pilot_name, client_name, farmer_name, contact_no, village, state, district,

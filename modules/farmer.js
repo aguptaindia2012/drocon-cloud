@@ -32,9 +32,9 @@ async function view(){
     <div class="stat"><div class="n">${all.length?Math.round(gps*100/all.length):0}%</div><div class="l">GPS image present</div></div>
   </div>`;
   function render(rows){
-    $("fList").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Village</th><th>Crop</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th></tr></thead>
+    $("fList").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.spray_date)}</td><td>${esc(r.pilot_name||'')}</td><td>${esc(r.farmer_name||'')}</td>
-        <td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td>
+        <td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical_company||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td>
         <td>${r.gps_image_present?'<span class="chip approved">✓</span>':'<span class="chip rejected">✗</span>'}</td></tr>`).join("")}</tbody></table></div>`
       : '<div class="card muted">No sprays logged yet.</div>';
   }

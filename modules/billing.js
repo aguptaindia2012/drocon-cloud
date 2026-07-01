@@ -71,12 +71,27 @@ async function startNew(type){
   if(!D.items.length) D.items.push({desc:"",hsn:"",gst:type==="quotation"?5:0,qty:1,rate:0,per:type==="quotation"?"Unit":"Acre",disc:0});
   editor();
 }
+/* ---------- Quotation → Invoice: raise an invoice from an accepted quotation ---------- */
+async function convertToInvoice(){
+  const srcNum=D.number, cfg=CONFIG.invoice, fy=fyOf(todayISO());
+  let seq=1; try{ const { data }=await sb().rpc("next_doc_seq",{p_doc_type:"invoice",p_fy:fy}); if(data) seq=data; }catch(e){}
+  TYPE="invoice";
+  D={ id:null, doc_type:"invoice", fiscal_year:fy, seq, number:cfg.number(fy,seq), doc_date:todayISO(),
+      copyLabel:"Original", party:Object.assign(blankParty(), D.party||{}), party_id:D.party_id||null,
+      related_doc_id:null, items:(D.items||[]).map(it=>Object.assign({},it)),
+      terms:Object.assign({},cfg.defTerms), status:"draft", fromQuotation:srcNum||null };
+  if(!D.items.length) D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"Acre",disc:0});
+  window.OPS.flashTop("New invoice draft from quotation "+(srcNum||"")+" — review rates & save.");
+  editor();
+}
+
 function openExisting(rec){
   TYPE=rec.doc_type;
   if(window.OPS.access) window.OPS.access.log("documents", rec.id, rec.number);
   D=Object.assign({ id:rec.id, doc_type:rec.doc_type, fiscal_year:rec.fiscal_year, seq:rec.seq, number:rec.number,
     doc_date:rec.doc_date, copyLabel:(rec.data&&rec.data.copyLabel)||null, party:rec.party_snapshot||blankParty(),
-    party_id:rec.party_id, related_doc_id:rec.related_doc_id, items:rec.line_items||[], terms:rec.terms||{}, status:rec.status||"draft" }, {});
+    party_id:rec.party_id, related_doc_id:rec.related_doc_id, items:rec.line_items||[], terms:rec.terms||{}, status:rec.status||"draft",
+    fromQuotation:(rec.data&&rec.data.fromQuotation)||null }, {});
   editor();
 }
 
@@ -125,8 +140,11 @@ function editor(){
       <h3 style="margin-top:14px">Terms</h3>
       ${termsHTML(cfg)}
 
+      ${TYPE==='quotation' && D.id?'<div class="callout">When this quotation is <b>accepted</b> by the client, use <b>→ Convert to Invoice</b> to raise an invoice pre-filled with these details. You can revise rates, quantities and negotiated terms before saving.</div>':''}
+
       <div class="row wrap" style="margin-top:14px">
         <button class="btn green" id="dSave">${D.id?"Save changes":"Save"}</button>
+        ${TYPE==='quotation' && D.id?'<button class="btn blue" id="dToInvoice">→ Convert to Invoice</button>':''}
         <button class="btn blue" id="dWord">⬇ Download Word (.docx)</button>
         <button class="btn" id="dJson">⬇ Download JSON</button>
         <button class="btn sm" id="dImport">Import JSON…</button>
@@ -154,6 +172,7 @@ function editor(){
   });
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
+  if($("dToInvoice")) $("dToInvoice").addEventListener("click",convertToInvoice);
   if($("dDel")) $("dDel").addEventListener("click",async()=>{ if(!confirm("Delete this document?"))return; await sb().from("documents").delete().eq("id",D.id); listView(TYPE); });
   renderItems(); loadPickers(cfg);
   bindTerms(cfg);
@@ -270,7 +289,7 @@ async function save(){
   const rec={ doc_type:TYPE, number:D.number, fiscal_year:D.fiscal_year, seq:D.seq, doc_date:D.doc_date,
     party_kind:CONFIG[TYPE].partyKind, party_id:D.party_id||null, party_snapshot:D.party,
     line_items:D.items, totals:t, terms:D.terms, status:D.status||"draft",
-    related_doc_id:D.related_doc_id||null, data:{ copyLabel:D.copyLabel } };
+    related_doc_id:D.related_doc_id||null, data:{ copyLabel:D.copyLabel, fromQuotation:D.fromQuotation||null } };
   let savedId=D.id;
   let reverted=false, reviewerId=null;   // #13: a non-admin editing an APPROVED doc sends it back to review
   if(D.id){

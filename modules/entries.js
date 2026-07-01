@@ -35,8 +35,8 @@ async function loadFarmer(){
   const all=data||[];
   window._eqRender=()=>{ const q=window._eqFilter||"";
     const rows=!q?all:all.filter(r=>[r.farmer_name,r.village,r.pilot_name,r.client_name,r.crop].some(v=>String(v||"").toLowerCase().includes(q)));
-    $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th></tr></thead>
-      <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.spray_date)}</td><td>${esc(r.pilot_name||'')}</td><td>${esc(r.farmer_name||'')}</td><td>${esc(mask(r.contact_no))}</td><td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td><td>${r.gps_image_present?'✓':'·'}</td></tr>`).join("")}</tbody></table></div>`
+    $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th></tr></thead>
+      <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.spray_date)}</td><td>${esc(r.pilot_name||'')}</td><td>${esc(r.farmer_name||'')}</td><td>${esc(mask(r.contact_no))}</td><td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical_company||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td><td>${r.gps_image_present?'✓':'·'}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No matching rows.</div>';
     $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>farmerForm(all.find(x=>x.id===tr.getAttribute("data-id"))))); };
   window._eqRender();
@@ -89,8 +89,8 @@ async function loadAcre(){
   const all=data||[];
   window._eqRender=()=>{ const q=window._eqFilter||"";
     const rows=!q?all:all.filter(r=>[(r.loc&&r.loc.name),r.pilot_name,r.crop].some(v=>String(v||"").toLowerCase().includes(q)));
-    $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th></tr></thead>
-      <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td></tr>`).join("")}</tbody></table></div>`
+    $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th><th>Medicine</th></tr></thead>
+      <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical||'')}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No matching rows.</div>';
     $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>acreForm(all.find(x=>x.id===tr.getAttribute("data-id"))))); };
   window._eqRender();
@@ -107,6 +107,7 @@ function acreForm(r){
       <div class="field"><label>Client rate (₹/acre)</label><input id="a_client_rate" type="number" step="any" value="${esc(r.client_rate)}"></div>
       <div class="field"><label>Farmer rate (₹/acre)</label><input id="a_farmer_rate" type="number" step="any" value="${esc(r.farmer_rate)}"></div>
       <div class="field"><label>Crop</label><input id="a_crop" value="${esc(r.crop||'')}"></div>
+      <div class="field"><label>Medicine / Chemical</label><input id="a_chemical" value="${esc(r.chemical||'')}"></div>
     </div>
     <div class="row"><button class="btn green" id="eqSave">Save changes</button><button class="btn" id="eqCancel">Cancel</button>
       <div class="spacer"></div>${window.OPS.canDelete()?'<button class="btn sm" id="eqDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
@@ -115,7 +116,7 @@ function acreForm(r){
   $("eqSave").addEventListener("click",async()=>{
     const acres=num($("a_acres").value), cr=num($("a_client_rate").value), fr=num($("a_farmer_rate").value); const rate=cr+fr;
     const out={ entry_date:$("a_entry_date").value||null, location_id:$("a_location_id").value||null, pilot_name:$("a_pilot_name").value||null,
-      acres:acres||0, client_rate:cr||null, farmer_rate:fr||null, rate:rate||null, amount:(acres*rate)||null, crop:$("a_crop").value||null };
+      acres:acres||0, client_rate:cr||null, farmer_rate:fr||null, rate:rate||null, amount:(acres*rate)||null, crop:$("a_crop").value||null, chemical:$("a_chemical").value||null };
     const { error }=await sb().from("acre_entries").update(out).eq("id",r.id);
     if(error){ $("eqErr").textContent=error.message; return; }
     window.OPS.audit("edited","acre_entries",r.id,out.pilot_name||""); window.OPS.flashTop("Saved ✓"); view();

@@ -71,8 +71,8 @@ async function view(){
         <td>${window.OPS.statusChip(x.status)}${x.r.approval_status==='submitted'?' <span class="chip in_review">in review</span>':''}</td>
         <td>${x.balance>0?`<button class="btn green sm" data-pay="${x.r.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.r.id}">Payments</button></td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No invoices match.</div>';
-    $("pTable").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>recordPayment(rows.find(z=>z.r.id===b.getAttribute("data-pay")),load)));
-    $("pTable").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayments(rows.find(z=>z.r.id===b.getAttribute("data-mng")),load)));
+    $("pTable").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>recordPayment(rows.find(z=>z.r.id===b.getAttribute("data-pay")),view)));
+    $("pTable").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayments(rows.find(z=>z.r.id===b.getAttribute("data-mng")),view)));
   }
   load();
 }
@@ -121,9 +121,9 @@ async function managePayments(x, back){
     </div>`;
   $("pBack").addEventListener("click",back);
   if($("pAdd")) $("pAdd").addEventListener("click",()=>recordPayment(x, ()=>managePayments(x,back)));
-  m.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editPayment(x, list.find(p=>p.id===b.getAttribute("data-edit")), back)));
+  m.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>editPayment(x, list.find(p=>String(p.id)===b.getAttribute("data-edit")), back)));
   m.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
-    const p=list.find(z=>z.id===b.getAttribute("data-del")); if(!confirm("Delete this payment of "+money(p.amount)+"?")) return;
+    const p=list.find(z=>String(z.id)===b.getAttribute("data-del")); if(!p||!confirm("Delete this payment of "+money(p.amount)+"?")) return;
     const { error }=await sb().from("payments").delete().eq("id",p.id); if(error){ alert(error.message); return; }
     x.paid-=num(p.amount); await recomputeStatus(x); await gateCorrection(x,"deleted");
     window.OPS.audit("payment_deleted","document",x.r.id,money(p.amount));

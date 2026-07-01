@@ -169,8 +169,8 @@ async function approvals(host){
           ${r.approval_status==="rejected"&&r.reject_note?`<div class="muted" style="color:#a3322a">Rejected: ${esc(r.reject_note)}</div>`:''}</div>
       </div>
       <details style="margin-top:8px"><summary class="muted">View ${sprays.length} spray row(s)</summary>
-        <table class="tight" style="margin-top:6px"><thead><tr><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th>GPS</th></tr></thead>
-        <tbody>${sprays.map(x=>`<tr><td>${esc(x.pilot||"")}</td><td>${esc(x.farmer||"")}</td><td>${esc(window.OPS.helpers.maskPhone(x.phone))}</td><td>${esc(x.village||"")}</td><td>${esc(x.crop||"")}</td><td class="num">${esc(x.acres||"")}</td><td class="num">${esc(x.crate||"")}</td><td class="num">${esc(x.frate||"")}</td><td>${x.gps?"✓":""}</td></tr>`).join("")}</tbody></table>
+        <table class="tight" style="margin-top:6px"><thead><tr><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th>GPS</th></tr></thead>
+        <tbody>${sprays.map(x=>`<tr><td>${esc(x.pilot||"")}</td><td>${esc(x.farmer||"")}</td><td>${esc(window.OPS.helpers.maskPhone(x.phone))}</td><td>${esc(x.village||"")}</td><td>${esc(x.crop||"")}</td><td>${esc(x.chemical||"")}</td><td class="num">${esc(x.acres||"")}</td><td class="num">${esc(x.crate||"")}</td><td class="num">${esc(x.frate||"")}</td><td>${x.gps?"✓":""}</td></tr>`).join("")}</tbody></table>
       </details>
       <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
         ${canEdit?`<button class="btn sm" data-act="edit" data-id="${r.id}">Edit</button>`:''}
