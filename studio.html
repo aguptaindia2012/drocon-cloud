@@ -834,6 +834,38 @@ const WORKORDER_CLAUSES = [
 <p>By signing below, the {{CP}} accepts this WO and reaffirms that all Supplied Drones hold a valid UIN, each pilot holds a valid RPC, and the {{CP}} shall perform the Services in compliance with the MSA.</p>` }
 ];
 
+/* Deployment letter (sugar mill) — editable clauses. Section A (deployment
+   details) and Section B (drone/pilot table) are rendered from the input
+   fields; the clauses below carry the editable narrative. The Enclosure clause
+   holds the pilot-letter text with {{PILOT_NAME}}/{{RPC}}/{{UIN}}/{{MILL}}/
+   {{CROP}}/{{EFF_DATE}} tokens, filled per pilot from the same inputs. */
+const DEPLOY_CLAUSES_EN = [
+  { id:"dep_intro", title:"Introduction & Authorisation", on:true, body:`<p>This letter serves to formally introduce and authorise the drone(s) and Remote Pilot(s) listed below, who are being deployed at your facility to carry out agricultural spraying operations on behalf of Drocon Bharat Private Limited. Kindly extend the necessary support and access to enable smooth commencement of the assignment.</p>` },
+  { id:"dep_request", title:"Section C — Request to the Client", on:true, body:`<p>Before permitting operations, and for record purposes, we request the client to kindly:</p>
+<ol><li>Verify the drone details, including the Unique Identification Number (UIN) of each drone against this letter.</li>
+<li>Verify the identity and credentials of each Remote Pilot, including the Remote Pilot Certificate (RPC) and Aadhaar Card (or other Government-issued photo ID).</li>
+<li>Issue a letter to each Remote Pilot confirming that the drone has been deployed at the Sugar Mill and that the pilot is operating on behalf of / with the authorisation of the Sugar Mill.</li></ol>
+<p><i>A ready-to-use draft of the letter referred to in point 3 is enclosed with this communication for the Sugar Mill to print on its own letterhead and hand over to each pilot.</i></p>` },
+  { id:"dep_scope", title:"Section D — Scope of Engagement", on:true, body:`<p>All operations under this engagement shall be limited to Agricultural Spraying services offered to the farmers through the Sugar Mill. Any other use of the drones is unauthorised and shall be the sole responsibility of the Pilot.</p>` },
+  { id:"dep_pilot_cert", title:"Enclosure — Pilot Authorisation Letter (text issued by the Sugar Mill)", on:true, body:`<p>This is to certify that Mr./Ms. {{PILOT_NAME}} (Remote Pilot), holding Remote Pilot Certificate (RPC) No. {{RPC}} and operating the drone bearing Unique Identification Number (UIN) {{UIN}}, has been deployed at our facility, {{MILL}} (Sugar Mill name &amp; address).</p>
+<p>The said pilot and drone are engaged in agricultural spraying operations on the crop of {{CROP}} with effect from {{EFF_DATE}}, and are hereby authorised to operate at and on behalf of our Sugar Mill for the said assignment.</p>
+<p>The identity, RPC and drone UIN of the above pilot have been verified by us. This letter is issued at the request of Drocon Bharat Private Limited to facilitate lawful field operations.</p>
+<p>All operations under this engagement shall be limited to Agricultural Spraying services offered to the farmers through the Sugar Mill. Any other use of the drones is unauthorised and shall be the sole responsibility of the Pilot.</p>` }
+];
+const DEPLOY_CLAUSES_HI = [
+  { id:"dep_intro", title:"परिचय एवं प्राधिकरण", on:true, body:`<p>यह पत्र नीचे सूचीबद्ध ड्रोन एवं रिमोट पायलट(ों) का औपचारिक परिचय एवं प्राधिकरण प्रदान करता है, जिन्हें Drocon Bharat Private Limited की ओर से आपके परिसर में कृषि छिड़काव कार्य हेतु तैनात किया जा रहा है। कृपया कार्य के सुचारु आरंभ हेतु आवश्यक सहयोग एवं अनुमति प्रदान करें।</p>` },
+  { id:"dep_request", title:"खंड — ग : ग्राहक से अनुरोध", on:true, body:`<p>कार्य आरंभ की अनुमति देने से पूर्व एवं अभिलेख हेतु, हम ग्राहक से निम्नलिखित अनुरोध करते हैं:</p>
+<ol><li>प्रत्येक ड्रोन का विवरण, विशेषकर विशिष्ट पहचान संख्या (UIN), इस पत्र से मिलान कर सत्यापित करें।</li>
+<li>प्रत्येक रिमोट पायलट की पहचान एवं प्रमाण-पत्रों का सत्यापन करें, जिसमें रिमोट पायलट प्रमाण-पत्र (RPC) एवं आधार कार्ड (अथवा अन्य सरकारी फोटो पहचान-पत्र) सम्मिलित हैं।</li>
+<li>प्रत्येक रिमोट पायलट को एक पत्र जारी करें जिसमें यह पुष्टि हो कि ड्रोन शुगर मिल में तैनात है तथा पायलट शुगर मिल की ओर से / उसके प्राधिकरण से कार्य कर रहा है।</li></ol>
+<p><i>बिंदु 3 में उल्लिखित पत्र का उपयोग-हेतु-तैयार प्रारूप इस संदेश के साथ संलग्न है, जिसे शुगर मिल अपने स्वयं के लेटरहेड पर मुद्रित कर प्रत्येक पायलट को प्रदान करे।</i></p>` },
+  { id:"dep_scope", title:"खंड — घ : कार्य का दायरा", on:true, body:`<p>इस अनुबंध के अंतर्गत समस्त कार्य केवल शुगर मिल के माध्यम से किसानों को प्रदान की जाने वाली कृषि छिड़काव सेवाओं तक सीमित रहेंगे। ड्रोन का किसी भी अन्य प्रयोजन हेतु उपयोग अनधिकृत है तथा इसका संपूर्ण उत्तरदायित्व पायलट का होगा।</p>` },
+  { id:"dep_pilot_cert", title:"संलग्नक — रिमोट पायलट हेतु पत्र (शुगर मिल द्वारा जारी) का पाठ", on:true, body:`<p>यह प्रमाणित किया जाता है कि श्री/सुश्री {{PILOT_NAME}} (रिमोट पायलट), रिमोट पायलट प्रमाण-पत्र (RPC) क्र. {{RPC}} के धारक, तथा विशिष्ट पहचान संख्या (UIN) {{UIN}} वाले ड्रोन का संचालन करते हुए, हमारे परिसर {{MILL}} (शुगर मिल का नाम एवं पता) में तैनात किए गए हैं।</p>
+<p>उक्त पायलट एवं ड्रोन {{CROP}} फसल पर कृषि छिड़काव कार्य में संलग्न हैं, जो दिनांक {{EFF_DATE}} से प्रभावी है, तथा उक्त कार्य हेतु हमारी शुगर मिल में एवं उसकी ओर से कार्य करने के लिए एतद्द्वारा अधिकृत हैं।</p>
+<p>उपर्युक्त पायलट की पहचान, RPC एवं ड्रोन UIN हमारे द्वारा सत्यापित कर लिए गए हैं। यह पत्र Drocon Bharat Private Limited के अनुरोध पर वैध क्षेत्रीय कार्य को सुगम बनाने हेतु जारी किया जा रहा है।</p>
+<p>इस अनुबंध के अंतर्गत समस्त कार्य केवल शुगर मिल के माध्यम से किसानों को प्रदान की जाने वाली कृषि छिड़काव सेवाओं तक सीमित रहेंगे। ड्रोन का किसी भी अन्य प्रयोजन हेतु उपयोग अनधिकृत है तथा इसका संपूर्ण उत्तरदायित्व पायलट का होगा।</p>` }
+];
+
 /* ============================================================
    TEMPLATE CATALOG
    ============================================================ */
@@ -959,7 +991,24 @@ const TEMPLATES = [
     title:"JOB DESCRIPTION",
     subtitle:"Role Profile",
     desc:"Standardised job-description document — role, responsibilities, qualifications and benefits.",
-    clauseSet:"jd", ops:false }
+    clauseSet:"jd", ops:false },
+
+  // ---- DEPLOYMENT LETTERS (sugar mill) ----
+  { key:"deploy_letter_en", cat:"module", status:"ready", kind:"deployment", lang:"en",
+    label:"Sugar Mill Deployment Letter (English)",
+    cpRole:"Client",
+    title:"AUTHORISATION & INTRODUCTION LETTER",
+    subtitle:"Deployment of Agricultural Spraying Drone(s) & Remote Pilot(s)",
+    desc:"Authorisation / introduction letter to a sugar mill for deploying drones & pilots — with an add-as-many-rows drone–pilot table, and a ready-to-print pilot letter (on the mill's own letterhead), generated one per pilot.",
+    clauseSet:"deployment_en", ops:false },
+
+  { key:"deploy_letter_hi", cat:"module", status:"ready", kind:"deployment", lang:"hi",
+    label:"तैनाती पत्र — शुगर मिल (Hindi)",
+    cpRole:"Client",
+    title:"प्राधिकरण एवं परिचय पत्र",
+    subtitle:"कृषि छिड़काव ड्रोन एवं रिमोट पायलट की तैनाती",
+    desc:"शुगर मिल को ड्रोन एवं पायलट तैनाती हेतु प्राधिकरण/परिचय पत्र — जितनी चाहें उतनी पंक्तियों वाली ड्रोन–पायलट तालिका, तथा प्रत्येक पायलट हेतु शुगर मिल के लेटरहेड पर छपने योग्य तैयार पत्र।",
+    clauseSet:"deployment_hi", ops:false }
 ];
 
 const FUTURE_MODULES = []; // all modules above are now active
@@ -976,6 +1025,8 @@ CLAUSE_SETS["offer"] = OFFER_CLAUSES;
 CLAUSE_SETS["internship"] = INTERNSHIP_CLAUSES;
 CLAUSE_SETS["jd"] = JD_CLAUSES;
 CLAUSE_SETS["workorder"] = WORKORDER_CLAUSES;
+CLAUSE_SETS["deployment_en"] = DEPLOY_CLAUSES_EN;
+CLAUSE_SETS["deployment_hi"] = DEPLOY_CLAUSES_HI;
 
 /* ============================================================
    STATE + HELPERS
@@ -1051,8 +1102,15 @@ function newDraft(key){
       pmAcreRate: t.clauseSet==="pm" ? "5" : "", pmSparesPct: t.clauseSet==="pm" ? "4" : "",
       // letter / JD specific
       recipientName:"", recipientAddress:"", roleTitle:t.roleTitle||"", reportsTo:"Abhishek Gupta, Director & Founder",
-      compensation:"", startDateText:"", duration:"", workLocation:"Headquarters, Meerut, Uttar Pradesh"
+      compensation:"", startDateText:"", duration:"", workLocation:"Headquarters, Meerut, Uttar Pradesh",
+      // deployment letter (sugar mill)
+      depRef:"", depDate:"", depClientName:"", depClientPoc:"", depClientPocNo:"", depClientAddress:"",
+      depDeployDate:"", depCrop:"", depDeployingCo:"", depCoPocName:"", depCoPocNo:"",
+      depSigName:DCB.director, depSigDesig:"Director & Founder", depSigContact:DCB.mobile,
+      depMillName:"", depMillAddress:"", depPilotEffDate:""
     },
+    lang: t.lang || "en",
+    pilots: kind==="deployment" ? [["","","",""]] : [],
     bodyResp,
     annex: (kind==="agreement") ? (isVendor ? VENDOR_ANNEX() : CLIENT_ANNEX()) : [],
     droneDetails: isVendor ? [["","","","","",""]] : [],
@@ -1284,13 +1342,20 @@ function migrateDraft(d){
     droconNoticeName:DCB.director, droconNoticeDesig:"Director & Founder", droconNoticeMobile:DCB.mobile, droconNoticeEmail:DCB.email,
     cpNoticeName:"", cpNoticeDesig:"", cpNoticeMobile:"", cpNoticeEmail:"", droneCount:"",
     woNumber:"", woMsaDate:"", woArea:"", woScope:"", woGrossRate:"", woPartnerRate:"", woFee:"",
-    consultRate:"", termText:"", engScope:"", pmRegion:"", pmAcreRate:"", pmSparesPct:""
+    consultRate:"", termText:"", engScope:"", pmRegion:"", pmAcreRate:"", pmSparesPct:"",
+    depRef:"", depDate:"", depClientName:"", depClientPoc:"", depClientPocNo:"", depClientAddress:"",
+    depDeployDate:"", depCrop:"", depDeployingCo:"", depCoPocName:"", depCoPocNo:"",
+    depSigName:DCB.director, depSigDesig:"Director & Founder", depSigContact:DCB.mobile,
+    depMillName:"", depMillAddress:"", depPilotEffDate:""
   };
   for(const k in fd){ if(d.fields[k]===undefined) d.fields[k]=fd[k]; }
   if(d.cat==="vendor" && !Array.isArray(d.droneDetails)) d.droneDetails=[["","","","","",""]];
   if(!Array.isArray(d.droneDetails)) d.droneDetails=[];
   if(d.cat==="client" && (!Array.isArray(d.serviceRates) || !d.serviceRates.length)) d.serviceRates=[["",""]];
   if(!Array.isArray(d.serviceRates)) d.serviceRates=[];
+  if(d.kind==="deployment" && (!Array.isArray(d.pilots) || !d.pilots.length)) d.pilots=[["","","",""]];
+  if(!Array.isArray(d.pilots)) d.pilots=[];
+  if(!d.lang){ const t=tmpl(d.templateKey); d.lang=(t&&t.lang)||"en"; }
   return d;
 }
 
@@ -1300,7 +1365,7 @@ function openTemplate(key, forceNew){
   draft = existing || newDraft(key);
   // re-sync structural fields in case template definitions changed
   const t = tmpl(key);
-  draft.cpRole=t.cpRole; draft.cat=t.cat; draft.clauseSet=t.clauseSet; draft.ops=t.ops; draft.kind=t.kind||"agreement";
+  draft.cpRole=t.cpRole; draft.cat=t.cat; draft.clauseSet=t.clauseSet; draft.ops=t.ops; draft.kind=t.kind||"agreement"; draft.lang=t.lang||draft.lang||"en";
   if(!draft.title) draft.title=t.title;
   if(!draft.subtitle && draft.subtitle!=="") draft.subtitle=t.subtitle;
   activePanel="parties";
@@ -1316,8 +1381,8 @@ function renderSidenav(){
   const isModule = draft.cat==="module";
   const labelFor = (p)=>{
     if(p.id==="parties") return isModule ? "Details" : "Parties & Engagement";
-    if(p.id==="clauses") return (draft.kind==="letter"||draft.kind==="jd") ? "Review Sections" : "Review Clauses";
-    if(p.id==="addclause") return (draft.kind==="letter"||draft.kind==="jd") ? "Add a Section" : "Add a Clause";
+    if(p.id==="clauses") return (draft.kind==="letter"||draft.kind==="jd"||draft.kind==="deployment") ? "Review Sections" : "Review Clauses";
+    if(p.id==="addclause") return (draft.kind==="letter"||draft.kind==="jd"||draft.kind==="deployment") ? "Add a Section" : "Add a Clause";
     return p.label;
   };
   let n=0;
@@ -1358,9 +1423,58 @@ function renderPanel(){
    ============================================================ */
 function F(name){ return esc(draft.fields[name]||""); }
 
+function panelDeployment(){
+  return `<div class="panel">
+    <h2>Deployment Letter — Details</h2>
+    <p class="sub">Fill the details below — all inputs for both the letter and the enclosed pilot letters live on this one page. The drone–pilot table takes as many rows as you need; the enclosed pilot letter is generated <b>once per pilot</b> from these same rows. The letter's wording (Introduction, Section C requests, Section D scope, and the pilot-letter text) lives on the <b>Review Sections</b> page as editable clauses.</p>
+
+    <fieldset class="fieldset"><legend>Letter header</legend>
+    <div class="fgrid">
+      <div class="field"><label>Reference No.</label><input type="text" data-f="depRef" value="${F('depRef')}" placeholder="DCB/DEP/____/2026"></div>
+      <div class="field"><label>Letter date</label><input type="date" data-f="depDate" value="${F('depDate')}"></div>
+      <div class="field full"><label>Client / Sugar Mill name</label><input type="text" data-f="depClientName" value="${F('depClientName')}"></div>
+      <div class="field"><label>Kind Attention (POC)</label><input type="text" data-f="depClientPoc" value="${F('depClientPoc')}"></div>
+      <div class="field"><label>POC contact no.</label><input type="text" data-f="depClientPocNo" value="${F('depClientPocNo')}"></div>
+      <div class="field full"><label>Client address</label><textarea data-f="depClientAddress">${F('depClientAddress')}</textarea></div>
+    </div></fieldset>
+
+    <fieldset class="fieldset"><legend>Section A — Deployment details</legend>
+    <div class="fgrid">
+      <div class="field"><label>Deployment date</label><input type="date" data-f="depDeployDate" value="${F('depDeployDate')}"></div>
+      <div class="field"><label>Crop</label><input type="text" data-f="depCrop" value="${F('depCrop')}"></div>
+      <div class="field full"><label>Deploying company (on behalf of DroCon Bharat)</label><input type="text" data-f="depDeployingCo" value="${F('depDeployingCo')}"></div>
+      <div class="field"><label>Company POC name</label><input type="text" data-f="depCoPocName" value="${F('depCoPocName')}"></div>
+      <div class="field"><label>Company POC contact no.</label><input type="text" data-f="depCoPocNo" value="${F('depCoPocNo')}"></div>
+    </div></fieldset>
+
+    <fieldset class="fieldset"><legend>Section B — Drone &amp; pilot list</legend>
+    <p class="small-note" style="margin:0 0 8px">Add a row per drone–pilot pair. These rows also fill the enclosed pilot letters (one letter per row).</p>
+    ${tableEditor(draft.pilots&&draft.pilots.length?draft.pilots:[["","","",""]], ["Drone UIN","Pilot RPC No.","Pilot Name","Pilot Phone No."], "pilots", null)}
+    <div class="toolbar-row"><button class="btn ghost sm" data-addrow="pilots">+ Add drone / pilot row</button></div>
+    </fieldset>
+
+    <fieldset class="fieldset"><legend>DroCon Bharat signatory</legend>
+    <div class="fgrid">
+      <div class="field"><label>Signatory name</label><input type="text" data-f="depSigName" value="${F('depSigName')}"></div>
+      <div class="field"><label>Designation</label><input type="text" data-f="depSigDesig" value="${F('depSigDesig')}"></div>
+      <div class="field"><label>Contact</label><input type="text" data-f="depSigContact" value="${F('depSigContact')}"></div>
+    </div></fieldset>
+
+    <fieldset class="fieldset"><legend>Enclosed pilot letter <span class="hint">(printed on the Sugar Mill's own letterhead)</span></legend>
+    <div class="fgrid">
+      <div class="field full"><label>Sugar Mill name — for pilot letter</label><input type="text" data-f="depMillName" value="${F('depMillName')}" placeholder="defaults to the client name above"></div>
+      <div class="field full"><label>Sugar Mill address — for pilot letter</label><textarea data-f="depMillAddress" placeholder="defaults to the client address above">${F('depMillAddress')}</textarea></div>
+      <div class="field"><label>Effective date (pilot letter)</label><input type="date" data-f="depPilotEffDate" value="${F('depPilotEffDate')}"></div>
+    </div>
+    <p class="small-note">The enclosure prints one certificate per pilot listed in Section B, each on its own page, ready for the Sugar Mill to reproduce on its letterhead and sign.</p>
+    </fieldset>
+  </div>`;
+}
+
 function panelParties(){
   const isVendor = draft.cat==="vendor";
   const cp = draft.cpRole;
+  if((draft.kind||"agreement")==="deployment"){ return panelDeployment(); }
   if((draft.kind||"agreement")==="workorder"){
     return `
     <div class="panel">
@@ -1590,7 +1704,7 @@ function panelBilling(){
 }
 
 function panelClauses(){
-  const isLetterJd = (draft.kind==="letter"||draft.kind==="jd");
+  const isLetterJd = (draft.kind==="letter"||draft.kind==="jd"||draft.kind==="deployment");
   const word = isLetterJd ? "section" : "clause";
   let h=`<div class="panel"><h2>Review ${isLetterJd?"Sections":"Clauses"}</h2>
     <p class="sub">Click a ${word} to expand and read it. Use <b>Edit</b> to change the wording. Toggle off any ${word} you don't want. Tokens like <kbd>{{CITY}}</kbd>, <kbd>{{CONF_YEARS}}</kbd>${draft.ops&&draft.cat==='client'?', <kbd>{{ORDER_ACRES}}</kbd>, <kbd>{{DEPOSIT}}</kbd>, <kbd>{{SERVICE_RATE}}</kbd>, <kbd>{{CONTRACT_VALUE}}</kbd>':''} auto-fill at preview time.${(draft.kind||"agreement")==="agreement"?' <span class="small-note">Clauses marked <span class="tag" style="background:var(--blue)">Legal</span> print in the fine-print Standard Legal Terms annexure.</span>':''}</p>
@@ -1702,6 +1816,7 @@ function wirePanel(){
     if(tn==="billing") draft.billing.push(["","",""]);
     if(tn==="droneDetails") draft.droneDetails.push(["","","","","",""]);
     if(tn==="serviceRates") draft.serviceRates.push(["",""]);
+    if(tn==="pilots") draft.pilots.push(["","","",""]);
     saveLocal(true); renderPanel();
   }));
   document.querySelectorAll("[data-delrow]").forEach(b=>b.addEventListener("click",()=>{
@@ -1768,7 +1883,7 @@ function renderDashboard(){
     const card=document.createElement("div");
     card.className="card"+(t.cat==="vendor"?" vendor":"");
     if(t.cat==="module") card.style.borderTopColor="var(--blue)";
-    const verb = (t.kind==="letter"||t.kind==="jd") ? "Draft document" : (t.kind==="workorder"?"Draft work order":"Draft agreement");
+    const verb = t.kind==="deployment" ? "Draft letter" : ((t.kind==="letter"||t.kind==="jd") ? "Draft document" : (t.kind==="workorder"?"Draft work order":"Draft agreement"));
     card.innerHTML=`
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
         ${catTag(t.cat)}${hasOverride(t.key)?'<span class="tag" style="background:var(--green)">Customised</span>':''}
@@ -1939,6 +2054,14 @@ function partiesHTML(){
   if(kind==="jd"){
     return `<p style="margin:6px 0">${esc(DCB.legalName)} — ${esc(DCB.shortAddress)}</p>`;
   }
+  if(kind==="deployment"){
+    const d=depData(); const L=d.L;
+    return `<p style="margin:2px 0">${esc(L.ref)} ${esc(d.ref)} &nbsp;&nbsp;&nbsp; ${esc(L.date)} ${esc(d.date)}</p>
+    <p style="margin:10px 0 2px">${esc(L.to)}</p>
+    <p style="margin:2px 0">${esc(L.clientName)} ${esc(d.clientName)}<br>${esc(L.poc)} ${esc(d.poc)}<br>${esc(L.pocNo)} ${esc(d.pocNo)}<br>${esc(L.address)} ${esc(d.address).replace(/\n/g,"<br>")}</p>
+    <p style="margin:12px 0"><b>${esc(L.subject)}</b></p>
+    <p style="margin:8px 0">${esc(L.salutation)}</p>`;
+  }
   if(kind==="workorder"){
     const woNo = f.woNumber ? esc(f.woNumber) : "WO-________";
     const onDate = f.effectiveDate ? fmtDate(f.effectiveDate) : "________________";
@@ -2087,6 +2210,160 @@ function droneDetailsHTML(){
   h+=`</tbody></table>`; return h;
 }
 
+/* ============================================================
+   DEPLOYMENT LETTER (sugar mill) — bilingual, fixed layout
+   ============================================================ */
+const DEP_DICT = {
+  en: {
+    ref:"Ref:", date:"Date:", to:"To,",
+    clientName:"Name of Client:", poc:"Kind Attention (POC):", pocNo:"POC Contact No.:", address:"Address:",
+    subject:"Subject: Authorisation & Introduction — Deployment of Agricultural Spraying Drone(s) and Remote Pilot(s) on behalf of Drocon Bharat Private Limited.",
+    salutation:"Dear Sir / Madam,",
+    secA:"Section A — Deployment Details",
+    lblDeployDate:"Deployment Date", lblCrop:"Crop", lblDeployingCo:"Deploying Company (on behalf of Drocon Bharat)", lblCoPoc:"Company POC Name", lblCoPocNo:"Company POC Contact No.",
+    secB:"Section B — Drone & Remote Pilot Details",
+    secBnote:"One or more drone–pilot combinations may be listed under this single authorisation.",
+    thSno:"S. No.", thUIN:"Drone UIN", thRPC:"Pilot RPC No.", thName:"Pilot Name", thPhone:"Pilot Phone No.",
+    closing:"We thank you for your cooperation and look forward to a successful deployment. For any clarification, please contact the undersigned or the Company POC named above.",
+    yours:"Yours faithfully,", forCo:"For Drocon Bharat Private Limited",
+    sigLine:"Authorised Signatory", nameLbl:"Name", desigLbl:"Designation", contactLbl:"Contact",
+    enclTitle:"Enclosure — Draft Letter for Remote Pilot(s) (Sugar Mill Letterhead)",
+    enclIntro:"The Sugar Mill is requested to reproduce the draft below on its official letterhead and print as many copies as required — one signed letter per Remote Pilot deployed. The details below are pre-filled from Section A & B above.",
+    enclBanner:function(n){ return "[ TO BE PRINTED ON THE SUGAR MILL'S OFFICIAL LETTERHEAD — Draft for Pilot #"+n+" ]"; },
+    whom:"TO WHOMSOEVER IT MAY CONCERN",
+    enclFor:function(mill){ return "For "+mill+" (Sugar Mill)"; },
+    enclSig:"Authorised Signatory", enclSigLine:"Name / Designation:", seal:"Seal:"
+  },
+  hi: {
+    ref:"संदर्भ / Ref:", date:"दिनांक:", to:"सेवा में,",
+    clientName:"ग्राहक का नाम:", poc:"कृपया ध्यानार्थ (संपर्क अधिकारी):", pocNo:"संपर्क अधिकारी का दूरभाष क्रमांक:", address:"पता:",
+    subject:"विषय: Drocon Bharat Private Limited की ओर से कृषि छिड़काव सेवा हेतु ड्रोन एवं रिमोट पायलट की तैनाती — प्राधिकरण एवं परिचय।",
+    salutation:"महोदय / महोदया,",
+    secA:"खंड — क : तैनाती विवरण",
+    lblDeployDate:"तैनाती की तिथि", lblCrop:"फसल", lblDeployingCo:"तैनात करने वाली कंपनी (Drocon Bharat की ओर से)", lblCoPoc:"कंपनी संपर्क अधिकारी का नाम", lblCoPocNo:"कंपनी संपर्क अधिकारी का दूरभाष क्रमांक",
+    secB:"खंड — ख : ड्रोन एवं रिमोट पायलट विवरण",
+    secBnote:"इस एकल प्राधिकरण के अंतर्गत एक या अधिक ड्रोन–पायलट संयोजन सूचीबद्ध किए जा सकते हैं।",
+    thSno:"क्र. सं.", thUIN:"ड्रोन UIN", thRPC:"पायलट RPC क्र.", thName:"पायलट का नाम", thPhone:"पायलट दूरभाष क्र.",
+    closing:"हम आपके सहयोग हेतु धन्यवाद देते हैं तथा एक सफल तैनाती की आशा करते हैं। किसी भी स्पष्टीकरण हेतु कृपया अधोहस्ताक्षरी अथवा उपर्युक्त कंपनी संपर्क अधिकारी से संपर्क करें।",
+    yours:"भवदीय,", forCo:"कृते Drocon Bharat Private Limited",
+    sigLine:"अधिकृत हस्ताक्षरकर्ता", nameLbl:"नाम", desigLbl:"पदनाम", contactLbl:"संपर्क",
+    enclTitle:"संलग्नक — रिमोट पायलट हेतु प्रारूप पत्र (शुगर मिल लेटरहेड)",
+    enclIntro:"शुगर मिल से अनुरोध है कि नीचे दिए गए प्रारूप को अपने आधिकारिक लेटरहेड पर मुद्रित कर आवश्यकतानुसार प्रतियां निकाले — प्रत्येक तैनात रिमोट पायलट हेतु एक हस्ताक्षरित पत्र। नीचे के विवरण उपरोक्त खंड क एवं ख से स्वतः भरे गए हैं।",
+    enclBanner:function(n){ return "[ शुगर मिल के आधिकारिक लेटरहेड पर मुद्रित किया जाए — पायलट #"+n+" हेतु प्रारूप ]"; },
+    whom:"जिससे भी संबंधित हो",
+    enclFor:function(mill){ return "कृते "+mill+" (शुगर मिल)"; },
+    enclSig:"अधिकृत हस्ताक्षरकर्ता", enclSigLine:"नाम / पदनाम:", seal:"मुहर:"
+  }
+};
+function depL(){ return DEP_DICT[draft.lang||"en"] || DEP_DICT.en; }
+function depClause(id){ return (draft.clauses||[]).find(c=>c.id===id); }
+function depData(){
+  const f=draft.fields; const bl="____________________";
+  return {
+    L: depL(),
+    ref: f.depRef||"DCB/DEP/________/2026",
+    date: f.depDate?fmtDate(f.depDate):"____ / ____ / 2026",
+    clientName: f.depClientName||bl,
+    poc: f.depClientPoc||bl,
+    pocNo: f.depClientPocNo||bl,
+    address: f.depClientAddress||bl,
+    deployDate: f.depDeployDate?fmtDate(f.depDeployDate):bl,
+    crop: f.depCrop||bl,
+    deployingCo: f.depDeployingCo||bl,
+    coPoc: f.depCoPocName||bl,
+    coPocNo: f.depCoPocNo||bl,
+    sigName: f.depSigName||DCB.director,
+    sigDesig: f.depSigDesig||"Director & Founder",
+    sigContact: f.depSigContact||DCB.mobile,
+    millName: f.depMillName||f.depClientName||bl,
+    millAddr: f.depMillAddress||f.depClientAddress||"",
+    effDate: f.depPilotEffDate?fmtDate(f.depPilotEffDate):(f.depDeployDate?fmtDate(f.depDeployDate):bl)
+  };
+}
+function depPilotRows(){ return (draft.pilots||[]).map(r=>({uin:(r[0]||""),rpc:(r[1]||""),name:(r[2]||""),phone:(r[3]||"")})); }
+function depFilledPilots(){ return depPilotRows().filter(p=>p.uin||p.rpc||p.name||p.phone); }
+// The pilot letter (Enclosure) reuses the SAME inputs — fill the clause tokens per pilot.
+function depFillCert(html, p, d){
+  const bl="____________________";
+  const mill=(d.millName||bl)+(d.millAddr?(", "+d.millAddr):"");
+  return String(html)
+    .replace(/\{\{PILOT_NAME\}\}/g, esc(p.name||bl))
+    .replace(/\{\{RPC\}\}/g, esc(p.rpc||bl))
+    .replace(/\{\{UIN\}\}/g, esc(p.uin||bl))
+    .replace(/\{\{MILL\}\}/g, esc(mill))
+    .replace(/\{\{CROP\}\}/g, esc(d.crop))
+    .replace(/\{\{EFF_DATE\}\}/g, esc(d.effDate));
+}
+
+// Section A (deployment details) + Section B (drone/pilot table), from the inputs
+function depTablesHTML(){
+  const d=depData(); const L=d.L;
+  const filled=depFilledPilots();
+  const prows = filled.length?filled:[{uin:"",rpc:"",name:"",phone:""},{uin:"",rpc:"",name:"",phone:""},{uin:"",rpc:"",name:"",phone:""}];
+  const pilotRows = prows.map((p,i)=>`<tr><td>${i+1}</td><td>${esc(p.uin)||"&nbsp;"}</td><td>${esc(p.rpc)||"&nbsp;"}</td><td>${esc(p.name)||"&nbsp;"}</td><td>${esc(p.phone)||"&nbsp;"}</td></tr>`).join("");
+  const aRow=(l,v)=>`<tr><td style="width:42%"><b>${esc(l)}</b></td><td>${esc(v)}</td></tr>`;
+  return `
+  <div class="sec"><h4>${esc(L.secA)}</h4>
+    <table class="doc"><tbody>${aRow(L.lblDeployDate,d.deployDate)}${aRow(L.lblCrop,d.crop)}${aRow(L.lblDeployingCo,d.deployingCo)}${aRow(L.lblCoPoc,d.coPoc)}${aRow(L.lblCoPocNo,d.coPocNo)}</tbody></table></div>
+  <div class="sec"><h4>${esc(L.secB)}</h4>
+    <p class="ref">${esc(L.secBnote)}</p>
+    <table class="doc"><thead><tr><th>${esc(L.thSno)}</th><th>${esc(L.thUIN)}</th><th>${esc(L.thRPC)}</th><th>${esc(L.thName)}</th><th>${esc(L.thPhone)}</th></tr></thead>
+    <tbody>${pilotRows}</tbody></table></div>`;
+}
+// Narrative = editable clauses (intro, then tables, then request/scope/custom), skipping the enclosure clause
+function depNarrativeHTML(){
+  let h="";
+  const intro=depClause("dep_intro");
+  if(intro && intro.on) h+=`<div class="sec">${subTokens(intro.body)}</div>`;
+  h+=depTablesHTML();
+  (draft.clauses||[]).forEach(c=>{
+    if(!c.on || c.id==="dep_intro" || c.id==="dep_pilot_cert") return;
+    h+=`<div class="sec"><h4>${esc(c.title)}</h4>${subTokens(c.body)}</div>`;
+  });
+  return h;
+}
+function depClosingHTML(){
+  const d=depData(); const L=d.L;
+  return `<p style="margin-top:14px">${esc(L.closing)}</p>
+  <p style="margin-top:12px">${esc(L.yours)}<br><b>${esc(L.forCo)}</b></p>
+  <div class="sign-box" style="margin-top:8px"><div class="sline"></div><b>${esc(L.sigLine)}</b><br>${esc(L.nameLbl)}: ${esc(d.sigName)} &nbsp;&nbsp; ${esc(L.desigLbl)}: ${esc(d.sigDesig)}<br>${esc(L.contactLbl)}: ${esc(d.sigContact)}</div>`;
+}
+// Enclosure: the editable "dep_pilot_cert" clause, filled once per pilot from the same inputs
+function depEnclosureHTML(){
+  const d=depData(); const L=d.L; const bl="____________________";
+  const cert=depClause("dep_pilot_cert");
+  if(cert && !cert.on) return "";
+  const certBody = cert ? cert.body : "";
+  const filled=depFilledPilots(); const pilots=filled.length?filled:[{uin:"",rpc:"",name:"",phone:""}];
+  let blocks="";
+  pilots.forEach((p,idx)=>{
+    blocks+=`<div class="sec" style="${idx>0?'page-break-before:always;':''}border:1px dashed #b9c9a6;padding:14px;border-radius:8px;margin-top:12px">
+      <p style="text-align:center;color:var(--green);font-weight:700;margin:0 0 8px">${esc(L.enclBanner(idx+1))}</p>
+      <p>${esc(L.ref)} ${bl} &nbsp;&nbsp;&nbsp; ${esc(L.date)} ____ / ____ / 2026</p>
+      <p style="text-align:center;font-weight:700;margin:8px 0">${esc(L.whom)}</p>
+      ${depFillCert(subTokens(certBody), p, d)}
+      <p style="margin-top:10px"><b>${esc(L.enclFor(d.millName||bl))}</b></p>
+      <div class="sign-box" style="margin-top:6px"><div class="sline"></div><b>${esc(L.enclSig)}</b><br>${esc(L.enclSigLine)} ${bl} &nbsp;&nbsp; ${esc(L.seal)} </div>
+    </div>`;
+  });
+  return `<div class="sec" style="page-break-before:always"><h4 style="color:var(--blue);border-bottom-color:#d8e6ef">${esc(L.enclTitle)}</h4>
+    <p class="ref">${esc(L.enclIntro)}</p></div>${blocks}`;
+}
+function buildDeploymentPage(){
+  const runHead = `<div class="rh"><img src="${draft.logo||DCB_LOGO}" alt="DroCon Bharat"></div>`;
+  const runFoot = `<div class="rf"><div class="co">${esc(DCB.legalName)}, ${esc(DCB.shortAddress)}, Mobile: ${esc(DCB.mobile)}</div><div class="bb"></div></div>`;
+  const subLine = draft.subtitle ? `<div class="doc-sub">${esc(draft.subtitle)}</div>` : "";
+  return `<div class="page">${runHead}${runFoot}<div class="wm"><span>DROCON<br>BHARAT</span></div><div class="content">
+    ${letterhead()}
+    <div class="doc-title">${esc(draft.title)}</div>
+    ${subLine}
+    <div class="parties">${partiesHTML()}</div>
+    ${depNarrativeHTML()}
+    ${depClosingHTML()}
+    ${depEnclosureHTML()}
+  </div>${pageFooter()}</div>`;
+}
+
 function letterhead(){
   const logo = `<img class="logo" src="${draft.logo || DCB_LOGO}" alt="DroCon Bharat">`;
   return `<div class="ph">${logo}</div>`;
@@ -2099,6 +2376,7 @@ function pageFooter(){
 
 function buildPageHTML(){
   const f=draft.fields; const cp=draft.cpRole; const kind=draft.kind||"agreement";
+  if(kind==="deployment") return buildDeploymentPage();
   let secHTML=""; let n=0;
   getSections().forEach(s=>{ n++; secHTML+=`<div class="sec"><h4><span class="secno">${n}.</span> ${esc(s.title)}</h4>${s.html}</div>`; });
   if(kind==="workorder"){
@@ -2164,9 +2442,12 @@ function renderPreview(){
    FILE NAMING + SAVE
    ============================================================ */
 function fileBase(){
-  const party = (draft.fields.cpName||draft.cpRole||"Party").trim().replace(/[\\\/:*?"<>|]+/g,"").replace(/\s+/g,"_");
-  const d = draft.fields.effectiveDate || todayISO();
-  return `DroCon Bharat_${party}_${d}`;
+  const dep = (draft.kind==="deployment");
+  const raw = dep ? (draft.fields.depClientName || "Sugar Mill") : (draft.fields.cpName||draft.cpRole||"Party");
+  const party = String(raw).trim().replace(/[\\\/:*?"<>|]+/g,"").replace(/\s+/g,"_");
+  const d = (dep ? draft.fields.depDate : draft.fields.effectiveDate) || todayISO();
+  const tag = dep ? (draft.lang==="hi" ? "Deployment_Letter_HI" : "Deployment_Letter") : "";
+  return `DroCon Bharat_${party}${tag?("_"+tag):""}_${d}`;
 }
 async function saveBlob(blob, filename, mime, ext){
   if(window.showSaveFilePicker){
@@ -2360,7 +2641,9 @@ function exportWord(){
   htmlToParas(partiesHTML()).forEach(p=>children.push(p));
 
   let n=0;
-  getSections().forEach(s=>{ n++; children.push(heading(n+". "+s.title)); htmlToParas(s.html).forEach(p=>children.push(p)); });
+  if((draft.kind||"agreement")!=="deployment"){
+    getSections().forEach(s=>{ n++; children.push(heading(n+". "+s.title)); htmlToParas(s.html).forEach(p=>children.push(p)); });
+  }
 
   const f=draft.fields; const kind=draft.kind||"agreement";
   if(kind==="agreement"){
@@ -2396,6 +2679,48 @@ function exportWord(){
     children.push(dataTable(["For DroCon Bharat Private Limited","For "+(f.cpName||draft.cpRole)],
       [["Signature:","Signature:"],["Name: "+(f.droconSignName||DCB.director),"Name: ____________________"],
        ["Title: "+(f.droconSignTitle||"Director"),"Title: ____________________"],["Date:","Date:"]],[4680,4680],[GREEN,BLUE]));
+  } else if(kind==="deployment"){
+    const d=depData(); const L=d.L; const bl="____________________";
+    // Introduction clause (editable), then Section A + B tables from the inputs
+    const intro=depClause("dep_intro");
+    if(intro && intro.on) htmlToParas(subTokens(intro.body)).forEach(p=>children.push(p));
+    children.push(heading(L.secA));
+    [[L.lblDeployDate,d.deployDate],[L.lblCrop,d.crop],[L.lblDeployingCo,d.deployingCo],[L.lblCoPoc,d.coPoc],[L.lblCoPocNo,d.coPocNo]]
+      .forEach(kv=>children.push(new D.Paragraph({spacing:{after:30},children:[new D.TextRun({text:kv[0]+": ",bold:true,color:CHAR,size:20}),new D.TextRun({text:String(kv[1]),color:CHAR,size:20})]})));
+    children.push(heading(L.secB));
+    children.push(new D.Paragraph({spacing:{after:60},children:[new D.TextRun({text:L.secBnote,italics:true,color:CHAR,size:18})]}));
+    const bfilled=depFilledPilots(); const btrows=(bfilled.length?bfilled:[{uin:"",rpc:"",name:"",phone:""}]).map((p,i)=>[String(i+1),p.uin,p.rpc,p.name,p.phone]);
+    children.push(dataTable([L.thSno,L.thUIN,L.thRPC,L.thName,L.thPhone], btrows,[900,2400,2200,2200,1660]));
+    // remaining editable clauses (request, scope, any custom) — skip intro + enclosure
+    (draft.clauses||[]).forEach(c=>{ if(!c.on||c.id==="dep_intro"||c.id==="dep_pilot_cert") return;
+      children.push(heading(c.title)); htmlToParas(subTokens(c.body)).forEach(p=>children.push(p)); });
+    // closing + DroCon signature
+    children.push(new D.Paragraph({spacing:{before:120,after:40},children:[new D.TextRun({text:L.closing,color:CHAR,size:20})]}));
+    children.push(new D.Paragraph({spacing:{before:40},children:[new D.TextRun({text:L.yours,color:CHAR,size:20})]}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:L.forCo,bold:true,color:CHAR,size:20})]}));
+    children.push(new D.Paragraph({spacing:{before:220},children:[new D.TextRun({text:"________________________",color:CHAR,size:20})]}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:L.sigLine,bold:true,color:CHAR,size:20})]}));
+    children.push(new D.Paragraph({children:[new D.TextRun({text:L.nameLbl+": "+d.sigName+"     "+L.desigLbl+": "+d.sigDesig,color:CHAR,size:20})]}));
+    children.push(new D.Paragraph({spacing:{after:40},children:[new D.TextRun({text:L.contactLbl+": "+d.sigContact,color:CHAR,size:20})]}));
+    // Enclosure — the editable pilot-letter clause, filled once per pilot from the same inputs
+    const cert=depClause("dep_pilot_cert");
+    if(!cert || cert.on){
+      const certBody=cert?cert.body:"";
+      children.push(new D.Paragraph({pageBreakBefore:true, spacing:{before:60,after:40},children:[new D.TextRun({text:L.enclTitle,bold:true,color:BLUE,size:24})]}));
+      children.push(new D.Paragraph({spacing:{after:60},children:[new D.TextRun({text:L.enclIntro,italics:true,color:CHAR,size:18})]}));
+      const efilled=depFilledPilots(); const pilots=efilled.length?efilled:[{uin:"",rpc:"",name:"",phone:""}];
+      pilots.forEach((p,idx)=>{
+        if(idx>0) children.push(new D.Paragraph({pageBreakBefore:true,children:[new D.TextRun({text:"",size:2})]}));
+        children.push(new D.Paragraph({spacing:{before:60,after:20},children:[new D.TextRun({text:L.enclBanner(idx+1),bold:true,color:GREEN,size:16})]}));
+        children.push(new D.Paragraph({children:[new D.TextRun({text:L.ref+" "+bl+"      "+L.date+" ____ / ____ / 2026",color:CHAR,size:18})]}));
+        children.push(new D.Paragraph({alignment:D.AlignmentType.CENTER,spacing:{before:40,after:40},children:[new D.TextRun({text:L.whom,bold:true,color:CHAR,size:22})]}));
+        htmlToParas(depFillCert(subTokens(certBody), p, d)).forEach(pp=>children.push(pp));
+        children.push(new D.Paragraph({spacing:{before:40},children:[new D.TextRun({text:L.enclFor(d.millName||bl),bold:true,color:CHAR,size:20})]}));
+        children.push(new D.Paragraph({spacing:{before:180},children:[new D.TextRun({text:"________________________",color:CHAR,size:20})]}));
+        children.push(new D.Paragraph({children:[new D.TextRun({text:L.enclSig,bold:true,color:CHAR,size:20})]}));
+        children.push(new D.Paragraph({children:[new D.TextRun({text:L.enclSigLine+" "+bl+"      "+L.seal+" ",color:CHAR,size:20})]}));
+      });
+    }
   } // jd: no signature block
 
   // ---- Operating annexures first — each on a new page ----
