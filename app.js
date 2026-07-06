@@ -198,9 +198,32 @@ $("auGo").addEventListener("click", async ()=>{
       const { error } = await sb.auth.signInWithPassword({ email, password:pass });
       if(error) throw error;
     }
-  }catch(err){ $("auErr").textContent = err.message || "Authentication failed."; }
+  }catch(err){ $("auErr").textContent = authErrorText(err, signupMode); console.error("Auth error:", err); }
   $("auGo").disabled=false;
 });
+// Turn an opaque Supabase auth error (sometimes just "{}") into something readable.
+function authErrorText(err, isSignup){
+  let msg = (err && (err.message || err.error_description || err.msg)) || "";
+  msg = String(msg).trim();
+  if(msg==="{}" || msg==="[object Object]" || msg==="") msg="";
+  const code = (err && (err.code || err.error || "")) + "";
+  const status = err && (err.status || err.statusCode);
+  if(/already|exists|registered/i.test(msg) || code==="user_already_exists" || status===422)
+    return "That email is already registered — use “Sign in” instead (or reset the password in Supabase).";
+  if(/signup|disabled|not allowed/i.test(msg) || code==="signup_disabled")
+    return "Sign-ups are disabled for this workspace. Ask the admin to enable them in Supabase → Authentication → Providers, or have the admin invite you.";
+  if(/invalid login|invalid credentials/i.test(msg) || code==="invalid_credentials")
+    return "Wrong email or password.";
+  if(/confirm|email/i.test(msg) && /send|smtp|deliver/i.test(msg))
+    return "The confirmation email couldn't be sent (SMTP not configured). Turn off email confirmation in Supabase, or configure SMTP.";
+  if(/fetch|network/i.test(msg) || (err&&err.name==="AuthRetryableFetchError"))
+    return "Couldn't reach the server. Check your connection and that config.js points to the right Supabase URL.";
+  if(msg) return msg + (status?(" (status "+status+")"):"");
+  // No usable message — most common cause for a blank/{} error here:
+  return isSignup
+    ? "Sign-up couldn't complete"+(status?(" (status "+status+")"):"")+". This email may already be registered — try “Sign in” — or sign-ups may be disabled/restricted for this workspace."
+    : "Sign-in failed"+(status?(" (status "+status+")"):"")+". Check the email and password, or that this account exists on this Supabase project.";
+}
 $("btnSignOut").addEventListener("click", async ()=>{ await sb.auth.signOut(); });
 (function(){ const r=$("meRole"); if(r){ r.style.cursor="pointer"; r.title="Click to refresh your role & access"; r.addEventListener("click", ()=>{ if(me) refreshRole(); }); } })();
 
