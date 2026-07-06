@@ -327,7 +327,7 @@ async function save(){
   // optional inventory decrement for invoice spare lines
   if(TYPE==="invoice" && $("dStock") && $("dStock").checked){
     for(const it of D.items){ if(it._spareId && num(it.qty)>0){
-      await sb().from("inventory_moves").insert({ spare_id:it._spareId, qty:num(it.qty), direction:"out", reason:"invoice "+D.number, ref_doc_id:savedId, created_by:window.OPS.me.id }); } }
+      await sb().from("inventory_moves").insert({ spare_id:it._spareId, qty:num(it.qty), direction:"out", reason:"invoice "+D.number, sales_invoice_no:D.number, ref_doc_id:savedId, created_by:window.OPS.me.id }); } }
   }
   window.OPS.flashTop("Saved ✓"); editor();
 }
