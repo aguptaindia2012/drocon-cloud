@@ -43,7 +43,26 @@ function downloadCSV(filename, headers, rows){
   const csv=[headers.map(q).join(",")].concat(rows.map(r=>r.map(q).join(","))).join("\n");
   window.OPS.saveBlob(new Blob([csv],{type:"text/csv"}), filename, "text/csv", ".csv");
 }
+// Real .xlsx via SheetJS (falls back to CSV if the library didn't load).
+// headers: string[]; rows: array of arrays (cells can be strings or numbers).
+function downloadExcel(filename, sheetName, headers, rows){
+  if(typeof XLSX==="undefined"){
+    window.OPS.csv.downloadCSV(filename.replace(/\.xlsx$/i,".csv"), headers, rows);
+    return;
+  }
+  const aoa=[headers].concat(rows);
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"]=headers.map((h,i)=>{ let w=String(h).length;
+    rows.forEach(r=>{ const c=r[i]==null?"":String(r[i]); if(c.length>w) w=c.length; });
+    return { wch: Math.min(Math.max(w+2,8), 40) }; });
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, (sheetName||"Sheet1").slice(0,31));
+  const out=XLSX.write(wb,{ bookType:"xlsx", type:"array" });
+  window.OPS.saveBlob(new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),
+    filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx");
+}
 window.OPS.csv = { parseCSV, pickCSV, downloadCSV };
+window.OPS.xlsx = { download: downloadExcel };
 
 /* ---------- reusable State/District dropdowns (for custom forms) ---------- */
 window.OPS.geoUI = {
