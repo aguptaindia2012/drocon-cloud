@@ -496,6 +496,7 @@ function openPrivacy(){
         <li><b>Your portal is private to you.</b> Your login can see <b>only</b> your own invoices, your rate card and this portal — never DroCon's internal records or any other partner's data. This is enforced by the database (Row-Level Security), not just the screen.</li>
         <li><b>Your details</b> (contact, bank/payment details on invoices) are visible only to you and DroCon Bharat's authorised finance/management team for processing your payments.</li>
         <li><b>Farmer data you enter</b> (farmer name, mobile, village, acres) is collected only to bill and document the spraying service. Please enter it accurately and only with the farmer's awareness, and do not share it outside DroCon Bharat.</li>
+        <li><b>Data protection (DPDP Act, 2023):</b> DroCon Bharat is the <b>Data Fiduciary</b> for farmer personal data and you (the pilot) collect it <b>as a Data Processor on DroCon's behalf</b>. Give the farmer the required notice, take only their consent-based, necessary details, and report any suspected data breach to DroCon Bharat immediately.</li>
         <li><b>Farmer phone numbers</b> you submit are treated as sensitive — they are masked in shared views and access to them is restricted.</li>
         <li><b>You are responsible</b> for keeping your login confidential. Everything submitted from your account is recorded with your identity and time.</li>
         <li><b>Data ownership:</b> service and farmer records generated under your engagement belong to DroCon Bharat per your agreement. You may request a copy or correction of your own submissions at any time.</li>
@@ -507,6 +508,7 @@ function openPrivacy(){
       <ul style="font-size:13px;line-height:1.7">
         <li><b>Access:</b> not signed in = no access. Sign-up is restricted to approved company domains (partners are invite-only).</li>
         <li><b>Row-Level Security</b> is enforced by the database — the browser cannot bypass it.</li>
+        <li><b>Data protection (DPDP Act, 2023):</b> DroCon Bharat is the <b>Data Fiduciary</b> for farmer/end-client personal data; pilots and partners collect it only as <b>Data Processors</b> on DroCon's behalf, on notice-and-consent, for the spraying service alone.</li>
         <li><b>Sensitive data</b> (salaries, bank details, farmer phone numbers) is readable only by admins or staff you grant access in <b>Team &amp; Access</b>.</li>
         <li><b>Phone numbers</b> are masked in lists unless you hold the “View contacts” grant.</li>
         <li><b>External partners</b> are sandboxed to their own portal and cannot read any internal data.</li>

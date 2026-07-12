@@ -326,8 +326,12 @@ const CL_CONFIDENTIALITY = `
 `;
 
 const CL_DATA_SECURITY = `
-<p><b>Data Security.</b> Each Party shall implement and maintain reasonable technical and organisational measures appropriate to safeguard the other Party's data against unauthorised access, loss, alteration or disclosure, and shall comply with applicable data-protection laws of India. Any personal data of farmers or end-clients shared under this Agreement shall be processed only for the purposes of performing the Services and shall not be used, retained or onward-shared for any independent commercial purpose.</p>
-<p><b>Data Ownership.</b> DroCon Bharat shall retain all rights, title and interest in the raw flight logs, drone telemetry, field-mapping data and proprietary software data generated during the Services. The {{CP}} shall have the right to use and retain aggregated application reports and service records solely for the purpose of managing this Agreement and its own client relations.</p>
+<p><b>Data Protection — Digital Personal Data Protection Act, 2023.</b> Each Party shall comply with the <b>Digital Personal Data Protection Act, 2023</b> and the rules, standards and directions issued thereunder, as amended from time to time (the "DPDP Act"), and all other applicable data-protection laws of India, in respect of any personal data of farmers, end-clients or other individuals ("Data Principals") handled in connection with the Services.</p>
+<p><b>Roles of the Parties.</b> For all such personal data, <b>DroCon Bharat is the Data Fiduciary</b> and determines the purposes and means of its processing. Where the {{CP}}, or any pilot, agent or personnel engaged by it, collects or otherwise processes the personal data of Data Principals in connection with the Services, it does so <b>solely as a Data Processor and collector on behalf of, and under the documented instructions of, DroCon Bharat</b>, and acquires no independent right over such data. The {{CP}} shall not determine its own purposes for such personal data, nor sell, publish, share or use it for any purpose other than performing the Services.</p>
+<p><b>Notice, consent and minimisation.</b> Before collecting a Data Principal's personal data, the {{CP}} (and its pilots) shall ensure the Data Principal is given the notice required under the DPDP Act and provides free, specific, informed and unambiguous consent to the collection and processing for the Services, and shall collect only the personal data reasonably necessary for the Services. Records of such notice and consent shall be maintained and provided to DroCon Bharat on request.</p>
+<p><b>Security, breach and Data Principal rights.</b> Each Party shall implement and maintain reasonable technical and organisational security safeguards appropriate to protect such personal data against unauthorised access, loss, alteration or disclosure. The {{CP}} shall notify DroCon Bharat of any personal data breach without undue delay and in any event within twenty-four (24) hours of becoming aware of it, and shall assist DroCon Bharat, as Data Fiduciary, in meeting its obligations under the DPDP Act — including enabling Data Principals to access, correct, update or erase their data, and any notification to the Data Protection Board of India or affected Data Principals.</p>
+<p><b>Retention and deletion.</b> Personal data of Data Principals shall be processed only for the purposes of the Services, shall not be retained longer than necessary for those purposes or as otherwise required by law, and shall be returned to DroCon Bharat or securely deleted on the expiry or termination of this Agreement, or earlier on DroCon Bharat's request, save for copies required to be retained by law.</p>
+<p><b>Data Ownership.</b> DroCon Bharat shall retain all rights, title and interest in the raw flight logs, drone telemetry, field-mapping data and proprietary software data generated during the Services, and, as Data Fiduciary, in the farmer and end-client personal data collected for the Services. The {{CP}} shall have the right to use and retain aggregated, non-personally-identifiable application reports and service records solely for the purpose of managing this Agreement and its own client relations.</p>
 `;
 
 /* ============================================================
@@ -357,6 +361,25 @@ const CLIENT_CLAUSES = [
 <p><b>Invoicing.</b> DroCon Bharat shall raise a Service Invoice for each completed order, detailing the Services rendered and the Gross Revenue. The {{CP}} shall communicate any deficiency in an invoice within the timeframe stated in the engagement details, failing which the invoice shall be deemed accepted.</p>
 <p><b>Collection &amp; Deposit.</b> Where the {{CP}} collects payments from farmers, it shall deposit the full collected amount into DroCon Bharat's designated bank account within one (1) business day of service delivery. Any delay shall attract interest at one percent (1%) per day on the delayed amount from the due date until actual deposit.</p>
 <p><b>Taxes.</b> All amounts are exclusive of GST and other applicable taxes, which shall be borne and remitted by the Party liable under Applicable Law.</p>` },
+
+  { id:"covenants", title:"Operational Covenants and Assurances", on:true, body:`
+<p>The Parties give the following mutual operational covenants and assurances in support of the Services:</p>
+<p><b>The {{CP}} covenants and assures that it shall:</b></p>
+<ul>
+<li><b>Deposit collections promptly.</b> Where it collects farmer payments, deposit the full amount into DroCon Bharat's designated account within one (1) business day, failing which interest accrues as set out in the Commercials clause.</li>
+<li><b>Confirm and facilitate orders accurately.</b> Provide accurate order confirmations and scheduling, secure farmer consent and unobstructed field access, and verify land ownership/lease where required.</li>
+<li><b>Supply lawful inputs.</b> Ensure any agri-chemicals it supplies or specifies are legally approved for the target crop and safe for aerial application, at the correct dosage.</li>
+<li><b>Pay agreed charges.</b> Pay DroCon Bharat the agreed charges for Services duly performed, irrespective of the {{CP}}'s own collection from farmers, save to the extent of a deficiency directly and solely caused by DroCon Bharat.</li>
+<li><b>Deal exclusively through DroCon Bharat.</b> Not bypass or circumvent DroCon Bharat with any pilot, farmer network or resource introduced by DroCon Bharat, consistent with the Non-Circumvention clause.</li>
+</ul>
+<p><b>DroCon Bharat covenants and assures that it shall:</b></p>
+<ul>
+<li><b>Deploy qualified resources.</b> Provide DGCA-compliant drones (valid UIN) and RPC-holding pilots, and perform the Services with reasonable skill, care and diligence.</li>
+<li><b>Operate safely and lawfully.</b> Conduct operations in compliance with Applicable Law and DGCA directions, and decline any operation that would be unsafe or unlawful.</li>
+<li><b>Invoice transparently.</b> Raise clear, itemised invoices for Services rendered and maintain verifiable order records.</li>
+<li><b>Maintain cover.</b> Keep third-party liability insurance and deployment coverage for the drones it provides, per the Insurances clause.</li>
+</ul>
+<p><b>Mutual.</b> Each Party shall reconcile from shared, verifiable records; a dispute over any part of an amount does not defer settlement of the undisputed part; and all amounts are exclusive of GST, to be borne by the Party liable under Applicable Law.</p>` },
 
   { id:"warranties", title:"Warranties", on:true, body:`
 <p><b>DroCon Bharat warrants</b> that: (a) it shall hold and maintain the licences, registrations and approvals that are required for the Services it actually performs under this Agreement; (b) the pilots it deploys hold valid Remote Pilot Certificates (RPC); (c) the drones it deploys hold a valid Unique Identification Number (UIN); and (d) the Services shall be performed with reasonable skill, care and diligence.</p>
@@ -486,6 +509,25 @@ const VENDOR_CLAUSES = [
 <p><b>Payment terms.</b> DroCon Bharat's obligation to pay the {{CP}}'s share of Gross Revenue is strictly conditional upon DroCon Bharat's successful collection of the corresponding Gross Collection from the end client. DroCon Bharat shall remit payment within five (5) days of receiving the relevant Gross Collection and a proper invoice.</p>
 <p><b>Client interaction.</b> The {{CP}} may communicate with DroCon Bharat's client only for order management, mission planning and reporting delivered orders. Any other communication without prior approval shall be treated as bypassing DroCon Bharat to secure future orders, and DroCon Bharat may at its sole discretion terminate this Agreement immediately and block future orders for a period it determines.</p>` },
 
+  { id:"covenants", title:"Operational Covenants and Assurances", on:true, body:`
+<p>The Parties give the following mutual operational covenants and assurances, which apply to every Work Order under the standard commission-based model (and, where elected, in addition to the Alternative Commercial Model):</p>
+<p><b>The {{CP}} covenants and assures that it shall:</b></p>
+<ul>
+<li><b>Report accurately.</b> Submit true and complete order reports for each mission (acres sprayed, farmer name and valid phone, village/location, and GPS-tagged photographs). Misreporting, inflation of acreage or duplicate reporting entitles DroCon Bharat to withhold, adjust or recover the affected amounts and, if repeated, to terminate under the Termination clause.</li>
+<li><b>Bear its own costs.</b> Meet all of its own costs (drone, batteries, pilot, fuel, transport, maintenance and insurance) as set out in the Responsibilities Annexure; its share of Gross Revenue is not a guarantee of profit.</li>
+<li><b>Accept collection-linked payment and set-off.</b> Acknowledge that payment of its share is conditional on DroCon Bharat's collection from the end client, and that DroCon Bharat may set off any advance, spares dues, penalty or amount owed by the {{CP}} against sums otherwise payable to it.</li>
+<li><b>Maintain continuity and compliance.</b> Deploy within the agreed timeline, keep each drone airworthy and DGCA-compliant with valid UIN and RPC, and not abandon or under-serve active orders.</li>
+<li><b>Deal exclusively through DroCon Bharat.</b> Not bypass or circumvent DroCon Bharat with any introduced farmer, client or pilot, consistent with the Non-Circumvention clause.</li>
+</ul>
+<p><b>DroCon Bharat covenants and assures that it shall:</b></p>
+<ul>
+<li><b>Pay promptly on collection.</b> On receiving the corresponding Gross Collection from the end client and a proper invoice, remit the {{CP}}'s undisputed share within the period stated in the Payment clause.</li>
+<li><b>Reconcile transparently.</b> Base any deduction, withholding or set-off on shared, verifiable records, and provide the {{CP}} a reasonable explanation on request.</li>
+<li><b>Manage the client relationship.</b> Handle client invoicing, contracting and collection, and use reasonable efforts to provide orders — while not guaranteeing any minimum order volume.</li>
+<li><b>Deal fairly with data.</b> Use the {{CP}}'s and farmers' data only for performing and documenting the Services, consistent with the Confidentiality and Data Security clause.</li>
+</ul>
+<p><b>Mutual.</b> A dispute over any part of an amount does not defer payment, accrual or set-off of the undisputed part; each Party shall retain and, on reasonable request, share the records relevant to reconciliation; and all amounts are exclusive of GST, with TDS applied as required by law.</p>` },
+
   { id:"commercial_acreage", title:"Alternative Commercial Model — Full Client Rate for a Daily Acreage Contribution", on:false, body:`
 <p><b>Election.</b> This clause applies <b>only where the Parties expressly elect it in writing</b> (in this Agreement or the relevant Work Order). Where elected, it operates <b>in place of the percentage split in the Billing Rates Annexure</b> for the Work Orders to which it is applied; the commission-based model in the Billing Rates Annexure otherwise remains the default. DroCon Bharat may, on written notice, revert the {{CP}} to the commission-based model for any future Work Order.</p>
 <p><b>Full Client Rate to the {{CP}}.</b> For acres sprayed under an elected Work Order, DroCon Bharat shall pass through to the {{CP}} <b>one hundred percent (100%) of the per-acre rate actually billed to, and collected from, the end client</b> (the "Full Client Rate"), in place of the {{CP}} Billing Rate percentage. Payment of the Full Client Rate remains conditional upon DroCon Bharat's collection from the end client, per the Payment clause.</p>
@@ -494,14 +536,21 @@ const VENDOR_CLAUSES = [
 <li>where the day's confirmed order <b>exceeds 10 acres</b> — <b>1.0 acre per operating day</b>;</li>
 <li>where the day's confirmed order is <b>up to 10 acres</b> — <b>0.5 acre per operating day</b>.</li>
 </ul>
-<p>The thresholds and the acreage figures above are the negotiated defaults and may be varied for a specific {{CP}} by editing this clause or in the relevant Work Order.</p>
+<p><b>Billing and Margin.</b> The {{CP}} is billed and paid the full client rate for every acre sprayed; DroCon Bharat's margin is realised in kind as the daily Acreage Contribution (the "acreage-equivalent margin"):</p>
+<table class="doc"><thead><tr><th>Daily order (per drone)</th><th>Rate offered to the {{CP}}</th><th>Gross revenue (per drone / day)</th><th>DroCon margin (acreage-equivalent)</th></tr></thead>
+<tbody>
+<tr><td>Above 10 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>1.0 acre × client rate</td></tr>
+<tr><td>Up to 10 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>0.5 acre × client rate</td></tr>
+</tbody></table>
+<p>The {{CP}}'s net for the day equals the Gross revenue less DroCon Bharat's acreage-equivalent margin. <i>Illustration at a client rate of ₹400/acre: a 20-acre day = ₹8,000 gross, DroCon margin ₹400 (1.0 acre), the {{CP}} nets ₹7,600; a 6-acre day = ₹2,400 gross, DroCon margin ₹200 (0.5 acre), the {{CP}} nets ₹2,200.</i></p>
+<p>The thresholds, acreage figures and rate above are the negotiated defaults and may be varied for a specific {{CP}} by editing this clause or in the relevant Work Order.</p>
 <p><b>Waiver of the Acreage Contribution on downtime.</b></p>
 <ul>
 <li><b>No work available (DroCon / client fault).</b> Where no work is available on a day due to the fault of DroCon Bharat or its client (for example, no order allocated, client stoppage or access not provided), <b>no Acreage Contribution shall be charged</b> for that day.</li>
 <li><b>Drone damage.</b> Where the {{CP}}'s drone is out of service due to damage, crash or malfunction, DroCon Bharat shall <b>waive the Acreage Contribution for up to two (2) days from the date of the damage</b>, and it shall <b>resume from the third (3rd) day onwards</b> — <b>except</b> where the return to service is delayed because DroCon Bharat delayed the supply of the required parts or engineering, in which case the waiver <b>continues</b> for each further day of DroCon-caused delay.</li>
 <li><b>Condition for the damage waiver.</b> To qualify for the damage waiver above, the {{CP}} must <b>order the required parts from DroCon Bharat within six (6) hours of the damage</b> (consistent with the Spares and Maintenance Priority clause). If the {{CP}} fails to order within this window, the Acreage Contribution continues to accrue notwithstanding the downtime.</li>
 </ul>
-<p><b>Operational safeguards (for DroCon Bharat's protection).</b></p>
+<p><b>Operational Covenants and Assurances.</b></p>
 <ul>
 <li><b>Accrues per operating day, per drone,</b> from the verified order/reporting data, irrespective of the timing of client payment; the Acreage Contribution is DroCon Bharat's fee and is <b>not</b> contingent on the {{CP}}'s profitability.</li>
 <li><b>Set-off.</b> DroCon Bharat may deduct or set off the value of the Acreage Contribution (and any spares, services or advances owed by the {{CP}}) against any amount otherwise payable to the {{CP}}, before remittance.</li>
@@ -516,7 +565,7 @@ const VENDOR_CLAUSES = [
 <p><b>First right of supply.</b> In the event of any drone damage, crash, malfunction, wear or other need for spares, repair or engineering support, the {{CP}} shall <b>first request and procure the required spares and maintenance / engineering services from DroCon Bharat</b>, at DroCon Bharat's prevailing rates, and shall give DroCon Bharat the first opportunity to supply before approaching any third party.</p>
 <p><b>Response window.</b> DroCon Bharat shall use reasonable efforts to confirm availability and an indicative timeline within twenty-four (24) hours of a written request from the {{CP}}.</p>
 <p><b>Third-party fallback (only on unavailability).</b> Only where DroCon Bharat confirms in writing that the required spares and/or a qualified engineer are not available within a reasonable period (ordinarily forty-eight (48) to seventy-two (72) hours), or fails to respond within the response window, the {{CP}} may source equivalent spares and services from a competent third party in order to minimise downtime.</p>
-<p><b>Safeguards.</b></p>
+<p><b>Assurances and Conditions.</b></p>
 <ul>
 <li>Any third-party spares must be genuine or OEM-equivalent and fitted by a competent engineer; the {{CP}} remains solely responsible for the airworthiness, UIN validity and DGCA compliance of the drone after any repair.</li>
 <li>The {{CP}} shall retain and, on request, share invoices and records for any third-party spares or services procured under this clause.</li>
@@ -871,7 +920,7 @@ const WORKORDER_CLAUSES = [
 <li>in consideration, the {{CP}} shall contribute to DroCon Bharat, per drone per operating day, an <b>Acreage Contribution</b> valued at the Full Client Rate: <b>1.0 acre/day</b> where the day's confirmed order exceeds 10 acres, and <b>0.5 acre/day</b> where it is up to 10 acres. DroCon Bharat may set off the Acreage Contribution against amounts payable to the {{CP}}.</li>
 </ul>
 <p><b>Downtime waiver.</b> No Acreage Contribution is charged for a day on which no work is available due to the fault of DroCon Bharat or its client. On drone damage, the Acreage Contribution is waived for up to two (2) days from the damage and resumes from the third (3rd) day — unless return to service is delayed by DroCon Bharat's delay in supplying parts/engineering, in which case the waiver continues; provided the {{CP}} orders the required parts from DroCon Bharat within six (6) hours of the damage.</p>
-<p>The spares-and-maintenance priority and all operational safeguards in the MSA apply to this WO. Thresholds and figures above may be varied by written agreement for this WO. Where this clause is not elected, the MSA commission-based Billing Rates apply.</p>` },
+<p>The spares-and-maintenance priority and all operational covenants and assurances in the MSA apply to this WO. Thresholds and figures above may be varied by written agreement for this WO. Where this clause is not elected, the MSA commission-based Billing Rates apply.</p>` },
   { id:"wo_payment_timeline", title:"Payment Timeline", on:true, body:`
 <p>The payment timeline under this WO shall broadly align with the payment terms of the corresponding work order or purchase order issued by the end client. Without prejudice to the foregoing and to the collection condition above, DroCon Bharat shall <b>process and release the {{CP}}'s undisputed payment within one (1) to two (2) business days of receipt of the corresponding amount from the end client</b>. Disputed amounts shall be paid within the same period after resolution.</p>` },
   { id:"wo_term", title:"Term, Deployment and Withdrawal", on:true, body:`
@@ -893,6 +942,7 @@ const DEPLOY_CLAUSES_EN = [
 <li>Issue a letter to each Remote Pilot confirming that the drone has been deployed at the Sugar Mill and that the pilot is operating on behalf of / with the authorisation of the Sugar Mill.</li></ol>
 <p><i>A ready-to-use draft of the letter referred to in point 3 is enclosed with this communication for the Sugar Mill to print on its own letterhead and hand over to each pilot.</i></p>` },
   { id:"dep_scope", title:"Section D — Scope of Engagement", on:true, body:`<p>All operations under this engagement shall be limited to Agricultural Spraying services offered to the farmers through the Sugar Mill. Any other use of the drones is unauthorised and shall be the sole responsibility of the Pilot.</p>` },
+  { id:"dep_data", title:"Section E — Farmer Data Protection (DPDP Act, 2023)", on:true, body:`<p>Any personal data of farmers collected during these operations (such as name, mobile number, village and acreage) shall be handled in accordance with the Digital Personal Data Protection Act, 2023. Drocon Bharat Private Limited is the <b>Data Fiduciary</b> for such data and determines the purpose and means of its processing; the Remote Pilot(s) collect it solely as <b>Data Processors</b> on behalf of, and under the instructions of, Drocon Bharat, only with the farmer's notice and consent, and only to bill and document the spraying service. Such data shall not be used for any other purpose or shared outside this engagement.</p>` },
   { id:"dep_pilot_cert", title:"Enclosure — Pilot Authorisation Letter (text issued by the Sugar Mill)", on:true, body:`<p>This is to certify that Mr./Ms. {{PILOT_NAME}} (Remote Pilot), holding Remote Pilot Certificate (RPC) No. {{RPC}} and operating the drone bearing Unique Identification Number (UIN) {{UIN}}, has been deployed at our facility, {{MILL}} (Sugar Mill name &amp; address).</p>
 <p>The said pilot and drone are engaged in agricultural spraying operations on the crop of {{CROP}} with effect from {{EFF_DATE}}, and are hereby authorised to operate at and on behalf of our Sugar Mill for the said assignment.</p>
 <p>The identity, RPC and drone UIN of the above pilot have been verified by us. This letter is issued at the request of Drocon Bharat Private Limited to facilitate lawful field operations.</p>
@@ -906,6 +956,7 @@ const DEPLOY_CLAUSES_HI = [
 <li>प्रत्येक रिमोट पायलट को एक पत्र जारी करें जिसमें यह पुष्टि हो कि ड्रोन शुगर मिल में तैनात है तथा पायलट शुगर मिल की ओर से / उसके प्राधिकरण से कार्य कर रहा है।</li></ol>
 <p><i>बिंदु 3 में उल्लिखित पत्र का उपयोग-हेतु-तैयार प्रारूप इस संदेश के साथ संलग्न है, जिसे शुगर मिल अपने स्वयं के लेटरहेड पर मुद्रित कर प्रत्येक पायलट को प्रदान करे।</i></p>` },
   { id:"dep_scope", title:"खंड — घ : कार्य का दायरा", on:true, body:`<p>इस अनुबंध के अंतर्गत समस्त कार्य केवल शुगर मिल के माध्यम से किसानों को प्रदान की जाने वाली कृषि छिड़काव सेवाओं तक सीमित रहेंगे। ड्रोन का किसी भी अन्य प्रयोजन हेतु उपयोग अनधिकृत है तथा इसका संपूर्ण उत्तरदायित्व पायलट का होगा।</p>` },
+  { id:"dep_data", title:"खंड — ङ : किसान डेटा संरक्षण (DPDP अधिनियम, 2023)", on:true, body:`<p>इन कार्यों के दौरान एकत्र किए गए किसानों के किसी भी व्यक्तिगत डेटा (जैसे नाम, मोबाइल नंबर, गाँव एवं रकबा) को <b>डिजिटल व्यक्तिगत डेटा संरक्षण अधिनियम, 2023</b> के अनुसार संभाला जाएगा। Drocon Bharat Private Limited ऐसे डेटा हेतु <b>डेटा फ़िड्यूशरी (Data Fiduciary)</b> है तथा इसके प्रसंस्करण के उद्देश्य एवं साधन निर्धारित करती है; रिमोट पायलट इसे केवल Drocon Bharat की ओर से एवं उसके निर्देशानुसार <b>डेटा प्रोसेसर (Data Processor)</b> के रूप में, किसान की सूचना एवं सहमति से, तथा केवल छिड़काव सेवा के बिलिंग एवं दस्तावेज़ीकरण हेतु एकत्र करते हैं। ऐसे डेटा का किसी अन्य प्रयोजन हेतु उपयोग अथवा इस अनुबंध के बाहर साझा नहीं किया जाएगा।</p>` },
   { id:"dep_pilot_cert", title:"संलग्नक — रिमोट पायलट हेतु पत्र (शुगर मिल द्वारा जारी) का पाठ", on:true, body:`<p>यह प्रमाणित किया जाता है कि श्री/सुश्री {{PILOT_NAME}} (रिमोट पायलट), रिमोट पायलट प्रमाण-पत्र (RPC) क्र. {{RPC}} के धारक, तथा विशिष्ट पहचान संख्या (UIN) {{UIN}} वाले ड्रोन का संचालन करते हुए, हमारे परिसर {{MILL}} (शुगर मिल का नाम एवं पता) में तैनात किए गए हैं।</p>
 <p>उक्त पायलट एवं ड्रोन {{CROP}} फसल पर कृषि छिड़काव कार्य में संलग्न हैं, जो दिनांक {{EFF_DATE}} से प्रभावी है, तथा उक्त कार्य हेतु हमारी शुगर मिल में एवं उसकी ओर से कार्य करने के लिए एतद्द्वारा अधिकृत हैं।</p>
 <p>उपर्युक्त पायलट की पहचान, RPC एवं ड्रोन UIN हमारे द्वारा सत्यापित कर लिए गए हैं। यह पत्र Drocon Bharat Private Limited के अनुरोध पर वैध क्षेत्रीय कार्य को सुगम बनाने हेतु जारी किया जा रहा है।</p>
