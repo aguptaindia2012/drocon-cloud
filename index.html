@@ -88,6 +88,17 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 .stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
 .statrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .searchbar{margin:10px 0}
+/* ---- formal landing directory (Home) ---- */
+.homegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:14px;align-items:start}
+.navcard{padding:0;overflow:hidden}
+.navcard-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 16px;background:var(--soft-green);border-bottom:1px solid var(--line)}
+.navcard-badge{background:var(--orange);color:#fff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700}
+.navlist{display:flex;flex-direction:column}
+.navrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:11px 16px;font-family:inherit;font-size:14px;font-weight:700;color:var(--charcoal);cursor:pointer;transition:background .12s}
+.navrow:last-child{border-bottom:none}
+.navrow:hover{background:var(--soft-green)}
+.navrow:hover .navrow-arrow{color:var(--green);transform:translateX(2px)}
+.navrow-arrow{color:var(--muted);font-weight:900;font-size:16px;transition:.12s}
 .linetable input,.linetable select{padding:6px 7px;font-size:13px}
 .linetable td{padding:4px 5px}
 .x{cursor:pointer;color:#a3322a;font-weight:900;text-align:center}
@@ -121,9 +132,11 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
     <div class="field"><label>Password</label><input id="auPass" type="password" placeholder="••••••••"></div>
     <button class="btn green" id="auGo" style="width:100%">Sign in</button>
     <div class="err" id="auErr"></div>
+    <div id="auDiag" class="muted" style="margin-top:6px"></div>
     <p class="muted" style="margin-top:14px">
       <span id="auToggleText">New to the workspace?</span>
       <a href="#" id="auToggle">Create an account</a>
+      · <a href="#" id="auTest" title="Check that this device can reach the server">Test connection</a>
     </p>
     <p class="muted" id="auConfigWarn" style="color:#a3322a"></p>
   </div>
@@ -136,7 +149,7 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
       <div class="accentsq"></div>
       <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
       <div class="spacer"></div>
-      <button class="btn sm" id="btnHome" title="Home (landing page)">🏠</button>
+      <button class="btn" id="btnRefresh" title="Refresh data on this screen (approvals, updates) without a full reload">🔄 Refresh Suite</button>
       <button class="btn sm" id="btnCalc" title="Calculator (pop out)">🧮</button>
       <button class="btn sm" id="btnCalendar" title="Calendar (pop out)">📅</button>
       <button class="btn sm" id="btnPrivacy" title="Data &amp; Privacy">🛡</button>
@@ -183,7 +196,7 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 
 <div id="notifPanel" class="hidden" style="position:fixed;top:54px;right:14px;width:340px;max-height:70vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.18);z-index:50">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)">
-    <b>Notifications</b><button class="btn sm" id="notifMark">Mark all read</button>
+    <b>Notifications</b><button class="btn sm" id="notifMark" title="Clear all notifications and close">Clear all</button>
   </div>
   <div id="notifList" style="padding:6px 0"></div>
 </div>

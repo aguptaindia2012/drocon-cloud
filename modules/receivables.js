@@ -45,6 +45,12 @@ async function load(){
   const totReceivable=rows.reduce((s,x)=>s+Math.max(0,x.balance),0);
   const totInvoiced=rows.reduce((s,x)=>s+x.gross,0);
   const totReceived=rows.reduce((s,x)=>s+x.paid,0);
+  const totCredit=rows.reduce((s,x)=>s+x.credit,0);
+  // "advances" = money received/credited BEYOND the invoice value (a negative balance).
+  // These are the rows that make Receivable look bigger than Invoiced − Received,
+  // and usually flag a data problem (payment logged against the wrong invoice, or twice).
+  const overpaid=rows.filter(x=>x.balance<-0.01).sort((a,b)=>a.balance-b.balance);
+  const totAdvance=overpaid.reduce((s,x)=>s+(-x.balance),0);
   const buckets={"0-30":0,"31-60":0,"61-90":0,">90":0};
   rows.forEach(x=>{ if(x.balance>0) buckets[bucket(x.age)]+=x.balance; });
   const overdue=rows.filter(x=>x.balance>0 && x.age>30).length;
@@ -63,6 +69,20 @@ async function load(){
       <div class="stat"><div class="n">${money(totReceived)}</div><div class="l">Total received</div></div>
       <div class="stat"><div class="n">${overdue}</div><div class="l">Overdue &gt;30d</div></div>
     </div>
+    <div class="card"><h3>How the receivable is built up</h3>
+      <table><tbody>
+        <tr><td>Total invoiced</td><td class="num">${money(totInvoiced)}</td></tr>
+        <tr><td>Less: credit notes</td><td class="num">− ${money(totCredit)}</td></tr>
+        <tr><td>Less: amount received</td><td class="num">− ${money(totReceived)}</td></tr>
+        <tr style="border-top:2px solid var(--line)"><td>= Net of all invoices</td><td class="num">${money(totInvoiced-totCredit-totReceived)}</td></tr>
+        <tr><td>Add back: advances / over-collections${totAdvance>0?' <span class="chip rejected">check data</span>':''}</td><td class="num">+ ${money(totAdvance)}</td></tr>
+        <tr style="border-top:2px solid var(--green)"><td><b>= Total receivable (still owed)</b></td><td class="num"><b>${money(totReceivable)}</b></td></tr>
+      </tbody></table>
+      <p class="muted">Receivable counts only invoices with money <b>still owed</b>. It can exceed “invoiced − received” when some invoices are <b>over-collected</b> (received more than billed) — that surplus is added back above and almost always means a payment was logged against the wrong invoice or entered twice. Review those rows below and fix them in <b>Finance → Payment Status</b> or the Invoice.</p>
+    </div>
+    ${overpaid.length?`<div class="card"><h3>⚠ Over-collected invoices (received &gt; billed) — likely bad data</h3>
+      <div style="overflow:auto"><table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Billed</th><th class="num">Credit</th><th class="num">Received</th><th class="num">Over by</th></tr></thead>
+      <tbody>${overpaid.map(x=>`<tr><td>${esc(x.r.entity||'DCB')}</td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td><td class="num">${money(x.gross)}</td><td class="num">${money(x.credit)}</td><td class="num">${money(x.paid)}</td><td class="num" style="color:#a3322a;font-weight:700">${money(-x.balance)}</td></tr>`).join("")}</tbody></table></div></div>`:''}
     <div class="row" id="recReport" style="margin-bottom:8px"></div>
     <div class="card"><h3>Monthly credit in market (invoiced)</h3>${window.OPS.report.canvas("recCredit",560,240)}</div>
     <div class="card"><h3>Flow of funds — payments received by month</h3>${window.OPS.report.canvas("recFunds",560,240)}</div>

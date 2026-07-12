@@ -19,26 +19,46 @@ async function listAgreements(filter){
   return data||[];
 }
 
+let _agRows=[], _agFilter="all";
 async function viewAgreements(){
-  const m=$("main"); m.innerHTML=`<div class="eyebrow">Agreement</div><h1>Agreements</h1>
-    <div class="row" style="margin:10px 0"><button class="btn sm" data-f="all">All</button>
-    <button class="btn sm" data-f="draft">Drafts</button>
-    <button class="btn sm" data-f="mine">Mine</button>
-    <button class="btn sm" data-f="review">In review</button>
-    <div class="spacer"></div><button class="btn green sm" id="newBtn">+ New agreement</button></div>
+  const m=$("main"); const canX=window.OPS.canExport();
+  m.innerHTML=`<div class="eyebrow">Agreement</div><h1>Agreements</h1>
+    <div class="callout">Everyone with access to this section sees <b>all agreements, in every status</b> — draft, in review, approved and executed.</div>
+    <div class="row wrap" style="margin:10px 0">
+      <button class="btn sm" data-f="all">All</button>
+      <button class="btn sm" data-f="draft">Drafts</button>
+      <button class="btn sm" data-f="mine">Mine</button>
+      <button class="btn sm" data-f="review">In review</button>
+      <div class="spacer"></div>
+      ${canX?'<button class="btn sm" id="dlBtn">⬇ Download Excel</button>':'<span class="muted" title="Needs export permission">🔒 export restricted</span>'}
+      <button class="btn green sm" id="newBtn">+ New agreement</button></div>
     <div id="listHost" class="muted">Loading…</div>`;
   $("newBtn").addEventListener("click",()=>window.OPS.openTool("new"));
+  if($("dlBtn")) $("dlBtn").addEventListener("click",downloadAgreements);
   m.querySelectorAll("[data-f]").forEach(b=>b.addEventListener("click",()=>load(b.getAttribute("data-f"))));
   async function load(f){
-    const rows=await listAgreements(f==="all"?null:f);
-    $("listHost").innerHTML = rows.length? `<table><thead><tr><th>Title</th><th>Counterparty</th><th>Type</th><th>Status</th><th>Owner</th><th>Updated</th></tr></thead>
+    _agFilter=f;
+    const rows=await listAgreements(f==="all"?null:f); _agRows=rows;
+    $("listHost").innerHTML = rows.length? `<div style="overflow:auto"><table><thead><tr><th>Contract&nbsp;no.</th><th>Title</th><th>Counterparty</th><th>Type</th><th>Status</th><th>Owner</th><th>Updated</th></tr></thead>
       <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">
+        <td>${r.agreement_no?('<b>'+esc(r.agreement_no)+'</b>'):'<span class="muted">—</span>'}</td>
         <td><b>${esc(r.title)}</b></td><td>${esc(r.counterparty||"")}</td><td>${esc(r.category||"")}</td>
         <td>${statusChip(r.status)}</td><td>${esc((r.creator&&(r.creator.full_name||r.creator.email))||"")}</td><td class="muted">${fmt(r.updated_at)}</td>
-      </tr>`).join("")}</tbody></table>` : '<div class="card muted">No agreements yet. Click “New agreement”.</div>';
+      </tr>`).join("")}</tbody></table></div>` : '<div class="card muted">No agreements yet. Click “New agreement”.</div>';
     $("listHost").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>viewDetail(tr.getAttribute("data-id"))));
   }
   load("all");
+}
+function downloadAgreements(){
+  if(!window.OPS.canExport()){ alert("You don't have permission to export."); return; }
+  if(!_agRows.length){ alert("No agreements to export."); return; }
+  const headers=["Contract no.","Title","Counterparty","Type","Status","Owner","Approver","Created","Updated"];
+  const rows=_agRows.map(r=>[ r.agreement_no||"", r.title||"", r.counterparty||"", r.category||"",
+    (STATUS_LABEL[r.status]||r.status||""), (r.creator&&(r.creator.full_name||r.creator.email))||"",
+    (r.approver&&(r.approver.full_name||r.approver.email))||"", fmt(r.created_at), fmt(r.updated_at) ]);
+  const base="Agreements_"+(_agFilter||"all")+"_"+window.OPS.helpers.todayISO()+".xlsx";
+  window.OPS.xlsx.download(base, "Agreements", headers, rows);
+  window.OPS.audit("exported","agreement","",rows.length+" rows ("+_agFilter+")");
 }
 
 async function viewApprovals(){
@@ -115,15 +135,22 @@ async function viewDetail(id){
   const canReject  = (adminCanDecide || approverCanDecide);
   const approveLabel = isAdmin() ? "Approve (final)" : "Approve & recommend";
   const canExecute = isApprover() && r.status==="approved";
+  // Contract number: assign after approval & signature, before/at execution.
+  const canAssignNo = isApprover() && (r.status==="approved" || r.status==="executed");
   const m=$("main");
   m.innerHTML=`<button class="btn sm" id="back">← Back</button>
     <div class="card" style="margin-top:12px">
       <div class="row"><div><div class="eyebrow">${esc(r.category||"")}</div><h1 style="margin:2px 0">${esc(r.title)}</h1></div>
         <div class="spacer"></div>${statusChip(r.status)}</div>
-      <p class="muted">Counterparty: <b>${esc(r.counterparty||"—")}</b> · Template: ${esc(r.template_key||"—")} ·
+      <p class="muted">${r.agreement_no?('Contract no.: <b style="color:var(--charcoal)">'+esc(r.agreement_no)+'</b> · '):''}Counterparty: <b>${esc(r.counterparty||"—")}</b> · Template: ${esc(r.template_key||"—")} ·
         Owner: ${esc((r.creator&&(r.creator.full_name||r.creator.email))||"")} ·
         Approver: ${esc((r.approver&&(r.approver.full_name||r.approver.email))||"unassigned")}</p>
       ${r.status==="recommended"?'<div class="callout">Reviewed and <b>recommended</b> — awaiting an <b>admin</b> for final approval.</div>':''}
+      ${canAssignNo?`<div class="callout" style="background:var(--cream);border-left-color:var(--orange)">
+        <div style="font-weight:700;margin-bottom:6px">Contract number ${r.status==="approved"?'— assign after signature, before marking executed':''}</div>
+        <div class="row wrap" style="gap:8px"><input id="agNo" value="${esc(r.agreement_no||"")}" placeholder="e.g. DCB/AGR/26-27/007" style="max-width:280px">
+          <button class="btn green sm" id="agNoSave">${r.agreement_no?"Update number":"Assign number"}</button>
+          <span class="muted" id="agNoMsg"></span></div></div>`:''}
       <div class="row wrap" style="margin-top:8px">
         ${canEditDoc?'<button class="btn green sm" id="editdoc">✎ Open document editor</button>':''}
         <button class="btn sm" id="editmeta">Edit details</button>
@@ -144,6 +171,14 @@ async function viewDetail(id){
   if($("submit")) $("submit").addEventListener("click",()=>runRpc("submit_for_review",{p_id:r.id},r.id));
   if($("approve")) $("approve").addEventListener("click",()=>runRpc("approve_agreement",{p_id:r.id,p_note:null},r.id));
   if($("reject")) $("reject").addEventListener("click",()=>{ const note=prompt("Reason for rejection / changes requested:"); if(note===null) return; runRpc("reject_agreement",{p_id:r.id,p_note:note||null},r.id); });
+  if($("agNoSave")) $("agNoSave").addEventListener("click",async()=>{
+    const no=$("agNo").value.trim();
+    if(!no){ $("agNoMsg").textContent="Enter a number."; $("agNoMsg").style.color="var(--orange)"; return; }
+    $("agNoSave").disabled=true; $("agNoMsg").textContent=" saving…"; $("agNoMsg").style.color="var(--muted)";
+    const { error }=await sb.rpc("set_agreement_no",{ p_id:r.id, p_no:no });
+    if(error){ $("agNoMsg").textContent=" "+error.message; $("agNoMsg").style.color="#a3322a"; $("agNoSave").disabled=false; return; }
+    window.OPS.flashTop("Contract number saved ✓"); viewDetail(r.id);
+  });
   if($("execute")) $("execute").addEventListener("click",()=>runRpc("mark_executed",{p_id:r.id,p_note:null},r.id));
   if($("dl")) $("dl").addEventListener("click",()=>{ const blob=new Blob([JSON.stringify({draft:r.data},null,2)],{type:"application/json"});
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=(r.title||"agreement")+".json"; a.click(); });

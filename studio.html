@@ -486,6 +486,44 @@ const VENDOR_CLAUSES = [
 <p><b>Payment terms.</b> DroCon Bharat's obligation to pay the {{CP}}'s share of Gross Revenue is strictly conditional upon DroCon Bharat's successful collection of the corresponding Gross Collection from the end client. DroCon Bharat shall remit payment within five (5) days of receiving the relevant Gross Collection and a proper invoice.</p>
 <p><b>Client interaction.</b> The {{CP}} may communicate with DroCon Bharat's client only for order management, mission planning and reporting delivered orders. Any other communication without prior approval shall be treated as bypassing DroCon Bharat to secure future orders, and DroCon Bharat may at its sole discretion terminate this Agreement immediately and block future orders for a period it determines.</p>` },
 
+  { id:"commercial_acreage", title:"Alternative Commercial Model — Full Client Rate for a Daily Acreage Contribution", on:false, body:`
+<p><b>Election.</b> This clause applies <b>only where the Parties expressly elect it in writing</b> (in this Agreement or the relevant Work Order). Where elected, it operates <b>in place of the percentage split in the Billing Rates Annexure</b> for the Work Orders to which it is applied; the commission-based model in the Billing Rates Annexure otherwise remains the default. DroCon Bharat may, on written notice, revert the {{CP}} to the commission-based model for any future Work Order.</p>
+<p><b>Full Client Rate to the {{CP}}.</b> For acres sprayed under an elected Work Order, DroCon Bharat shall pass through to the {{CP}} <b>one hundred percent (100%) of the per-acre rate actually billed to, and collected from, the end client</b> (the "Full Client Rate"), in place of the {{CP}} Billing Rate percentage. Payment of the Full Client Rate remains conditional upon DroCon Bharat's collection from the end client, per the Payment clause.</p>
+<p><b>Consideration — Daily Acreage Contribution (in kind).</b> In consideration of receiving the Full Client Rate, and in place of the DroCon Bharat Fee percentage, the {{CP}} shall contribute to DroCon Bharat, for each drone for each day on which it operates under an elected Work Order, a daily acreage (the "Acreage Contribution"), valued at the Full Client Rate for that day and retained by (or payable to) DroCon Bharat, as follows:</p>
+<ul>
+<li>where the day's confirmed order <b>exceeds 10 acres</b> — <b>1.0 acre per operating day</b>;</li>
+<li>where the day's confirmed order is <b>up to 10 acres</b> — <b>0.5 acre per operating day</b>.</li>
+</ul>
+<p>The thresholds and the acreage figures above are the negotiated defaults and may be varied for a specific {{CP}} by editing this clause or in the relevant Work Order.</p>
+<p><b>Waiver of the Acreage Contribution on downtime.</b></p>
+<ul>
+<li><b>No work available (DroCon / client fault).</b> Where no work is available on a day due to the fault of DroCon Bharat or its client (for example, no order allocated, client stoppage or access not provided), <b>no Acreage Contribution shall be charged</b> for that day.</li>
+<li><b>Drone damage.</b> Where the {{CP}}'s drone is out of service due to damage, crash or malfunction, DroCon Bharat shall <b>waive the Acreage Contribution for up to two (2) days from the date of the damage</b>, and it shall <b>resume from the third (3rd) day onwards</b> — <b>except</b> where the return to service is delayed because DroCon Bharat delayed the supply of the required parts or engineering, in which case the waiver <b>continues</b> for each further day of DroCon-caused delay.</li>
+<li><b>Condition for the damage waiver.</b> To qualify for the damage waiver above, the {{CP}} must <b>order the required parts from DroCon Bharat within six (6) hours of the damage</b> (consistent with the Spares and Maintenance Priority clause). If the {{CP}} fails to order within this window, the Acreage Contribution continues to accrue notwithstanding the downtime.</li>
+</ul>
+<p><b>Operational safeguards (for DroCon Bharat's protection).</b></p>
+<ul>
+<li><b>Accrues per operating day, per drone,</b> from the verified order/reporting data, irrespective of the timing of client payment; the Acreage Contribution is DroCon Bharat's fee and is <b>not</b> contingent on the {{CP}}'s profitability.</li>
+<li><b>Set-off.</b> DroCon Bharat may deduct or set off the value of the Acreage Contribution (and any spares, services or advances owed by the {{CP}}) against any amount otherwise payable to the {{CP}}, before remittance.</li>
+<li><b>Costs remain the {{CP}}'s.</b> The Full Client Rate is gross and is not a guarantee of profit; the {{CP}} continues to bear all of its own costs (drone, batteries, pilot, fuel, transport, maintenance, insurance and statutory dues) as set out in the Responsibilities Annexure.</li>
+<li><b>Minimum utilisation.</b> If the {{CP}} declines, under-reports or fails to operate on available order days in order to avoid the Acreage Contribution, DroCon Bharat may treat the corresponding contribution as accrued and/or revert the {{CP}} to the commission model, without prejudice to its other remedies.</li>
+<li><b>Anti-circumvention.</b> Any attempt to bypass DroCon Bharat, deal directly with the introduced client/farmers, or misreport acreage so as to reduce the Acreage Contribution is a material breach entitling DroCon Bharat to terminate and block future orders under the Non-Circumvention and Termination clauses.</li>
+<li><b>Reconciliation.</b> The Acreage Contribution is reconciled against DroCon Bharat's verified records; a dispute over any part does not defer accrual or set-off of the undisputed part.</li>
+<li>All amounts are exclusive of GST; TDS applies as provided in this Agreement.</li>
+</ul>` },
+
+  { id:"spares_priority", title:"Spares and Maintenance Priority (DroCon First Right of Supply)", on:false, body:`
+<p><b>First right of supply.</b> In the event of any drone damage, crash, malfunction, wear or other need for spares, repair or engineering support, the {{CP}} shall <b>first request and procure the required spares and maintenance / engineering services from DroCon Bharat</b>, at DroCon Bharat's prevailing rates, and shall give DroCon Bharat the first opportunity to supply before approaching any third party.</p>
+<p><b>Response window.</b> DroCon Bharat shall use reasonable efforts to confirm availability and an indicative timeline within twenty-four (24) hours of a written request from the {{CP}}.</p>
+<p><b>Third-party fallback (only on unavailability).</b> Only where DroCon Bharat confirms in writing that the required spares and/or a qualified engineer are not available within a reasonable period (ordinarily forty-eight (48) to seventy-two (72) hours), or fails to respond within the response window, the {{CP}} may source equivalent spares and services from a competent third party in order to minimise downtime.</p>
+<p><b>Safeguards.</b></p>
+<ul>
+<li>Any third-party spares must be genuine or OEM-equivalent and fitted by a competent engineer; the {{CP}} remains solely responsible for the airworthiness, UIN validity and DGCA compliance of the drone after any repair.</li>
+<li>The {{CP}} shall retain and, on request, share invoices and records for any third-party spares or services procured under this clause.</li>
+<li>This clause is a right of first supply only; it does not oblige DroCon Bharat to hold stock or guarantee availability, and DroCon Bharat shall not be liable for any downtime, delay or loss arising from unavailability of spares or engineers. Work Order timelines shall be reasonably adjusted for such downtime.</li>
+<li>Where the Alternative Commercial Model above is elected, continued procurement of spares and maintenance from DroCon Bharat (save on confirmed unavailability) is a condition of that model.</li>
+</ul>` },
+
   { id:"warranties", title:"Warranties", on:true, body:`
 <p>The {{CP}} warrants that: (a) it has full authority to enter into and perform this Agreement; (b) each Supplied Drone is airworthy, holds a valid UIN and complies with DGCA requirements; (c) each pilot holds a valid RPC and is competent and authorised to operate the Supplied Drone; (d) it shall perform the Services with reasonable skill, care and diligence and in compliance with Applicable Law; and (e) it holds all statutory registrations applicable to its business.</p>` },
 
@@ -826,6 +864,14 @@ const WORKORDER_CLAUSES = [
 <p>The {{CP}} shall deploy the Supplied Drone(s) and pilot(s) detailed in this WO to perform the agricultural drone spraying Services in the operational area and for the period specified in the Work Order Details below, in accordance with the obligations, standards and reporting requirements of the MSA.</p>` },
   { id:"wo_rates", title:"Rates and Payment", on:true, body:`
 <p>The rates applicable to this WO are set out in the Work Order Details below and are subject to the billing, invoicing and payment terms of the MSA. DroCon Bharat's obligation to pay the {{CP}}'s share is conditional upon DroCon Bharat's collection of the corresponding amount from the end client, as provided in the MSA.</p>` },
+  { id:"wo_commercial_acreage", title:"Commercial Model for this Work Order — Full Client Rate for a Daily Acreage Contribution", on:false, body:`
+<p>The Parties <b>elect</b>, for this Work Order, the <b>Full Client Rate / Daily Acreage Contribution</b> model in place of the percentage split in the MSA Billing Rates Annexure. Accordingly:</p>
+<ul>
+<li>DroCon Bharat shall pass through to the {{CP}} <b>100% of the per-acre rate billed to and collected from the end client</b> for acres sprayed under this WO (payment remaining conditional on collection, per the MSA); and</li>
+<li>in consideration, the {{CP}} shall contribute to DroCon Bharat, per drone per operating day, an <b>Acreage Contribution</b> valued at the Full Client Rate: <b>1.0 acre/day</b> where the day's confirmed order exceeds 10 acres, and <b>0.5 acre/day</b> where it is up to 10 acres. DroCon Bharat may set off the Acreage Contribution against amounts payable to the {{CP}}.</li>
+</ul>
+<p><b>Downtime waiver.</b> No Acreage Contribution is charged for a day on which no work is available due to the fault of DroCon Bharat or its client. On drone damage, the Acreage Contribution is waived for up to two (2) days from the damage and resumes from the third (3rd) day — unless return to service is delayed by DroCon Bharat's delay in supplying parts/engineering, in which case the waiver continues; provided the {{CP}} orders the required parts from DroCon Bharat within six (6) hours of the damage.</p>
+<p>The spares-and-maintenance priority and all operational safeguards in the MSA apply to this WO. Thresholds and figures above may be varied by written agreement for this WO. Where this clause is not elected, the MSA commission-based Billing Rates apply.</p>` },
   { id:"wo_payment_timeline", title:"Payment Timeline", on:true, body:`
 <p>The payment timeline under this WO shall broadly align with the payment terms of the corresponding work order or purchase order issued by the end client. Without prejudice to the foregoing and to the collection condition above, DroCon Bharat shall <b>process and release the {{CP}}'s undisputed payment within one (1) to two (2) business days of receipt of the corresponding amount from the end client</b>. Disputed amounts shall be paid within the same period after resolution.</p>` },
   { id:"wo_term", title:"Term, Deployment and Withdrawal", on:true, body:`

@@ -198,9 +198,35 @@ $("auGo").addEventListener("click", async ()=>{
       const { error } = await sb.auth.signInWithPassword({ email, password:pass });
       if(error) throw error;
     }
-  }catch(err){ $("auErr").textContent = authErrorText(err, signupMode); console.error("Auth error:", err); }
+  }catch(err){
+    $("auErr").textContent = authErrorText(err, signupMode); console.error("Auth error:", err);
+    // If it looks like a connectivity failure, run the self-test automatically.
+    const m=String((err&&(err.message||""))||"");
+    if(/fetch|network/i.test(m) || (err&&err.name==="AuthRetryableFetchError")) diagnoseConnection();
+  }
   $("auGo").disabled=false;
 });
+// Connection self-test — tells the user (on THEIR device/network) exactly why a
+// login can't reach Supabase: blocked by extension/VPN/firewall, wrong key, or fine.
+async function diagnoseConnection(){
+  const box=$("auDiag"); if(!box) return;
+  const cfg=window.DCB_CONFIG||{};
+  const url=(cfg.SUPABASE_URL||"").replace(/\/+$/,"");
+  const key=cfg.SUPABASE_ANON_KEY||"";
+  if(!url){ box.style.color="#a3322a"; box.innerHTML="✗ config.js has no Supabase URL."; return; }
+  box.style.color="var(--muted)"; box.innerHTML="Testing connection to the server…";
+  try{
+    const r=await fetch(url+"/auth/v1/health",{ headers:{ apikey:key, Authorization:"Bearer "+key } });
+    if(r.ok){ box.style.color="var(--green)";
+      box.innerHTML="✓ Reached the server successfully. The connection is fine — if sign-in still fails it's the email/password (or email-confirmation), not the network."; }
+    else{ box.style.color="#9a5b00";
+      box.innerHTML="⚠ Reached the server but it replied HTTP "+r.status+". The project is up; the API key in config.js may be wrong or auth is misconfigured."; }
+  }catch(e){
+    box.style.color="#a3322a";
+    box.innerHTML="✗ This device could <b>not reach</b> "+esc(url)+".<br>Almost always an <b>ad-blocker, VPN, firewall or browser extension</b> on this network is blocking it. Try an <b>incognito window with extensions off</b>, or a different network (e.g. mobile hotspot).";
+  }
+}
+(function(){ const t=$("auTest"); if(t) t.addEventListener("click",e=>{ e.preventDefault(); diagnoseConnection(); }); })();
 // Turn an opaque Supabase auth error (sometimes just "{}") into something readable.
 function authErrorText(err, isSignup){
   let msg = (err && (err.message || err.error_description || err.msg)) || "";
@@ -257,13 +283,15 @@ function visibleSections(){
   return SECTIONS.filter(s => TOOLS.some(t=>t.section===s.key && canSee(t)));
 }
 function renderNav(){
-  // top section bar
+  // top section bar — Home is the first tab
   const secs = visibleSections();
-  $("sectionBar").innerHTML = secs.map(s=>{
+  const homeBtn = `<button data-sec="__home" class="${window.OPS.currentTool==='home'?'active':''}">🏠 Home</button>`;
+  $("sectionBar").innerHTML = homeBtn + secs.map(s=>{
     const badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
-    return `<button data-sec="${s.key}" class="${s.key===window.OPS.currentSection?'active':''}">${esc(s.label)}${badge}</button>`;
+    return `<button data-sec="${s.key}" class="${(window.OPS.currentTool!=='home' && s.key===window.OPS.currentSection)?'active':''}">${esc(s.label)}${badge}</button>`;
   }).join("");
-  $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>openSection(b.getAttribute("data-sec"))));
+  $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{
+    const k=b.getAttribute("data-sec"); if(k==="__home") goHome(); else openSection(k); }));
   // sub-tabs for the active section
   const tools = TOOLS.filter(t=>t.section===window.OPS.currentSection && canSee(t));
   $("nav").innerHTML = tools.map(t=>
@@ -302,20 +330,22 @@ function renderHome(){
   secs.forEach(s=>{
     const tools=TOOLS.filter(t=>t.section===s.key && canSee(t));
     if(!tools.length) return;
-    cards+=`<div class="card" style="margin:0">
-      <div class="eyebrow">${esc(s.label)}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
-        ${tools.map(t=>`<button class="btn sm" data-go="${t.key}">${esc(t.label)}</button>`).join("")}
+    const badge = (s.key==="reviews" && window.OPS.reviewCount) ? `<span class="navcard-badge">🔔 ${window.OPS.reviewCount}</span>` : "";
+    cards+=`<div class="card navcard">
+      <div class="navcard-h"><span class="eyebrow">${esc(s.label)}</span>${badge}</div>
+      <div class="navlist">
+        ${tools.map(t=>`<button class="navrow" data-go="${t.key}"><span>${esc(t.label)}</span><span class="navrow-arrow">›</span></button>`).join("")}
       </div></div>`;
   });
   const helpBtns = ext
     ? `<button class="btn sm green" data-go="portal_help">💬 Help &amp; FAQs</button>`
     : `<button class="btn sm green" data-go="manual">📖 User Manual</button> <button class="btn sm" data-go="faqs">❓ FAQs</button>`;
   $("main").innerHTML=`
-    <h1 style="margin-bottom:2px">Welcome${name?(", "+name):""} 👋</h1>
-    <p class="muted">Jump to any area you have access to. Return here anytime with the 🏠 Home button in the header.</p>
-    <div class="card" style="background:var(--soft-green);border:none"><b>Getting started:</b> ${helpBtns}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:12px">${cards}</div>`;
+    <div class="eyebrow">DroCon Cloud · Operations Suite</div>
+    <h1 style="margin-bottom:2px">Welcome${name?(", "+name):""}</h1>
+    <p class="muted">Select a module from the directory below. Return here anytime with the 🏠 Home button in the header.</p>
+    <div class="card" style="background:var(--soft-green);border:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b>Getting started:</b> ${helpBtns}</div>
+    <div class="homegrid">${cards}</div>`;
   $("main").querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-go"))));
   renderNav();
 }
@@ -374,7 +404,16 @@ function renderNotifs(){
   }));
 }
 function toggleNotif(){ const p=$("notifPanel"); if(p.classList.contains("hidden")){ renderNotifs(); p.classList.remove("hidden"); } else p.classList.add("hidden"); }
-async function markAllRead(){ await sb.from("notifications").update({is_read:true}).eq("user_id",me.id).eq("is_read",false); refreshNotifs(); renderNotifs(); }
+async function markAllRead(){
+  // Clear the notification history, then close the panel.
+  // Deleting needs the notif_delete policy (sql/30); if that isn't in place yet,
+  // fall back to marking everything read so the bell still clears.
+  let cleared=false;
+  try{ const { error }=await sb.from("notifications").delete().eq("user_id",me.id); if(!error) cleared=true; }catch(e){}
+  if(!cleared){ try{ await sb.from("notifications").update({is_read:true}).eq("user_id",me.id).eq("is_read",false); }catch(e){} }
+  $("notifPanel").classList.add("hidden");
+  await refreshNotifs(); renderNotifs();
+}
 window.OPS.refreshNotifs = refreshNotifs;
 
 // ---------- pending-approval counter (badge on the Review / Approvals tab) ----------
@@ -477,7 +516,28 @@ function openPrivacy(){
   }
   $("privacyOverlay").classList.remove("hidden");
 }
+// ---------- soft refresh (re-pull data, stay on the same screen) ----------
+async function softRefresh(){
+  if(!me) return;
+  const btn=$("btnRefresh"); const label=btn?btn.textContent:"";
+  if(btn){ btn.disabled=true; btn.textContent="⏳ Refreshing…"; }
+  try{ await loadPerms(); }catch(e){}
+  try{ const p=await loadProfile(); if(p){ profile=p; window.OPS.profile=p; } }catch(e){}
+  try{ await refreshNotifs(); }catch(e){}
+  try{ await refreshReviewCount(); }catch(e){}
+  // re-render whatever screen the user is on, so they land back on the same sheet
+  try{
+    const key=window.OPS.currentTool;
+    if(!key || key==="home") goHome();
+    else if(canSee(toolByKey(key))) openTool(key);
+    else goHome();
+  }catch(e){ console.error(e); }
+  if(btn){ btn.disabled=false; btn.textContent=label||"🔄 Refresh Suite"; }
+  flashTop("Suite refreshed ✓");
+}
+window.OPS.softRefresh = softRefresh;
 (function(){
+  const rf=$("btnRefresh"); if(rf) rf.addEventListener("click",softRefresh);
   const h=$("btnHome"); if(h) h.addEventListener("click",goHome);
   const c=$("btnCalc"); if(c) c.addEventListener("click",openCalc);
   const cal=$("btnCalendar"); if(cal) cal.addEventListener("click",openCalendar);
