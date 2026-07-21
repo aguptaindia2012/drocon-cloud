@@ -56,16 +56,25 @@ function activeOf(pid){ return (assigns[pid]||[]).find(a=>a.status==="active"); 
 function render(q){
   const rows=pilots.filter(p=>!q ||
     [p.name,vName(p.vendor),p.phone,p.rpc_no,p.drone_uin].some(x=>String(x||"").toLowerCase().includes(q)));
-  $("plList").innerHTML = rows.length ? `<div style="overflow:auto"><table>
+  const needFix=pilots.filter(p=>!p.vendor_id).length;
+  const banner = needFix
+    ? `<div class="callout warn"><b>${needFix} pilot${needFix>1?'s':''} imported from your existing entries need attention.</b>
+        They were created from the distinct names already in the data so you can start selecting them straight away —
+        open each one to set the <b>Vendor</b>, and delete any duplicate spellings.
+        Historic entries are untouched and keep their original text names.</div>`
+    : "";
+  $("plList").innerHTML = banner + (rows.length ? `<div style="overflow:auto"><table>
     <thead><tr><th>Pilot</th><th>Vendor</th><th>Phone</th><th>RPC</th><th>Drone UIN</th><th>Current location</th><th>Status</th></tr></thead>
     <tbody>${rows.map(p=>{ const a=activeOf(p.id);
       return `<tr class="clickable" data-id="${p.id}">
-        <td><b>${esc(p.name)}</b></td><td>${esc(vName(p.vendor))}</td><td>${esc(p.phone||'')}</td>
+        <td><b>${esc(p.name)}</b>${p.source==='imported'?' <span class="chip draft">imported</span>':''}</td>
+        <td>${p.vendor_id?esc(vName(p.vendor)):'<span class="chip rejected">set vendor</span>'}</td>
+        <td>${esc(p.phone||'')}</td>
         <td>${esc(p.rpc_no||'—')}</td><td>${esc(p.drone_uin||'—')}</td>
         <td>${a?esc((a.loc&&a.loc.name)||''):'<span class="muted">— unassigned —</span>'}</td>
         <td>${p.is_active?'<span class="chip approved">Active</span>':'<span class="chip draft">Inactive</span>'}</td></tr>`;
     }).join("")}</tbody></table></div>`
-    : '<div class="card muted">No pilots yet. Click “New pilot”.</div>';
+    : '<div class="card muted">No pilots yet. Click “New pilot”.</div>');
   $("plList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>{
     const p=pilots.find(x=>String(x.id)===tr.getAttribute("data-id")); if(p) form(p); }));
 }
@@ -83,6 +92,10 @@ function form(rec){
   m.innerHTML=`<button class="btn sm" id="plBack">← Back to Pilots</button>
     <div class="card" style="margin-top:12px">
       <div class="eyebrow">Daily Spray Entry · Pilot</div><h1>${rec?"Edit pilot":"New pilot"}</h1>
+      ${(rec && rec.source==='imported' && !rec.vendor_id)?`<div class="callout warn">
+        <b>Imported from your existing entries.</b> Set the <b>Vendor</b> below to finish setting this pilot up.
+        If this is a duplicate spelling of another pilot, use <b>Delete duplicate</b> — historic entries keep their
+        original text names, so deleting it changes no past data.</div>`:''}
       <div class="fgrid">
         <div class="field"><label>Vendor (employer) *</label><select id="p_vendor">
           <option value="">— select vendor —</option>
@@ -98,8 +111,10 @@ function form(rec){
           <option value="true" ${e.is_active!==false?'selected':''}>Yes</option>
           <option value="false" ${e.is_active===false?'selected':''}>No</option></select></div>
       </div>
-      <div class="row"><button class="btn green" id="plSave">${rec?"Save changes":"Create pilot"}</button>
-        <button class="btn" id="plCancel">Cancel</button></div>
+      <div class="row wrap"><button class="btn green" id="plSave">${rec?"Save changes":"Create pilot"}</button>
+        <button class="btn" id="plCancel">Cancel</button>
+        <div class="spacer"></div>
+        ${rec?'<button class="btn sm" id="plDel" style="color:#a3322a;border-color:#e4b4b4">Delete duplicate</button>':''}</div>
       <div class="err" id="plErr"></div>
     </div>
     ${rec?`<div class="card" id="plAssign"><h3>Location assignment</h3><div class="muted">Loading…</div></div>`:''}`;
@@ -120,6 +135,12 @@ function form(rec){
       ? "That pilot already exists for this vendor." : err.message; return; }
     window.OPS.audit(rec?"edited":"created","pilots",rec?rec.id:"new",out.name);
     window.OPS.flashTop("Saved ✓"); view();
+  });
+  if($("plDel")) $("plDel").addEventListener("click",async()=>{
+    if(!confirm("Delete “"+(rec.name||"")+"”?\n\nOnly possible if nothing points at this pilot. Past entries keep their original text names and are not affected.")) return;
+    const { error }=await sb().rpc("delete_pilot",{ p_id:rec.id });
+    if(error){ $("plErr").textContent=error.message; return; }
+    window.OPS.flashTop("Pilot deleted ✓"); view();
   });
   if(rec) renderAssign(rec);
 }
