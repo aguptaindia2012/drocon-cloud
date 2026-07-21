@@ -23,7 +23,7 @@ async function view(){
     $("lList").innerHTML = rows.length?`<table><thead><tr><th>Location</th><th>District</th><th>State</th><th class="num">Default rate</th></tr></thead>
       <tbody>${rows.map(l=>`<tr class="clickable" data-id="${l.id}"><td><b>${esc(l.name)}</b></td><td>${esc(l.district||'')}</td><td>${esc(l.state||'')}</td><td class="num">${l.rates&&l.rates.default!=null?money(l.rates.default):'—'}</td></tr>`).join("")}</tbody></table>`
       :'<div class="card muted">No locations yet. Add one to start logging acres.</div>';
-    $("lList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>locForm(locations.find(x=>x.id===tr.getAttribute("data-id")))));
+    $("lList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>locForm(locations.find(x=>String(x.id)===tr.getAttribute("data-id")))));
   }
   render(locations);
   $("lSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();

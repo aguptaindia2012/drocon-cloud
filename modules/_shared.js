@@ -106,7 +106,7 @@ function makeRegistry(cfg){
       $("rqList").innerHTML = rows.length ? `<table><thead><tr>${cfg.listCols.map(c=>`<th class="${c.num?'num':''}">${esc(c.label)}</th>`).join("")}</tr></thead>
         <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.listCols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.key],r):(c.mask?esc(window.OPS.helpers.maskPhone(r[c.key])):esc(r[c.key]==null?"":r[c.key]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`
         : '<div class="card muted">No records yet.</div>';
-      $("rqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>x.id===tr.getAttribute("data-id")))));
+      $("rqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
     }
     render(all);
     $("rqSearch").addEventListener("input",e=>{

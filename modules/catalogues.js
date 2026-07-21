@@ -55,7 +55,7 @@ async function view(){
         else if(c[0]==='gst_rate') v=(v==null?'':v+'%'); else if(c[0]==='current_stock') v=(v==null?0:v);
         return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td class="muted">edit ›</td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No items yet.</div>';
-    $("cList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>x.id===tr.getAttribute("data-id")))));
+    $("cList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
   }
   render(all);
   $("cSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();

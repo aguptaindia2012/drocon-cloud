@@ -71,8 +71,8 @@ async function view(){
         <td>${window.OPS.statusChip(x.status)}${x.r.approval_status==='submitted'?' <span class="chip in_review">in review</span>':''}</td>
         <td>${x.balance>0?`<button class="btn green sm" data-pay="${x.r.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.r.id}">Payments</button></td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No invoices match.</div>';
-    $("pTable").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>recordPayment(rows.find(z=>z.r.id===b.getAttribute("data-pay")),view)));
-    $("pTable").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayments(rows.find(z=>z.r.id===b.getAttribute("data-mng")),view)));
+    $("pTable").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>recordPayment(rows.find(z=>String(z.r.id)===b.getAttribute("data-pay")),view)));
+    $("pTable").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayments(rows.find(z=>String(z.r.id)===b.getAttribute("data-mng")),view)));
   }
   load();
 }

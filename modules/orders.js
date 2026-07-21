@@ -57,7 +57,7 @@ function upcoming(all){
         <td>${urgent?'<span class="chip rejected">Follow up now</span>':'<span class="chip in_review">Upcoming</span>'}</td></tr>`; }).join("")}</tbody></table></div>`
       :'<div class="muted">No upcoming orders with a start date. Add start dates to orders to populate this queue.</div>'}
       <p class="muted">Tip: "Days" is days until the order's start. &le; 15 days &rarr; follow up now.</p></div>`;
-  $("oBody").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(o=>o.id===tr.getAttribute("data-id")))));
+  $("oBody").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(o=>String(o.id)===tr.getAttribute("data-id")))));
 }
 
 function listAll(all){
@@ -68,7 +68,7 @@ function listAll(all){
         <td>${esc(o.status||'')}</td><td>${esc([o.city,o.state].filter(Boolean).join(", "))}</td><td>${esc(o.crop||'')}</td>
         <td>${esc([o.start_month,o.end_month].filter(Boolean).join(" → "))}</td><td class="num">${o.gross_rate?money(o.gross_rate):''}</td></tr>`).join("")}</tbody></table></div>`
       : '<div class="card muted">No orders yet.</div>';
-    $("oList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(o=>o.id===tr.getAttribute("data-id")))));
+    $("oList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(o=>String(o.id)===tr.getAttribute("data-id")))));
   }
   render(all);
   $("oSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();

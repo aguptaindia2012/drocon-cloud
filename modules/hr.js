@@ -174,8 +174,8 @@ async function records(){
         <td>${window.OPS.statusChip(x.r.status)}</td>
         <td>${x.r.status==='calculated'?`<button class="btn sm" data-post="${x.r.id}">Post</button> `:''}${x.bal>0.01?`<button class="btn sm" data-pay="${x.r.id}">+ Pay</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No salary runs for this month. Calculate them in <b>Salary Calculator</b>.</div>'}`;
-  $("rBody").querySelectorAll("[data-post]").forEach(b=>b.addEventListener("click",()=>postRun(rows.find(x=>x.r.id===b.getAttribute("data-post")).r)));
-  $("rBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payRun(rows.find(x=>x.r.id===b.getAttribute("data-pay")))));
+  $("rBody").querySelectorAll("[data-post]").forEach(b=>b.addEventListener("click",()=>postRun(rows.find(x=>String(x.r.id)===b.getAttribute("data-post")).r)));
+  $("rBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payRun(rows.find(x=>String(x.r.id)===b.getAttribute("data-pay")))));
 }
 async function postRun(run){
   if(!confirm("Post "+money(run.net_payable)+" salary expense to accounts?")) return;

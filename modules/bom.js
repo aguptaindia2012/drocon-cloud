@@ -26,7 +26,7 @@ async function listView(){
       <td><b>${esc(r.name)}</b></td><td class="num">${(r.parts||[]).length}</td>
       <td class="num">${money(c.sellingIncl)}</td><td class="num muted">${window.OPS.helpers.fmtDate(r.updated_at)}</td></tr>`; }).join("")}</tbody></table>`
     : '<div class="card muted">No designs yet. Click “New design”.</div>';
-  $("bList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>edit(rows.find(x=>x.id===tr.getAttribute("data-id")))));
+  $("bList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>edit(rows.find(x=>String(x.id)===tr.getAttribute("data-id")))));
 }
 
 function compute(d){

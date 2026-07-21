@@ -103,13 +103,21 @@ function renderFarmer(rows){
   $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th></tr></thead>
     <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.spray_date)}</td><td>${esc(r.pilot_name||'')}</td><td>${esc(r.farmer_name||'')}</td><td>${esc(mask(r.contact_no))}</td><td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical_company||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td><td>${r.gps_image_present?'✓':'·'}</td></tr>`).join("")}</tbody></table></div>`
     :'<div class="card muted">No matching rows.</div>';
-  $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>farmerForm(allRows.find(x=>x.id===tr.getAttribute("data-id")))));
+  // ids are bigint (numbers) but data-id is a string — compare as strings
+  $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>{
+    const row=allRows.find(x=>String(x.id)===tr.getAttribute("data-id"));
+    if(!row){ alert("Could not open that row — refresh and try again."); return; }
+    farmerForm(row); }));
 }
 function renderAcre(rows){
   $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th><th>Medicine</th><th>Status</th></tr></thead>
     <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical||'')}</td><td>${r.approval_status==="submitted"?'<span class="chip in_review">Edit in review</span>':'<span class="muted">OK</span>'}</td></tr>`).join("")}</tbody></table></div>`
     :'<div class="card muted">No matching rows.</div>';
-  $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>acreForm(allRows.find(x=>x.id===tr.getAttribute("data-id")))));
+  // ids are bigint (numbers) but data-id is a string — compare as strings
+  $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>{
+    const row=allRows.find(x=>String(x.id)===tr.getAttribute("data-id"));
+    if(!row){ alert("Could not open that row — refresh and try again."); return; }
+    acreForm(row); }));
 }
 
 /* ---------------- Excel report download (respects the filters + contact privacy) ---------------- */

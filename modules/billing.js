@@ -51,7 +51,7 @@ async function listView(type){
         <td>${esc(((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"")}</td>
         <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(dispStatus(r))}</td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No documents yet.</div>';
-    $("dList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>openExisting(all.find(x=>x.id===tr.getAttribute("data-id")))));
+    $("dList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>openExisting(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
   }
   render(all);
   $("dSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
