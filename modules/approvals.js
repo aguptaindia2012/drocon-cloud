@@ -20,6 +20,10 @@ const TYPES = {
     title:r=>{ const c=r.pending_changes||{}; const dir=((c.direction!=null?c.direction:r.direction)==='in')?'Purchased':'Sold';
       const qty=(c.qty!=null?c.qty:r.qty); const inv=r.sales_invoice_no||r.purchase_invoice_no||r.reason||"";
       return dir+" · qty "+qty+(inv?(" · "+inv):""); } },
+  acre_entries: { label:"Acre entry edit",
+    title:r=>{ const c=r.pending_changes||{}; const d=(c.entry_date!=null?c.entry_date:r.entry_date)||"";
+      const p=(c.pilot_name!=null?c.pilot_name:r.pilot_name)||""; const a=(c.acres!=null?c.acres:r.acres);
+      return (d?String(d).slice(0,10):"")+(p?(" · "+p):"")+(a!=null?(" · "+a+" ac"):""); } },
 };
 let invSpares={};   // id -> name cache for the inventory review summary
 const labelOf = (table,r)=>{ const l=TYPES[table].label; return typeof l==="function"?l(r):l; };
@@ -40,12 +44,14 @@ async function submit(table, id, approverId, title){
 async function approve(table, id, title){
   if(table==="agreements"){ const { error }=await sb().rpc("approve_agreement",{p_id:id,p_note:null}); if(error){ alert(error.message); return false; } }
   else if(table==="inventory_moves"){ const { error }=await sb().rpc("approve_inventory_edit",{p_id:id}); if(error){ alert(error.message); return false; } }
+  else if(table==="acre_entries"){ const { error }=await sb().rpc("approve_acre_edit",{p_id:id}); if(error){ alert(error.message); return false; } }
   else { const { error }=await sb().from(table).update({ approval_status:"approved", approved_by:me().id, approved_at:new Date().toISOString() }).eq("id",id); if(error){ alert(error.message); return false; } }
   window.OPS.audit("approved",table,id,title||""); window.OPS.flashTop("Approved ✓"); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
 async function reject(table, id, note, title){
   if(table==="agreements"){ const { error }=await sb().rpc("reject_agreement",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
   else if(table==="inventory_moves"){ const { error }=await sb().rpc("reject_inventory_edit",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
+  else if(table==="acre_entries"){ const { error }=await sb().rpc("reject_acre_edit",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
   else { const { error }=await sb().from(table).update({ approval_status:"rejected", approved_by:me().id, approved_at:new Date().toISOString(), reject_note:note||null }).eq("id",id); if(error){ alert(error.message); return false; } }
   window.OPS.audit("rejected",table,id,note||""); window.OPS.flashTop("Rejected"); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
@@ -99,7 +105,7 @@ async function reviewQueue(){
     if(!admin) q=q.eq("assigned_approver",me().id);
     const { data }=await q; return (data||[]).map(r=>({table:"agreements",r}));
   }
-  const groups=await Promise.all([ pendingAgs(), pending("documents"), pending("clients"), pending("vendors"), pending("bom_designs"), pending("inventory_moves") ]);
+  const groups=await Promise.all([ pendingAgs(), pending("documents"), pending("clients"), pending("vendors"), pending("bom_designs"), pending("inventory_moves"), pending("acre_entries") ]);
   const items=[].concat(...groups);
   // preload spare names for any inventory items so the summary can name them
   try{
@@ -165,13 +171,29 @@ function summaryHTML(it){
       <tbody>${rowsDef.map(([lab,k])=>{ const changed=String(cur[k]??"")!==String(prop[k]??"");
         return `<tr${changed?' style="background:#fff7e6"':''}><td>${esc(lab)}</td><td>${esc(cur[k]??"")}</td><td>${changed?"<b>"+esc(prop[k]??"")+"</b>":esc(prop[k]??"")}</td></tr>`; }).join("")}</tbody></table>`;
   }
+  if(it.table==="acre_entries"){
+    const c=r.pending_changes||{};
+    const has=k=>Object.prototype.hasOwnProperty.call(c,k);
+    const cur={ date:r.entry_date?fmtDate(r.entry_date):"", pilot:r.pilot_name||"", acres:r.acres, client:r.client_rate, farmer:r.farmer_rate,
+      rate:r.rate, amount:r.amount, crop:r.crop||"", chem:r.chemical||"" };
+    const prop={ date:has('entry_date')?fmtDate(c.entry_date):cur.date, pilot:has('pilot_name')?(c.pilot_name||""):cur.pilot,
+      acres:has('acres')?c.acres:cur.acres, client:has('client_rate')?c.client_rate:cur.client, farmer:has('farmer_rate')?c.farmer_rate:cur.farmer,
+      rate:has('rate')?c.rate:cur.rate, amount:has('amount')?c.amount:cur.amount, crop:has('crop')?(c.crop||""):cur.crop,
+      chem:has('chemical')?(c.chemical||""):cur.chem };
+    const rowsDef=[["Date","date"],["Pilot","pilot"],["Acres","acres"],["Client rate","client"],["Farmer rate","farmer"],["Total rate","rate"],["Amount","amount"],["Crop","crop"],["Medicine","chem"]];
+    return `<p class="muted">Proposed edit to an acre entry — the values below take effect only when you approve.</p>
+      <table class="tight" style="margin-top:6px"><thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead>
+      <tbody>${rowsDef.map(([lab,k])=>{ const changed=String(cur[k]??"")!==String(prop[k]??"");
+        return `<tr${changed?' style="background:#fff7e6"':''}><td>${esc(lab)}</td><td>${esc(cur[k]??"")}</td><td>${changed?"<b>"+esc(prop[k]??"")+"</b>":esc(prop[k]??"")}</td></tr>`; }).join("")}</tbody></table>`;
+  }
   return '<p class="muted">No summary available.</p>';
 }
 async function loadChanges(it){
   const host=$("rdChanges"); if(!host) return;
   const variants=({ documents:["document","documents"], agreements:["agreement","agreements"],
     clients:["client","clients"], vendors:["vendor","vendors"], bom_designs:["bom_design","bom_designs","bom"],
-    inventory_moves:["inventory_move","inventory_moves"] }[it.table])||[it.table];
+    inventory_moves:["inventory_move","inventory_moves"],
+    acre_entries:["acre_entry","acre_entries"] }[it.table])||[it.table];
   const { data }=await sb().from("audit_log").select("*").in("entity",variants).eq("entity_id",String(it.r.id)).order("created_at",{ascending:false}).limit(8);
   const rows=data||[]; if(!rows.length){ host.innerHTML=""; return; }
   const ps=await listProfilesCached();
@@ -215,6 +237,7 @@ function openItem(it){
   else if(it.table==="vendors"){ window.OPS.openTool("vendors"); }
   else if(it.table==="bom_designs"){ window.OPS.openTool("bom"); }
   else if(it.table==="inventory_moves"){ window.OPS.openTool("inventory"); }
+  else if(it.table==="acre_entries"){ window.OPS.openTool("entries"); }
 }
 
 window.OPS.approvals = { submit, approve, reject, bar };

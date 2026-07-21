@@ -433,6 +433,7 @@ async function refreshReviewCount(){
     cnt("agreements","status","in_review"),
     cnt("daily_submissions","approval_status","submitted"),
     cnt("inventory_moves","approval_status","submitted"),
+    cnt("acre_entries","approval_status","submitted"),
   ]);
   window.OPS.reviewCount = parts.reduce((a,b)=>a+b,0);
   renderNav();

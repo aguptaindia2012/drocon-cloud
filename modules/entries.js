@@ -56,6 +56,8 @@ function passFilters(m,r){
 }
 
 async function view(){
+  // another tool (e.g. Acre Tracker) can ask for a specific sub-tab
+  if(window.OPS.entriesMode){ mode=window.OPS.entriesMode; window.OPS.entriesMode=null; }
   const m=$("main"); const canX=window.OPS.canExport();
   const defs=fieldDefs(mode); const f=fltr[mode];
   m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>Entries</h1>
@@ -104,8 +106,8 @@ function renderFarmer(rows){
   $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>farmerForm(allRows.find(x=>x.id===tr.getAttribute("data-id")))));
 }
 function renderAcre(rows){
-  $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th><th>Medicine</th></tr></thead>
-    <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical||'')}</td></tr>`).join("")}</tbody></table></div>`
+  $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th><th>Medicine</th><th>Status</th></tr></thead>
+    <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical||'')}</td><td>${r.approval_status==="submitted"?'<span class="chip in_review">Edit in review</span>':'<span class="muted">OK</span>'}</td></tr>`).join("")}</tbody></table></div>`
     :'<div class="card muted">No matching rows.</div>';
   $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>acreForm(allRows.find(x=>x.id===tr.getAttribute("data-id")))));
 }
@@ -196,8 +198,12 @@ async function loadAcre(){
 }
 function acreForm(r){
   const m=$("main");
+  const admin = window.OPS.isAdmin() || (window.OPS.isApprover && window.OPS.isApprover());
+  const pend = r.approval_status==="submitted" && r.pending_changes;
   m.innerHTML=`<button class="btn sm" id="eqBack">← Back to Entries</button>
     <div class="card" style="margin-top:12px"><div class="eyebrow">Daily Spray Entry · Acre entry</div><h1>Edit acre entry</h1>
+    ${pend?'<div class="callout warn">An edit to this entry is <b>awaiting approval</b>. The figures below are the current (live) values — the proposed change is shown in the <b>Review / Approvals</b> queue.</div>':''}
+    ${admin?'':'<div class="callout">Your changes are <b>submitted for approval</b> — the entry only updates once an approver accepts it.</div>'}
     <div class="fgrid">
       <div class="field"><label>Date</label><input id="a_entry_date" type="date" value="${esc((r.entry_date||"").slice(0,10))}"></div>
       <div class="field"><label>Location</label><select id="a_location_id"><option value="">— none —</option>${locations.map(l=>`<option value="${l.id}" ${r.location_id===l.id?'selected':''}>${esc(l.name)}</option>`).join("")}</select></div>
@@ -207,18 +213,33 @@ function acreForm(r){
       <div class="field"><label>Farmer rate (₹/acre)</label><input id="a_farmer_rate" type="number" step="any" value="${esc(r.farmer_rate)}"></div>
       <div class="field"><label>Crop</label><input id="a_crop" value="${esc(r.crop||'')}"></div>
       <div class="field"><label>Medicine / Chemical</label><input id="a_chemical" value="${esc(r.chemical||'')}"></div>
+      ${admin?'':`<div class="field full"><label>Send approval to *</label><select id="a_approver"><option value="">— select approver —</option></select></div>`}
     </div>
-    <div class="row"><button class="btn green" id="eqSave">Save changes</button><button class="btn" id="eqCancel">Cancel</button>
+    <div class="row"><button class="btn green" id="eqSave">${admin?"Save changes":"Submit for approval"}</button><button class="btn" id="eqCancel">Cancel</button>
       <div class="spacer"></div>${window.OPS.canDelete()?'<button class="btn sm" id="eqDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
     <div class="err" id="eqErr"></div></div>`;
   $("eqBack").addEventListener("click",view); $("eqCancel").addEventListener("click",view);
+  if($("a_approver")){ window.OPS.listProfiles().then(ps=>{ const opts=(ps||[]).filter(p=>!p.is_external && p.id!==window.OPS.me.id);
+    $("a_approver").innerHTML='<option value="">— select approver —</option>'+opts.map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)} (${esc(p.role)})</option>`).join(""); }); }
   $("eqSave").addEventListener("click",async()=>{
     const acres=num($("a_acres").value), cr=num($("a_client_rate").value), fr=num($("a_farmer_rate").value); const rate=cr+fr;
     const out={ entry_date:$("a_entry_date").value||null, location_id:$("a_location_id").value||null, pilot_name:$("a_pilot_name").value||null,
       acres:acres||0, client_rate:cr||null, farmer_rate:fr||null, rate:rate||null, amount:(acres*rate)||null, crop:$("a_crop").value||null, chemical:$("a_chemical").value||null };
-    const { error }=await sb().from("acre_entries").update(out).eq("id",r.id);
-    if(error){ $("eqErr").textContent=error.message; return; }
-    window.OPS.audit("edited","acre_entries",r.id,out.pilot_name||""); window.OPS.flashTop("Saved ✓"); view();
+    $("eqSave").disabled=true;
+    if(admin){
+      const { error }=await sb().from("acre_entries").update(out).eq("id",r.id);
+      $("eqSave").disabled=false; if(error){ $("eqErr").textContent=error.message; return; }
+      window.OPS.audit("edited","acre_entries",r.id,out.pilot_name||""); window.OPS.flashTop("Saved ✓"); view(); return;
+    }
+    // non-approver: park the change — the live entry only updates once approved
+    const approver=$("a_approver")?$("a_approver").value:"";
+    if(!approver){ $("eqSave").disabled=false; $("eqErr").textContent="Choose who should approve this change."; return; }
+    const { error }=await sb().rpc("propose_acre_edit",{ p_id:r.id, p_changes:out, p_approver:approver });
+    $("eqSave").disabled=false; if(error){ $("eqErr").textContent=error.message; return; }
+    window.OPS.audit("edit_requested","acre_entries",r.id,"proposed edit sent for approval");
+    try{ await sb().from("notifications").insert({ user_id:approver, message:"Review: acre entry edit ("+(out.pilot_name||fmtDate(out.entry_date))+")" }); }catch(e){}
+    window.OPS.refreshNotifs&&window.OPS.refreshNotifs(); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount();
+    window.OPS.flashTop("Edit submitted for approval ✓"); view();
   });
   if($("eqDel")) $("eqDel").addEventListener("click",async()=>{ if(!confirm("Delete this acre row?"))return; const { error }=await sb().from("acre_entries").delete().eq("id",r.id); if(error){ alert(error.message); return; } window.OPS.audit("deleted","acre_entries",r.id,""); view(); });
 }

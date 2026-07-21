@@ -69,6 +69,7 @@ function form(rec){
     <div class="card" style="margin-top:12px">
       <h1>${rec?"Edit":"New"} ${active==='service'?'service':'spare'}</h1>
       ${rec&&active==='spare'?`<div class="callout">Current stock: <b>${num(rec.current_stock)}</b> ${esc(rec.unit||'')}. Adjust stock in the <b>Inventory</b> tool.</div>`:''}
+      ${rec?'<div id="cUsage" class="muted">Checking where this item is used…</div>':''}
       <div class="fgrid">${cfg.fields.map(f=>{
         const v=e[f.key]==null?"":e[f.key];
         const inner=f.type==="textarea"?`<textarea id="cf_${f.key}">${esc(v)}</textarea>`:`<input id="cf_${f.key}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':''} value="${esc(v)}">`;
@@ -76,10 +77,11 @@ function form(rec){
       }).join("")}</div>
       <div class="row"><button class="btn green" id="cSave">${rec?"Save":"Create"}</button>
         <button class="btn" id="cCancel">Cancel</button><div class="spacer"></div>
-        ${rec && window.OPS.canDelete()?'<button class="btn sm" id="cDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
+        ${rec?'<button class="btn sm" id="cDel" style="color:#a3322a;border-color:#e4b4b4" disabled title="Checking usage…">Delete</button>':''}</div>
       <div class="err" id="cErr"></div>
     </div>`;
   $("cBack").addEventListener("click",view); $("cCancel").addEventListener("click",view);
+  if(rec) checkUsage(rec);
   $("cSave").addEventListener("click",async()=>{
     const out={};
     for(const f of cfg.fields){ let v=$("cf_"+f.key).value; if(f.type==="number") v=v===""?null:Number(v); out[f.key]=v===""?null:v;
@@ -88,8 +90,44 @@ function form(rec){
     else { const { error }=await sb().from(cfg.table).insert(out); if(error){ $("cErr").textContent=error.message; return; } }
     window.OPS.flashTop("Saved ✓"); view();
   });
-  if($("cDel")) $("cDel").addEventListener("click",async()=>{ if(!confirm("Delete this item?"))return;
-    const { error }=await sb().from(cfg.table).delete().eq("id",rec.id); if(error){ alert(error.message); return; } view(); });
+  if($("cDel")) $("cDel").addEventListener("click",async()=>{
+    // re-check at click time so a stale screen can't delete an item that is now in use
+    const u=await usageOf(rec);
+    if(!u || u.blocked){ alert(u?("Cannot delete — "+u.reasons.join("; ")+"."):"Could not verify usage; delete cancelled."); checkUsage(rec); return; }
+    if(!confirm("Delete “"+(rec.name||"")+"”? This item is not used anywhere and has no stock."))return;
+    const { error }=await sb().from(cfg.table).delete().eq("id",rec.id);
+    if(error){ alert(error.message); return; }
+    window.OPS.audit("deleted",cfg.table,rec.id,rec.name||""); window.OPS.flashTop("Item deleted ✓"); view(); });
+}
+
+/* ---- usage guard: an item can only be deleted when it has no stock and is not
+   referenced by any invoice / quotation / purchase order / credit note ---- */
+async function usageOf(rec){
+  const cfg=CATS[active];
+  const kind = active==="spare" ? "spare" : "service";
+  const { data, error }=await sb().rpc("catalogue_usage",{ p_kind:kind, p_id:rec.id, p_name:rec.name||"" });
+  if(error){ console.error(error); return null; }
+  const u=data||{}; const docs=num(u.docs), moves=num(u.moves), stock=num(u.stock);
+  const reasons=[];
+  if(stock!==0) reasons.push("stock on hand is "+stock);
+  if(docs>0)    reasons.push("used on "+docs+" document"+(docs>1?"s":"")+(u.sample?(" ("+u.sample+")"):""));
+  if(moves>0)   reasons.push("has "+moves+" inventory movement"+(moves>1?"s":""));
+  return { docs, moves, stock, sample:u.sample||"", reasons, blocked:reasons.length>0 };
+}
+async function checkUsage(rec){
+  const host=$("cUsage"), btn=$("cDel");
+  const u=await usageOf(rec);
+  if(!host) return;
+  if(!u){ host.innerHTML='<span style="color:#9a5b00">Could not check usage — deletion is disabled.</span>';
+    if(btn){ btn.disabled=true; btn.title="Usage check failed"; } return; }
+  if(u.blocked){
+    host.innerHTML='<div class="callout warn" style="margin:8px 0"><b>In use — cannot be deleted.</b> '+esc(u.reasons.join("; "))+
+      '.<br><span class="muted">You can still edit its details. To remove it, clear the stock and it must not be referenced by any document.</span></div>';
+    if(btn){ btn.disabled=true; btn.title="Cannot delete: "+u.reasons.join("; "); btn.style.opacity=".5"; }
+  } else {
+    host.innerHTML='<div class="callout" style="margin:8px 0">Not used on any document and no stock on hand — this item <b>can be deleted</b>.</div>';
+    if(btn){ btn.disabled=false; btn.title="Delete this unused item"; btn.style.opacity="1"; }
+  }
 }
 
 window.OPS.routes.catalogues = view;

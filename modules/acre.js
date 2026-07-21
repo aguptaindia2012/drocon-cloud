@@ -18,11 +18,15 @@ async function loadLocations(){ const { data }=await sb().from("spray_locations"
 async function view(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Dashboards</div><h1>Acre Tracker</h1>
-    <div class="row" style="margin:10px 0"><div class="spacer"></div>
+    <div class="callout">This is the summary view. To <b>correct an entry</b>, use <b>Edit acre entries</b> — changes by non-approvers go to the Review queue and apply once approved.</div>
+    <div class="row" style="margin:10px 0">
+      <button class="btn green sm" id="aEdit">✎ Edit acre entries</button>
+      <div class="spacer"></div>
       ${window.OPS.isAdmin()?'<button class="btn sm" id="aImport">⬆ Import acre history (CSV)</button>':''}
     </div>
     <div id="aBody" class="muted">Loading…</div>`;
   if($("aImport")) $("aImport").addEventListener("click",importCSV);
+  if($("aEdit")) $("aEdit").addEventListener("click",()=>{ window.OPS.entriesMode="acre"; window.OPS.openTool("entries"); });
   dashboard();
 }
 
