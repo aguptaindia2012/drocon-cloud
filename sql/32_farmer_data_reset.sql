@@ -1,55 +1,69 @@
 -- ============================================================================
--- 32. Clear farmer spray data BEFORE 1 June 2026 so the team can re-enter it
+-- 32. Clear mis-entered farmer spray data so the team can re-enter it
 -- ----------------------------------------------------------------------------
 -- ⚠ THIS DELETES LIVE DATA. Run the steps IN ORDER and read the output of each
 --   one before moving to the next. Step 2 makes a full in-database backup, so
 --   the delete in Step 3 is reversible via Step 5.
 --
--- CUT-OFF (confirmed): rows with spray_date EARLIER THAN 1 June 2026 are deleted.
---   KEEP   : everything on/after 2026-06-01
---   DELETE : all farmer history before 2026-06-01
+-- CONFIRMED SCOPE — two ranges are deleted:
+--     (a) everything BEFORE  1 June 2026      (old data, to be re-entered)
+--     (b) everything ON/AFTER 22 June 2026    (mis-entry)
+--
+--   >>> THE ONLY FARMER DATA THAT SURVIVES IS 1 JUNE 2026 -> 21 JUNE 2026 <<<
+--
+--   If that is not what you expect, STOP after Step 1 and do not run Step 3.
+--   Affects public.farmer_sprays ONLY. Acre entries, invoices, agreements,
+--   inventory, catalogues and every other table are untouched.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- STEP 1 — Look before you leap. How many rows, and over what date range?
+-- STEP 1 — Look before you leap. What goes, and what stays?
 -- ---------------------------------------------------------------------------
-select count(*)                        as rows_to_delete,
-       min(spray_date)                 as oldest,
-       max(spray_date)                 as newest,
-       count(distinct pilot_name)      as pilots,
-       round(sum(acre)::numeric, 2)    as total_acres,
-       round(sum(amount)::numeric, 2)  as total_amount
-  from public.farmer_sprays
- where spray_date < date '2026-06-01';
+-- (a) rows to DELETE, split by reason
+select 'before 2026-06-01 (old)'   as bucket,
+       count(*) as rows_to_delete, min(spray_date) as oldest, max(spray_date) as newest,
+       round(sum(acre)::numeric,2) as acres, round(sum(amount)::numeric,2) as amount
+  from public.farmer_sprays where spray_date < date '2026-06-01'
+union all
+select 'on/after 2026-06-22 (mis-entry)',
+       count(*), min(spray_date), max(spray_date),
+       round(sum(acre)::numeric,2), round(sum(amount)::numeric,2)
+  from public.farmer_sprays where spray_date >= date '2026-06-22';
 
--- Sanity check — this is what SURVIVES (should be your 1 June onward data):
-select count(*) as rows_kept, min(spray_date) as kept_from, max(spray_date) as kept_to
+-- (b) rows that SURVIVE — must be 1 Jun 2026 .. 21 Jun 2026 only
+select count(*) as rows_kept, min(spray_date) as kept_from, max(spray_date) as kept_to,
+       round(sum(acre)::numeric,2) as acres_kept
   from public.farmer_sprays
- where spray_date >= date '2026-06-01';
+ where spray_date >= date '2026-06-01' and spray_date < date '2026-06-22';
 
 -- ---------------------------------------------------------------------------
 -- STEP 2 — Full backup INTO the database (run this before Step 3).
 --          Nothing is deleted here; it only copies the rows aside.
 -- ---------------------------------------------------------------------------
-create table if not exists public.farmer_sprays_backup_pre20260601 as
+create table if not exists public.farmer_sprays_backup_20260722 as
   select * from public.farmer_sprays
-   where spray_date < date '2026-06-01';
+   where spray_date <  date '2026-06-01'
+      or spray_date >= date '2026-06-22';
 
--- Confirm the backup matches rows_to_delete from Step 1 before continuing.
-select count(*) as rows_backed_up from public.farmer_sprays_backup_pre20260601;
+-- Confirm this equals the TOTAL of the two delete buckets in Step 1(a).
+select count(*) as rows_backed_up from public.farmer_sprays_backup_20260722;
 
 -- ---------------------------------------------------------------------------
--- STEP 3 — The delete. Only run this once Steps 1 and 2 both look correct.
+-- STEP 3 — The delete. Only run once Steps 1 and 2 both look correct.
 -- ---------------------------------------------------------------------------
 delete from public.farmer_sprays
- where spray_date < date '2026-06-01';
+ where spray_date <  date '2026-06-01'
+    or spray_date >= date '2026-06-22';
 
 -- ---------------------------------------------------------------------------
--- STEP 4 — Verify: the first number must be 0, the second is your kept data.
+-- STEP 4 — Verify: should_be_zero must be 0; rows_remaining is your 1–21 June data.
 -- ---------------------------------------------------------------------------
 select
-  (select count(*) from public.farmer_sprays where spray_date <  date '2026-06-01') as should_be_zero,
-  (select count(*) from public.farmer_sprays where spray_date >= date '2026-06-01') as rows_remaining;
+  (select count(*) from public.farmer_sprays
+     where spray_date < date '2026-06-01' or spray_date >= date '2026-06-22') as should_be_zero,
+  (select count(*) from public.farmer_sprays) as rows_remaining,
+  (select min(spray_date) from public.farmer_sprays) as remaining_from,
+  (select max(spray_date) from public.farmer_sprays) as remaining_to;
 
 -- ---------------------------------------------------------------------------
 -- STEP 5 — UNDO (only if you need the data back). Restores every backed-up row.
@@ -57,10 +71,15 @@ select
 -- ---------------------------------------------------------------------------
 -- insert into public.farmer_sprays
 --   overriding system value
---   select * from public.farmer_sprays_backup_pre20260601;
+--   select * from public.farmer_sprays_backup_20260722;
+
+-- To restore ONLY the mis-entered range (if you keep the rest deleted):
+-- insert into public.farmer_sprays
+--   overriding system value
+--   select * from public.farmer_sprays_backup_20260722 where spray_date >= date '2026-06-22';
 
 -- ---------------------------------------------------------------------------
 -- STEP 6 — Housekeeping: drop the backup once the team has re-entered the data
 --          and you are certain you no longer need it. NOT reversible.
 -- ---------------------------------------------------------------------------
--- drop table public.farmer_sprays_backup_pre20260601;
+-- drop table public.farmer_sprays_backup_20260722;
