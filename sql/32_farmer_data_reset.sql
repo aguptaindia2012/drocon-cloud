@@ -7,9 +7,9 @@
 --
 -- CONFIRMED SCOPE — two ranges are deleted:
 --     (a) everything BEFORE  1 June 2026      (old data, to be re-entered)
---     (b) everything ON/AFTER 22 June 2026    (mis-entry)
+--     (b) everything ON/AFTER 22 July 2026    (mis-entry)
 --
---   >>> THE ONLY FARMER DATA THAT SURVIVES IS 1 JUNE 2026 -> 21 JUNE 2026 <<<
+--   >>> THE ONLY FARMER DATA THAT SURVIVES IS 1 JUNE 2026 -> 21 JULY 2026 <<<
 --
 --   If that is not what you expect, STOP after Step 1 and do not run Step 3.
 --   Affects public.farmer_sprays ONLY. Acre entries, invoices, agreements,
@@ -25,16 +25,16 @@ select 'before 2026-06-01 (old)'   as bucket,
        round(sum(acre)::numeric,2) as acres, round(sum(amount)::numeric,2) as amount
   from public.farmer_sprays where spray_date < date '2026-06-01'
 union all
-select 'on/after 2026-06-22 (mis-entry)',
+select 'on/after 2026-07-22 (mis-entry)',
        count(*), min(spray_date), max(spray_date),
        round(sum(acre)::numeric,2), round(sum(amount)::numeric,2)
-  from public.farmer_sprays where spray_date >= date '2026-06-22';
+  from public.farmer_sprays where spray_date >= date '2026-07-22';
 
--- (b) rows that SURVIVE — must be 1 Jun 2026 .. 21 Jun 2026 only
+-- (b) rows that SURVIVE — must be 1 Jun 2026 .. 21 Jul 2026 only
 select count(*) as rows_kept, min(spray_date) as kept_from, max(spray_date) as kept_to,
        round(sum(acre)::numeric,2) as acres_kept
   from public.farmer_sprays
- where spray_date >= date '2026-06-01' and spray_date < date '2026-06-22';
+ where spray_date >= date '2026-06-01' and spray_date < date '2026-07-22';
 
 -- ---------------------------------------------------------------------------
 -- STEP 2 — Full backup INTO the database (run this before Step 3).
@@ -43,7 +43,7 @@ select count(*) as rows_kept, min(spray_date) as kept_from, max(spray_date) as k
 create table if not exists public.farmer_sprays_backup_20260722 as
   select * from public.farmer_sprays
    where spray_date <  date '2026-06-01'
-      or spray_date >= date '2026-06-22';
+      or spray_date >= date '2026-07-22';
 
 -- Confirm this equals the TOTAL of the two delete buckets in Step 1(a).
 select count(*) as rows_backed_up from public.farmer_sprays_backup_20260722;
@@ -53,14 +53,14 @@ select count(*) as rows_backed_up from public.farmer_sprays_backup_20260722;
 -- ---------------------------------------------------------------------------
 delete from public.farmer_sprays
  where spray_date <  date '2026-06-01'
-    or spray_date >= date '2026-06-22';
+    or spray_date >= date '2026-07-22';
 
 -- ---------------------------------------------------------------------------
--- STEP 4 — Verify: should_be_zero must be 0; rows_remaining is your 1–21 June data.
+-- STEP 4 — Verify: should_be_zero must be 0; rows_remaining is your 1 Jun – 21 Jul data.
 -- ---------------------------------------------------------------------------
 select
   (select count(*) from public.farmer_sprays
-     where spray_date < date '2026-06-01' or spray_date >= date '2026-06-22') as should_be_zero,
+     where spray_date < date '2026-06-01' or spray_date >= date '2026-07-22') as should_be_zero,
   (select count(*) from public.farmer_sprays) as rows_remaining,
   (select min(spray_date) from public.farmer_sprays) as remaining_from,
   (select max(spray_date) from public.farmer_sprays) as remaining_to;
@@ -76,7 +76,7 @@ select
 -- To restore ONLY the mis-entered range (if you keep the rest deleted):
 -- insert into public.farmer_sprays
 --   overriding system value
---   select * from public.farmer_sprays_backup_20260722 where spray_date >= date '2026-06-22';
+--   select * from public.farmer_sprays_backup_20260722 where spray_date >= date '2026-07-22';
 
 -- ---------------------------------------------------------------------------
 -- STEP 6 — Housekeeping: drop the backup once the team has re-entered the data
