@@ -49,7 +49,12 @@ async function dashboard(){
   const byL={}; rows.forEach(r=>{ const k=(r.loc&&r.loc.name)||"(none)"; byL[k]=byL[k]||{a:0,r:0}; byL[k].a+=num(r.acres); byL[k].r+=num(r.amount); });
   const locs=Object.entries(byL).map(([k,o])=>({k,...o})).sort((a,b)=>b.r-a.r);
   // last 7 days by location, broken down per pilot (to spot under-supplied days)
-  const MIN_ACRES=15;   // minimum daily acreage a client should provide per pilot
+  const MIN_ACRES=15;    // green  — at/above the daily minimum
+  const WARN_ACRES=13;   // yellow — 13 to under 15; below 13 is red
+  // band for a pilot-day: >=15 green, 13-14 yellow, <=12 red
+  const band=v=> v>=MIN_ACRES  ? {key:"green", label:"OK",     color:"#3e6b20", bg:"#e3f0d9"}
+               : v>=WARN_ACRES ? {key:"yellow",label:"Yellow", color:"#9a5b00", bg:"#fff0db"}
+                               : {key:"red",   label:"Red",    color:"#a3322a", bg:"#fbe0de"};
   const since=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
   const last7=rows.filter(r=>r.entry_date>=since);
   const byLoc={}; const days=new Set();
@@ -65,7 +70,8 @@ async function dashboard(){
   const below=[];
   Object.keys(byLoc).forEach(k=>Object.keys(byLoc[k].pilots).forEach(p=>{
     dayList.forEach(d=>{ const v=byLoc[k].pilots[p][d];
-      if(v!=null && v<MIN_ACRES) below.push({loc:k,pilot:p,day:d,acres:v}); }); }));
+      if(v!=null && v<MIN_ACRES) below.push({loc:k,pilot:p,day:d,acres:v,band:band(v)}); }); }));
+  const redCount=below.filter(x=>x.band.key==="red").length;
 
   host.innerHTML=`
     <div class="statrow">
@@ -73,7 +79,7 @@ async function dashboard(){
       <div class="stat"><div class="n">${money(totR)}</div><div class="l">Total revenue</div></div>
       <div class="stat"><div class="n">${monthA.toFixed(0)}</div><div class="l">Acres this month</div></div>
       <div class="stat"><div class="n">${money(monthR)}</div><div class="l">Revenue this month</div></div>
-      <div class="stat" style="${below.length?'background:#fbe0de':''}"><div class="n" style="${below.length?'color:#a3322a':''}">${below.length}</div><div class="l">Pilot-days &lt; ${MIN_ACRES} ac (7d)</div></div>
+      <div class="stat" style="${redCount?'background:#fbe0de':(below.length?'background:#fff0db':'')}"><div class="n" style="${redCount?'color:#a3322a':(below.length?'color:#9a5b00':'')}">${below.length}</div><div class="l">Below ${MIN_ACRES} ac (7d)${redCount?" · "+redCount+" red":""}</div></div>
     </div>
     <div class="row" id="acreReport" style="margin-bottom:10px"></div>
     <div class="card"><h3>Charts</h3><div class="fgrid">
@@ -81,9 +87,10 @@ async function dashboard(){
       <div>${window.OPS.report.canvas("acLoc",560,240)}</div></div></div>
     <div class="card"><h3>Last 7 days — acres by location &amp; pilot</h3>
       <p class="muted" style="margin-top:-4px">Each location expands to its pilots. A pilot-day is
-        <b style="color:#3e6b20">green at ${MIN_ACRES} acres or more</b> and
-        <b style="color:#a3322a">red below ${MIN_ACRES}</b> — red days are where the client did not supply the daily minimum.
-        A dot (·) means no entry that day.</p>
+        <b style="color:#3e6b20;background:#e3f0d9;padding:1px 5px;border-radius:4px">green at ${MIN_ACRES}+ acres</b>,
+        <b style="color:#9a5b00;background:#fff0db;padding:1px 5px;border-radius:4px">yellow at ${WARN_ACRES}–${MIN_ACRES-1}</b>,
+        <b style="color:#a3322a;background:#fbe0de;padding:1px 5px;border-radius:4px">red at ${WARN_ACRES-1} or less</b> —
+        anything not green is a day the client fell short of the daily minimum. A dot (·) means no entry that day.</p>
       ${dayList.length?`<div style="overflow:auto"><table><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
       <tbody>${Object.keys(byLoc).sort().map(k=>{
         const L=byLoc[k]; const tot=dayList.reduce((s,d)=>s+(L.days[d]||0),0);
@@ -92,8 +99,8 @@ async function dashboard(){
           const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
           const cells=dayList.map(d=>{ const v=P[d];
             if(v==null) return '<td class="num muted">·</td>';
-            const ok=v>=MIN_ACRES;
-            return `<td class="num" style="font-weight:700;color:${ok?'#3e6b20':'#a3322a'};background:${ok?'#e3f0d9':'#fbe0de'}">${v.toFixed(1)}</td>`;
+            const b=band(v);
+            return `<td class="num" style="font-weight:700;color:${b.color};background:${b.bg}">${v.toFixed(1)}</td>`;
           }).join("");
           return `<tr><td style="padding-left:26px">${esc(p)}</td>${cells}<td class="num">${pt.toFixed(1)}</td></tr>`;
         }).join("");
@@ -102,9 +109,10 @@ async function dashboard(){
         :'<div class="muted">No sprays in the last 7 days.</div>'}</div>
     ${below.length?`<div class="card"><h3>⚠ Pilot-days below ${MIN_ACRES} acres (last 7 days)</h3>
       <p class="muted" style="margin-top:-4px">Use this when raising under-supply with the client.</p>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Short by</th></tr></thead>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Short by</th><th>Band</th></tr></thead>
       <tbody>${below.sort((a,b)=>a.day<b.day?1:-1).map(x=>`<tr><td>${fmtDate(x.day)}</td><td>${esc(x.loc)}</td><td>${esc(x.pilot)}</td>
-        <td class="num" style="color:#a3322a;font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td></tr>`).join("")}</tbody></table></div></div>`:''}
+        <td class="num" style="color:${x.band.color};font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td>
+        <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td></tr>`).join("")}</tbody></table></div></div>`:''}
     <div class="card"><h3>Monthly work</h3><table><thead><tr><th>Month</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
       <tbody>${months.map(k=>`<tr><td>${k}</td><td class="num">${byM[k].a.toFixed(1)}</td><td class="num">${money(byM[k].r)}</td></tr>`).join("")}</tbody></table></div>
     <div class="card"><h3>Location-wise totals</h3><table><thead><tr><th>Location</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
@@ -118,10 +126,10 @@ async function dashboard(){
     {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total acres",totA.toFixed(1)],["Total revenue",money(totR)],["Acres this month",monthA.toFixed(1)],["Revenue this month",money(monthR)]]}},
     {heading:"Monthly work", image:window.OPS.report.img("acMonthly"), table:{headers:["Month","Acres","Revenue"], rows:cm.map(k=>[k,byM[k].a.toFixed(1),money(byM[k].r)])}},
     {heading:"Location-wise totals", image:window.OPS.report.img("acLoc"), table:{headers:["Location","Acres","Revenue"], rows:locs.map(l=>[l.k,l.a.toFixed(1),money(l.r)])}},
-    {heading:"Pilot-days below "+MIN_ACRES+" acres (last 7 days)",
-     table:{headers:["Date","Location","Pilot","Acres","Short by"],
-            rows: below.length? below.sort((a,b)=>a.day<b.day?1:-1).map(x=>[fmtDate(x.day),x.loc,x.pilot,x.acres.toFixed(1),(MIN_ACRES-x.acres).toFixed(1)])
-                              : [["—","All pilots met the "+MIN_ACRES+"-acre minimum","","",""]]}},
+    {heading:"Pilot-days below "+MIN_ACRES+" acres (last 7 days) — red ≤"+(WARN_ACRES-1)+", yellow "+WARN_ACRES+"–"+(MIN_ACRES-1),
+     table:{headers:["Date","Location","Pilot","Acres","Short by","Band"],
+            rows: below.length? below.sort((a,b)=>a.day<b.day?1:-1).map(x=>[fmtDate(x.day),x.loc,x.pilot,x.acres.toFixed(1),(MIN_ACRES-x.acres).toFixed(1),x.band.label])
+                              : [["—","All pilots met the "+MIN_ACRES+"-acre minimum","","","",""]]}},
   ]));
 }
 
