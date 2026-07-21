@@ -5,55 +5,111 @@
    the Acre Tracker (which is now a summary dashboard only).
    ============================================================================ */
 (function(){
-const { $, esc, num, money } = window.OPS.helpers;
+const { $, esc, num, money, fmtDate } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
-let locations=[];
+let locations=[], clients=[];
+const cName = c => (c && (c.firm_name || c.name)) || "";
+const isApprover = ()=> window.OPS.isAdmin() || (window.OPS.isApprover && window.OPS.isApprover());
 
-async function loadLocations(){ const { data }=await sb().from("spray_locations").select("*").order("name"); locations=data||[]; }
+async function loadLocations(){
+  const [l,c]=await Promise.all([
+    sb().from("spray_locations").select("*, client:client_id(firm_name,name)").order("name"),
+    sb().from("clients").select("id,firm_name,name").order("firm_name")
+  ]);
+  locations=l.data||[]; clients=c.data||[];
+}
 
 async function view(){
   await loadLocations();
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>Locations</h1>
-    <div class="callout">Deployment areas used by the Daily Spray Entry form and the Acre dashboard. Set an optional default ₹/acre per location.</div>
+    <div class="callout">Every location belongs to a <b>Client</b> — create the client first under <b>Finance → Client</b>.
+      Locking a location freezes it: no new pilots can be assigned and it disappears from the entry drop-downs, which keeps the lists short and prevents wrong entries.</div>
     <div class="row" style="margin-bottom:8px"><input id="lSearch" placeholder="Search locations…" style="max-width:280px"><div class="spacer"></div><button class="btn green sm" id="lNew">+ New location</button></div>
     <div id="lList" class="muted">Loading…</div>`;
   $("lNew").addEventListener("click",()=>locForm(null));
   function render(rows){
-    $("lList").innerHTML = rows.length?`<table><thead><tr><th>Location</th><th>District</th><th>State</th><th class="num">Default rate</th></tr></thead>
-      <tbody>${rows.map(l=>`<tr class="clickable" data-id="${l.id}"><td><b>${esc(l.name)}</b></td><td>${esc(l.district||'')}</td><td>${esc(l.state||'')}</td><td class="num">${l.rates&&l.rates.default!=null?money(l.rates.default):'—'}</td></tr>`).join("")}</tbody></table>`
+    $("lList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District</th><th>State</th><th class="num">Default rate</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(l=>`<tr class="clickable" data-id="${l.id}"><td><b>${esc(l.name)}</b></td>
+        <td>${l.client?esc(cName(l.client)):'<span class="chip rejected">no client</span>'}</td>
+        <td>${esc(l.district||'')}</td><td>${esc(l.state||'')}</td>
+        <td class="num">${l.rates&&l.rates.default!=null?money(l.rates.default):'—'}</td>
+        <td>${l.is_locked?'<span class="chip executed">🔒 Locked</span>':'<span class="chip approved">Open</span>'}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No locations yet. Add one to start logging acres.</div>';
     $("lList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>locForm(locations.find(x=>String(x.id)===tr.getAttribute("data-id")))));
   }
   render(locations);
   $("lSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
-    render(!q?locations:locations.filter(l=>[l.name,l.district,l.state].some(v=>String(v||"").toLowerCase().includes(q)))); });
+    render(!q?locations:locations.filter(l=>[l.name,l.district,l.state,cName(l.client)].some(v=>String(v||"").toLowerCase().includes(q)))); });
 }
 
 function locForm(rec){
-  const e=rec||{}; const m=$("main");
+  const e=rec||{}; const m=$("main"); const locked=!!e.is_locked;
+  if(!clients.length && !rec){
+    m.innerHTML=`<button class="btn sm" id="lBack">← Back to Locations</button>
+      <div class="card" style="margin-top:12px"><div class="callout warn"><b>No clients yet.</b>
+      Every location must belong to a client. Create the client first under <b>Finance → Client</b>, then come back.</div></div>`;
+    $("lBack").addEventListener("click",view); return;
+  }
   m.innerHTML=`<button class="btn sm" id="lBack">← Back to Locations</button>
     <div class="card" style="margin-top:12px"><div class="eyebrow">Daily Spray Entry</div><h1>${rec?"Edit":"New"} location</h1>
+    ${locked?'<div class="callout warn">🔒 <b>This location is locked.</b> Details cannot be edited and no pilots can be assigned. An approver must unlock it first.</div>':''}
     <div class="fgrid">
-      <div class="field"><label>Location name *</label><input id="lName" value="${esc(e.name||'')}"></div>
+      <div class="field"><label>Client *</label><select id="lClient" ${locked?'disabled':''}>
+        <option value="">— select client —</option>
+        ${clients.map(c=>`<option value="${c.id}" ${e.client_id===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
+      </select></div>
+      <div class="field"><label>Location name *</label><input id="lName" value="${esc(e.name||'')}" ${locked?'disabled':''}></div>
       <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("lState",e.state||"")}</div>
       <div class="field"><label>District</label>${window.OPS.geoUI.districtSelect("lDist",e.district||"",e.state||"")}</div>
-      <div class="field"><label>Default rate (₹/acre)</label><input id="lRate" type="number" step="any" value="${e.rates&&e.rates.default!=null?e.rates.default:''}"></div>
+      <div class="field"><label>Default rate (₹/acre)</label><input id="lRate" type="number" step="any" value="${e.rates&&e.rates.default!=null?e.rates.default:''}" ${locked?'disabled':''}></div>
     </div>
-    <div class="row"><button class="btn green" id="lSave">${rec?"Save":"Create"}</button><button class="btn" id="lCancel">Cancel</button>
-      <div class="spacer"></div>${rec&&window.OPS.canDelete()?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
-    <div class="err" id="lErr"></div></div>`;
+    <div class="row wrap"><button class="btn green" id="lSave" ${locked?'disabled':''}>${rec?"Save":"Create"}</button><button class="btn" id="lCancel">Cancel</button>
+      <div class="spacer"></div>
+      ${rec&&isApprover()?`<button class="btn sm" id="lLock">${locked?'🔓 Unlock location':'🔒 Lock location'}</button>`:''}
+      ${rec&&window.OPS.canDelete()&&!locked?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
+    <div class="err" id="lErr"></div></div>
+    ${rec?'<div class="card" id="lPilots"><h3>Pilots at this location</h3><div class="muted">Loading…</div></div>':''}`;
   $("lBack").addEventListener("click",view); $("lCancel").addEventListener("click",view);
   window.OPS.geoUI.wire("lState","lDist");
+  if($("lLock")) $("lLock").addEventListener("click",async()=>{
+    const note = locked ? null : prompt("Optional note for locking this location:","");
+    if(!locked && note===null) return;
+    const { error }=await sb().rpc("set_location_lock",{ p_id:rec.id, p_locked:!locked, p_note:note||null });
+    if(error){ alert(error.message); return; }
+    window.OPS.flashTop(locked?"Location unlocked ✓":"Location locked ✓"); view();
+  });
+  if(rec) loadLocPilots(rec);
   $("lSave").addEventListener("click",async()=>{
     const name=$("lName").value.trim(); if(!name){ $("lErr").textContent="Name required."; return; }
+    const client_id=$("lClient").value; if(!client_id){ $("lErr").textContent="Select the client this location belongs to."; return; }
     const rates={ default: num($("lRate").value)||null };
-    const out={ name, district:$("lDist").value||null, state:$("lState").value||null, rates };
+    const out={ name, client_id, district:$("lDist").value||null, state:$("lState").value||null, rates };
     if(rec){ const { error }=await sb().from("spray_locations").update(out).eq("id",rec.id); if(error){ $("lErr").textContent=error.message; return; } window.OPS.audit("edited","spray_locations",rec.id,name); }
     else { out.created_by=window.OPS.me.id; const { error }=await sb().from("spray_locations").insert(out); if(error){ $("lErr").textContent=error.message; return; } window.OPS.audit("created","spray_locations",name,name); }
     window.OPS.flashTop("Saved ✓"); view();
   });
   if($("lDel")) $("lDel").addEventListener("click",async()=>{ if(!confirm("Delete location? (existing entries remain)"))return; await sb().from("spray_locations").delete().eq("id",rec.id); window.OPS.audit("deleted","spray_locations",rec.id,""); view(); });
+}
+
+/* every pilot who has ever worked this location, active and past */
+async function loadLocPilots(rec){
+  const host=$("lPilots"); if(!host) return;
+  const { data, error }=await sb().from("pilot_assignments")
+    .select("*, pilot:pilot_id(name,phone, vendor:vendor_id(firm_name,name))")
+    .eq("location_id",rec.id).order("start_date",{ascending:false});
+  if(error){ host.innerHTML='<h3>Pilots at this location</h3><div class="muted">'+esc(error.message)+'</div>'; return; }
+  const rows=data||[];
+  host.innerHTML=`<h3>Pilots at this location</h3>
+    ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Pilot</th><th>Vendor</th><th>Phone</th><th>From</th><th>To</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(a=>`<tr><td><b>${esc((a.pilot&&a.pilot.name)||'')}</b></td>
+        <td>${esc((a.pilot&&a.pilot.vendor&&cName(a.pilot.vendor))||'')}</td>
+        <td>${esc(window.OPS.helpers.maskPhone((a.pilot&&a.pilot.phone)||''))}</td>
+        <td>${fmtDate(a.start_date)}</td><td>${a.end_date?fmtDate(a.end_date):'—'}</td>
+        <td>${a.status==="active"?'<span class="chip approved">Active</span>'
+             :a.status==="paused"?'<span class="chip in_review">Paused</span>'
+             :'<span class="chip executed">Closed</span>'}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted">No pilots assigned yet. Assign them from <b>Pilots</b>.</div>'}`;
 }
 
 window.OPS.routes.locations = view;
