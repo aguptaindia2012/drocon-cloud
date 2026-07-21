@@ -1,7 +1,7 @@
 /* DroCon Bharat Agreement Studio — Cloud service worker.
    Caches the app shell so it installs and launches like an app.
    IMPORTANT: never caches your Supabase API responses (those stay live). */
-const VERSION = "dcb-cloud-v56";
+const VERSION = "dcb-cloud-v57";
 const SHELL = [
   "./", "./index.html", "./studio.html", "./manifest.webmanifest",
   "./app.js", "./logo.js", "./docgen.js", "./modules/report.js", "./agreement.js", "./config.js",
@@ -47,7 +47,23 @@ self.addEventListener("fetch", e=>{
       const net=fetch(req).then(r=>{ if(r&&(r.ok||r.type==="opaque")) c.put(req,r.clone()); return r; }).catch(()=>hit);
       return hit||net; })); return;
   }
-  // same-origin static files: cache-first, network fallback
+  // App CODE (js/css/html): NETWORK-FIRST so a new deploy applies on the very
+  // first reload. Falls back to cache when offline, so the PWA still launches.
+  // (Cache-first here was why updates seemed to "not change anything" until a
+  // second hard reload.)
+  if(url.origin===self.location.origin && /\.(js|css|html)$/i.test(url.pathname)){
+    e.respondWith((async()=>{
+      try{
+        const r = await fetch(req);
+        if(r && r.ok){ const cp=r.clone(); caches.open(VERSION).then(c=>c.put(req,cp)); }
+        return r;
+      }catch(_){
+        return (await caches.match(req)) || new Response("Offline", {status:503, statusText:"Offline"});
+      }
+    })());
+    return;
+  }
+  // other same-origin assets (icons, images, manifest): cache-first
   if(url.origin===self.location.origin){
     e.respondWith((async()=>{
       const cached = await caches.match(req);
