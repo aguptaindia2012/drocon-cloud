@@ -76,6 +76,7 @@ const TOOLS = [
   { key:"templates",        section:"agreement", label:"Shared templates",gate:"approver" },
   // Finance
   { key:"invoice",       section:"finance", label:"Invoice",        gate:"perm" },
+  { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
   { key:"credit_note",   section:"finance", label:"Credit Note",     gate:"perm" },
   { key:"payment_status",section:"finance", label:"Payment Status",  gate:"perm" },
   { key:"clients",       section:"finance", label:"Client",         gate:"perm" },

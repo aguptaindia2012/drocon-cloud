@@ -81,6 +81,7 @@ async function dashboard(){
       <div class="stat"><div class="n">${money(monthR)}</div><div class="l">Revenue this month</div></div>
       <div class="stat" style="${redCount?'background:#fbe0de':(below.length?'background:#fff0db':'')}"><div class="n" style="${redCount?'color:#a3322a':(below.length?'color:#9a5b00':'')}">${below.length}</div><div class="l">Below ${MIN_ACRES} ac (7d)${redCount?" · "+redCount+" red":""}</div></div>
     </div>
+    <div id="acUnbilled"></div>
     <div class="row" id="acreReport" style="margin-bottom:10px"></div>
     <div class="card"><h3>Charts</h3><div class="fgrid">
       <div>${window.OPS.report.canvas("acMonthly",560,240)}</div>
@@ -119,6 +120,7 @@ async function dashboard(){
       <tbody>${locs.map(l=>`<tr><td><b>${esc(l.k)}</b></td><td class="num">${l.a.toFixed(1)}</td><td class="num">${money(l.r)}</td></tr>`).join("")}</tbody></table>
       <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>`;
   const cm=months.slice().reverse();
+  loadUnbilled();
   window.OPS.report.line("acMonthly", cm, cm.map(k=>byM[k].a), "Acres / month", "#599533");
   const topL=locs.slice(0,10);
   window.OPS.report.bar("acLoc", topL.map(l=>l.k), topL.map(l=>l.r), "Revenue by location", "#0A6496");
@@ -131,6 +133,29 @@ async function dashboard(){
             rows: below.length? below.sort((a,b)=>a.day<b.day?1:-1).map(x=>[fmtDate(x.day),x.loc,x.pilot,x.acres.toFixed(1),(MIN_ACRES-x.acres).toFixed(1),x.band.label])
                               : [["—","All pilots met the "+MIN_ACRES+"-acre minimum","","","",""]]}},
   ]));
+}
+
+/* ---------- anything missed from billing? ---------- */
+async function loadUnbilled(){
+  const host=$("acUnbilled"); if(!host) return;
+  const { data, error }=await sb().from("v_acre_unbilled_summary").select("*");
+  if(error || !data || !data.length){ host.innerHTML=""; return; }   // view missing or nothing pending
+  const rows=data.filter(r=>num(r.farmer_rows)>0 || num(r.client_rows)>0);
+  if(!rows.length){ host.innerHTML=""; return; }
+  const fVal=rows.reduce((s,r)=>s+num(r.farmer_value),0), cVal=rows.reduce((s,r)=>s+num(r.client_value),0);
+  const oldest=rows.map(r=>r.oldest_unbilled).filter(Boolean).sort()[0];
+  host.innerHTML=`<div class="card" style="border-left:4px solid var(--orange)">
+    <h3>⚠ Acre work not yet billed</h3>
+    <p class="muted" style="margin-top:-4px">Sprayed acres with no invoice raised against them.
+      Oldest outstanding: <b>${oldest?fmtDate(oldest):'—'}</b>. Raise these in <b>Finance → Acre Invoicing</b>.</p>
+    <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Farmer bill to</th><th class="num">Farmer acres</th><th class="num">Farmer value</th><th>Client bill to</th><th class="num">Client value</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td><b>${esc(r.location_name||'')}</b></td>
+      <td>${r.farmer_client_name?esc(r.farmer_client_name):'<span class="chip rejected">not set</span>'}</td>
+      <td class="num">${num(r.farmer_acres).toFixed(1)}</td>
+      <td class="num" style="color:#9a5b00;font-weight:700">${money(r.farmer_value)}</td>
+      <td>${num(r.client_rows)>0?(r.client_client_name?esc(r.client_client_name):'<span class="chip rejected">not set</span>'):'<span class="muted">—</span>'}</td>
+      <td class="num">${num(r.client_rows)>0?money(r.client_value):'<span class="muted">—</span>'}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="3" class="num"><b>Total unbilled</b></td><td class="num"><b>${money(fVal)}</b></td><td></td><td class="num"><b>${money(cVal)}</b></td></tr></tfoot></table></div></div>`;
 }
 
 /* ---------- CSV import (Date,Location,Pilot,Acres,Rate[,State,District,Crop]) ---------- */

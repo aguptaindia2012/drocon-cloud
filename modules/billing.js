@@ -103,7 +103,7 @@ function openExisting(rec){
   D=Object.assign({ id:rec.id, doc_type:rec.doc_type, fiscal_year:rec.fiscal_year, seq:rec.seq, number:rec.number,
     doc_date:rec.doc_date, copyLabel:(rec.data&&rec.data.copyLabel)||null, party:rec.party_snapshot||blankParty(),
     party_id:rec.party_id, related_doc_id:rec.related_doc_id, items:rec.line_items||[], terms:rec.terms||{}, status:rec.status||"draft",
-    fromQuotation:(rec.data&&rec.data.fromQuotation)||null }, {});
+    fromQuotation:(rec.data&&rec.data.fromQuotation)||null, data:rec.data||{} }, {});
   editor();
 }
 
@@ -288,7 +288,10 @@ function toDocgen(){
   const refs=[];
   if(D.copyLabel) {/* title carries copy */}
   if(TYPE==="credit_note" && D.related_doc_id){ /* shown in notes */ }
-  const title = TYPE==="invoice" ? `Tax/Cash Credit Invoice (${D.copyLabel||"Original"})` : cfg.title;
+  // acre-billed farmer documents are a Bill of Supply (0% GST), not a tax invoice
+  const bos = D.data && D.data.title==="Bill of Supply";
+  const title = bos ? `Bill of Supply (${D.copyLabel||"Original"})`
+    : (TYPE==="invoice" ? `Tax/Cash Credit Invoice (${D.copyLabel||"Original"})` : cfg.title);
   return { doc_type:TYPE, number:D.number, doc_date:D.doc_date, title,
     party:D.party, refs, items:D.items, totals:computeTotals(), terms:D.terms, copyLabel:D.copyLabel };
 }
@@ -301,7 +304,9 @@ async function save(){
   const rec={ doc_type:TYPE, number:D.number, fiscal_year:D.fiscal_year, seq:D.seq, doc_date:D.doc_date,
     party_kind:CONFIG[TYPE].partyKind, party_id:D.party_id||null, party_snapshot:D.party,
     line_items:D.items, totals:t, terms:D.terms, status:D.status||"draft",
-    related_doc_id:D.related_doc_id||null, data:{ copyLabel:D.copyLabel, fromQuotation:D.fromQuotation||null } };
+    related_doc_id:D.related_doc_id||null,
+    // keep any acre-billing metadata (source/side/title/locations) intact on re-save
+    data:Object.assign({}, D.data||{}, { copyLabel:D.copyLabel, fromQuotation:D.fromQuotation||null }) };
   let savedId=D.id;
   let reverted=false, reviewerId=null;   // #13: a non-admin editing an APPROVED doc sends it back to review
   if(D.id){
