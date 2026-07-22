@@ -22,7 +22,7 @@ function fyOf(dateStr){
 
 // Shared mutable state + a place for modules to hang their views.
 window.OPS = { sb:null, me:null, profile:null, perms:new Set(),
-  routes:{}, currentSection:"agreement", currentTool:"agreements",
+  routes:{}, currentSection:null, currentTool:"home",
   helpers:{ $, esc, fmt, fmtDate, todayISO, money, num, fyOf } };
 
 let sb=null, me=null, profile=null, signupMode=false;
@@ -31,14 +31,15 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
 /* ---------- sections + tools registry ----------
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
+  { key:"reviews",    label:"Review / Approvals" },   // sits right after Home
   { key:"trackers",   label:"Daily Spray Entry" },
-  { key:"reviews",    label:"Review / Approvals" },
-  { key:"dashboards", label:"Dashboards" },
-  { key:"resources",  label:"Resources" },
   { key:"order",      label:"Business Development" },
   { key:"agreement",  label:"Agreement" },
   { key:"finance",    label:"Finance" },
+  { key:"inventory",  label:"Inventory" },
+  { key:"admin",      label:"Administration" },
   { key:"hr",         label:"HR" },
+  { key:"resources",  label:"Resources" },
   { key:"team",       label:"Team & Access" },
   { key:"audit",      label:"Audit" },
   { key:"portal",     label:"Partner Portal" },   // external (invite-only) logins only
@@ -46,51 +47,53 @@ const SECTIONS = [
 const TOOLS = [
   // Daily Spray Entry (its own section, the landing tab)
   // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
-  { key:"daily_entry",     section:"trackers", label:"Daily Spray Entry", gate:"perm" },
-  { key:"entries",         section:"trackers", label:"Entries",           gate:"perm" },
-  { key:"locations",       section:"trackers", label:"Locations",         gate:"perm" },
-  { key:"pilots_master",   section:"trackers", label:"Pilots",            gate:"perm" },
-  { key:"vendor_report",   section:"trackers", label:"Vendor Statement",  gate:"perm" },
-  { key:"farmer_bulk",     section:"trackers", label:"Farmer Bulk Entry", gate:"perm" },
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
-  // Dashboards (Acre & Farmer trackers are dashboards now; receivables consolidated here)
-  { key:"receivables",         section:"dashboards", label:"Invoice & Receivables", gate:"perm" },
-  { key:"acre",                section:"dashboards", label:"Acre Tracking",         gate:"perm" },
-  { key:"farmer",              section:"dashboards", label:"Farmer Tracking",       gate:"perm" },
-  { key:"agreement_dashboard", section:"dashboards", label:"Agreement Dashboard",   gate:"perm" },
-  { key:"bd_dashboard",        section:"dashboards", label:"Ongoing Sales",         gate:"perm" },
-  // Resources (policies, manual & FAQs)
-  { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
-  { key:"manual",        section:"resources",   label:"User Manual",    gate:"all" },
-  { key:"faqs",          section:"resources",   label:"FAQs",           gate:"all" },
-  // Business Development — Authorized Partners home, agreements + sales documents
+  // Daily Spray Entry — the trackers lead, then entry and reporting
+  { key:"acre",            section:"trackers", label:"Acre Tracking",     gate:"perm" },
+  { key:"farmer",          section:"trackers", label:"Farmer Tracking",   gate:"perm" },
+  { key:"daily_entry",     section:"trackers", label:"Daily Spray Entry", gate:"perm" },
+  { key:"entries",         section:"trackers", label:"Entries",           gate:"perm" },
+  { key:"vendor_report",   section:"trackers", label:"Vendor Statement",  gate:"perm" },
+  // (Farmer Bulk Entry is a sub-sub tab under Entries → Farmer sprays)
+  // Business Development — Authorized Partners home, orders + sales documents
   { key:"partners",         section:"order", label:"Authorized Partners",      gate:"all" },
   { key:"ap_rates",         section:"order", label:"Authorized Partner Rates", gate:"perm" },
   { key:"partner_invoices", section:"order", label:"Partner Invoices",         gate:"perm" },
   { key:"orders",           section:"order", label:"Order Tracker",   gate:"all" },
   { key:"quotation",        section:"order", label:"Quotation",       gate:"perm" },
   { key:"bom",              section:"order", label:"BOM Calculator",  gate:"perm" },
-  { key:"purchase_order",   section:"order", label:"Purchase Order",  gate:"perm" },
-  // Agreement (own section, after Business Development)
+  { key:"bd_dashboard",     section:"order", label:"Ongoing Sales",   gate:"perm" },
+  // Agreement — dashboard first
+  { key:"agreement_dashboard", section:"agreement", label:"Agreement Dashboard", gate:"perm" },
   { key:"agreements",       section:"agreement", label:"Agreements",      gate:"all" },
   { key:"new",              section:"agreement", label:"New agreement",   gate:"all" },
   { key:"templates",        section:"agreement", label:"Shared templates",gate:"approver" },
-  // Finance
+  // Finance — receivables first
+  { key:"receivables",   section:"finance", label:"Invoice & Receivables", gate:"perm" },
   { key:"invoice",       section:"finance", label:"Invoice",        gate:"perm" },
   { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
-  { key:"credit_note",   section:"finance", label:"Credit Note",     gate:"perm" },
-  { key:"payment_status",section:"finance", label:"Payment Status",  gate:"perm" },
-  { key:"clients",       section:"finance", label:"Client",         gate:"perm" },
-  { key:"vendors",       section:"finance", label:"Vendors",       gate:"perm" },
-  { key:"inventory",     section:"finance", label:"Inventory",     gate:"perm" },
-  { key:"catalogues",    section:"finance", label:"Catalogue",     gate:"perm" },
-  // HR (consultants are people records here; their portal invoicing is in Business Development)
+  { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
+  { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
+  { key:"payment_status",section:"finance", label:"Payment Status", gate:"perm" },
+  // Inventory
+  { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
+  { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },
+  // Administration — the master records everything else depends on
+  { key:"clients",       section:"admin", label:"Client",       gate:"perm" },
+  { key:"vendors",       section:"admin", label:"Vendors",      gate:"perm" },
+  { key:"pilots_master", section:"admin", label:"Pilots",       gate:"perm" },
+  { key:"locations",     section:"admin", label:"Locations",    gate:"perm" },
+  { key:"consultants",   section:"admin", label:"Consultants",  gate:"perm" },
+  // HR
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",  gate:"perm" },
   { key:"hr_employees",  section:"hr", label:"Employees",          gate:"perm" },
-  { key:"consultants",   section:"hr", label:"Consultants",        gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",     gate:"perm" },
   { key:"hr_payslips",   section:"hr", label:"Payslips",           gate:"perm" },
+  // Resources (policies, manual & FAQs)
+  { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
+  { key:"manual",        section:"resources",   label:"User Manual",    gate:"all" },
+  { key:"faqs",          section:"resources",   label:"FAQs",           gate:"all" },
   // Team & Access + Audit (admin-only)
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
@@ -165,13 +168,8 @@ async function afterLogin(){
 function applyProfile(){
   $("meEmail").textContent = profile.email || me.email;
   $("meRole").textContent = isExternal() ? "PARTNER" : (profile.role||"drafter").toUpperCase();
-  // land on the home page; if the user was already on a valid tab, keep them there
-  if(window.OPS.currentTool && window.OPS.currentTool!=="home" && canSee(toolByKey(window.OPS.currentTool))){
-    window.OPS.currentSection = (toolByKey(window.OPS.currentTool)||{}).section || null;
-    renderNav(); openTool(window.OPS.currentTool);
-  } else {
-    goHome();
-  }
+  // always land on Home after a login or refresh
+  goHome();
   refreshNotifs(); refreshReviewCount();
   if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); } }, 30000);
 }

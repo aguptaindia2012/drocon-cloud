@@ -67,6 +67,7 @@ async function view(){
       <button class="btn sm ${mode==='acre'?'green':''}" id="emAcre">Acre entries</button>
       <input id="eqSearch" placeholder="Quick search…" style="max-width:220px" value="${esc(window._eqFilter||'')}">
       <div class="spacer"></div>
+      ${mode==='farmer'?'<button class="btn sm" id="eqBulk" title="Re-enter historic farmer records (up to 31 May 2026)">＋ Bulk entry (historic)</button>':''}
     </div>
     <div class="card" style="padding:12px;margin-bottom:10px">
       <div class="row wrap" style="gap:10px;align-items:flex-end">
@@ -83,6 +84,7 @@ async function view(){
       <div class="small-note" style="margin-top:8px">Set a date range for a period report, or leave blank for the latest entries. Add a field filter for an ad-hoc slice. The Excel matches exactly what is listed below.</div>
     </div>
     <div id="eqList" class="muted">Loading…</div>`;
+  if($("eqBulk")) $("eqBulk").addEventListener("click",()=>{ if(window.OPS.routes.farmer_bulk) window.OPS.routes.farmer_bulk(); });
   $("emFarmer").addEventListener("click",()=>{ mode="farmer"; window._eqFilter=""; view(); });
   $("emAcre").addEventListener("click",()=>{ mode="acre"; window._eqFilter=""; view(); });
   $("eqSearch").addEventListener("input",e=>{ window._eqFilter=e.target.value.toLowerCase().trim(); renderList(); });

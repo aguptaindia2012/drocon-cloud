@@ -28,7 +28,8 @@ function lastFilled(){
 function view(){
   rows = rows.length ? rows : [blank(),blank(),blank(),blank(),blank()];
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>Farmer Bulk Entry</h1>
+  m.innerHTML=`<button class="btn sm" id="fbBack">← Back to Entries</button>
+    <div class="eyebrow" style="margin-top:10px">Daily Spray Entry · Entries · Farmer sprays</div><h1>Farmer Bulk Entry</h1>
     <div class="callout warn"><b>Temporary catch-up form</b> for re-entering historic farmer records.
       Only dates <b>up to ${CUTOFF}</b> are accepted — anything from 1 June 2026 onward must be entered through
       <b>Daily Spray Entry</b> so it also reaches the Acre dashboards and billing.
@@ -62,6 +63,8 @@ function view(){
     const st=(window.OPS.geoUI && window.OPS.geoUI.states && window.OPS.geoUI.states()) || [];
     if($("fbStates")) $("fbStates").innerHTML = st.map(x=>'<option value="'+esc(x)+'">').join("");
   }catch(e){}
+  const backToEntries=()=>{ window.OPS.entriesMode="farmer"; if(window.OPS.routes.entries) window.OPS.routes.entries(); };
+  if($("fbBack")) $("fbBack").addEventListener("click",backToEntries);
   $("fbAdd").addEventListener("click",()=>{ rows.push(blank(lastFilled())); renderRows(); });
   $("fbAdd10").addEventListener("click",()=>{ for(let i=0;i<10;i++) rows.push(blank(lastFilled())); renderRows(); });
   $("fbClear").addEventListener("click",()=>{ rows=[blank(),blank(),blank(),blank(),blank()]; view(); });
