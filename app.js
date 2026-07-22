@@ -80,6 +80,8 @@ const TOOLS = [
   // Accounting — internal money out + daily reconciliation
   { key:"day_book",     section:"accounting", label:"Day Book",           gate:"perm" },
   { key:"expense_mgmt", section:"accounting", label:"Expense Management", gate:"perm" },
+  { key:"advances",      section:"accounting", label:"Advances",           gate:"perm" },
+  { key:"acct_position", section:"accounting", label:"Position",           gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },

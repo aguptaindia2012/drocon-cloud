@@ -359,6 +359,163 @@ function settle(kind, id, suggested, back){
   });
 }
 
-window.OPS.routes.day_book    = dayBook;
+/* ========================= ADVANCES ========================= */
+async function advances(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Finance &amp; Accounting</div><h1>Advances</h1>
+    <div class="callout">Money paid out <b>before</b> the expense is known — a tour or fuel advance to an employee,
+      or an advance to a vendor. It stays outstanding until it is accounted for: either by the expenses actually
+      incurred, or by returning the balance.</div>
+    <div class="row wrap" style="margin:10px 0"><div class="spacer"></div>
+      <button class="btn green sm" id="adNew">+ New advance</button></div>
+    <div id="adBody" class="muted">Loading…</div>`;
+  await refs();
+  $("adNew").addEventListener("click",()=>advForm(null));
+  const { data, error }=await sb().from("v_advances_open").select("*").order("issued_on",{ascending:false});
+  if(error){ $("adBody").innerHTML='<div class="card">'+esc(error.message)+'</div>'; return; }
+  const rows=data||[], open=rows.filter(r=>r.status==='open');
+  const tot=open.reduce((s,r)=>s+num(r.outstanding),0);
+  $("adBody").innerHTML=`
+    ${open.length?`<div class="statrow"><div class="stat" style="background:#fff0db"><div class="n" style="color:#9a5b00">${money(tot)}</div><div class="l">Advances outstanding</div></div>
+      <div class="stat"><div class="n">${open.length}</div><div class="l">Open advances</div></div></div>`:''}
+    <div class="card"><h3>Advances</h3>
+    ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Issued</th><th>To</th><th>Purpose</th>
+      <th class="num">Amount</th><th class="num">Settled</th><th class="num">Outstanding</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.issued_on)}</td>
+        <td><b>${esc(r.party_name||'')}</b> <span class="muted">${esc(r.party_kind)}</span></td>
+        <td>${esc(r.purpose||'')}</td><td class="num">${money(r.amount)}</td>
+        <td class="num">${money(r.settled)}</td>
+        <td class="num" style="font-weight:700;color:${num(r.outstanding)>0?'#9a5b00':'#3e6b20'}">${money(r.outstanding)}</td>
+        <td>${r.status==='settled'?'<span class="chip paid">Settled</span>':'<span class="chip issued">Open</span>'}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted">No advances yet.</div>'}</div>`;
+  $("adBody").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>
+    advForm(rows.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+}
+
+function advForm(rec){
+  const e=rec||{}; const m=$("main"); const isNew=!rec;
+  m.innerHTML=`<button class="btn sm" id="avBack">← Back to Advances</button>
+    <div class="card" style="margin-top:12px"><div class="eyebrow">Accounting</div><h1>${isNew?"New advance":"Advance"}</h1>
+    ${!isNew?`<div class="callout"><b>${esc(e.party_name||'')}</b> · issued ${fmtDate(e.issued_on)} ·
+      ${money(e.amount)} · settled ${money(e.settled)} ·
+      <b style="color:${num(e.outstanding)>0?'#9a5b00':'#3e6b20'}">outstanding ${money(e.outstanding)}</b></div>`:''}
+    <div class="fgrid">
+      <div class="field"><label>Paid to *</label><select id="av_kind" ${isNew?'':'disabled'}>
+        ${["employee","vendor","other"].map(k=>`<option value="${k}" ${e.party_kind===k?'selected':''}>${k}</option>`).join("")}</select></div>
+      <div class="field"><label>Vendor <span class="muted">(if a vendor advance)</span></label><select id="av_vendor" ${isNew?'':'disabled'}>
+        <option value="">— none —</option>
+        ${vendors.map(v=>`<option value="${v.id}" ${e.vendor_id===v.id?'selected':''}>${esc(vName(v))}</option>`).join("")}</select></div>
+      <div class="field"><label>Or name the person</label><input id="av_payee" value="${esc(e.payee_text||'')}" ${isNew?'':'disabled'}></div>
+      <div class="field"><label>Amount *</label><input type="number" step="0.01" id="av_amt" value="${esc(e.amount||'')}" ${isNew?'':'disabled'}></div>
+      <div class="field"><label>Issued on *</label><input type="date" id="av_on" value="${esc(e.issued_on||todayISO())}" ${isNew?'':'disabled'}></div>
+      <div class="field"><label>Purpose</label><input id="av_purpose" value="${esc(e.purpose||'')}" ${isNew?'':'disabled'}></div>
+      ${isNew?`<div class="field"><label>Pay from account *</label><select id="av_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Mode</label><select id="av_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>`:''}
+    </div>
+    ${isNew?'<div class="small-note">Issuing the advance records the money leaving the account on the date above, so it appears in that day\'s Day Book.</div>':''}
+    <div class="row" style="margin-top:10px">${isNew?'<button class="btn green" id="avSave">Issue advance</button>':''}
+      <button class="btn" id="avCancel">${isNew?'Cancel':'Back'}</button></div>
+    <div class="err" id="avErr"></div></div>
+    ${!isNew && num(e.outstanding)>0?`<div class="card"><h3>Account for this advance</h3>
+      <p class="muted" style="margin-top:-4px">Record what the money was spent on, or the balance returned.</p>
+      <div class="fgrid">
+        <div class="field"><label>How</label><select id="sv_kind">
+          <option value="expense">Spent — expense incurred</option>
+          <option value="repayment">Returned — money back</option>
+          <option value="write_off">Written off</option></select></div>
+        <div class="field"><label>Amount *</label><input type="number" step="0.01" id="sv_amt" value="${num(e.outstanding)}"></div>
+        <div class="field"><label>Date</label><input type="date" id="sv_on" value="${todayISO()}"></div>
+        <div class="field"><label>Note</label><input id="sv_note"></div>
+      </div>
+      <div class="small-note">A <b>repayment</b> also needs the money-in entry on the Day Book for the day it was returned.</div>
+      <div class="row" style="margin-top:8px"><button class="btn green" id="svGo">Record</button></div>
+      <div class="err" id="svErr"></div></div>`:''}`;
+  $("avBack").addEventListener("click",advances); $("avCancel").addEventListener("click",advances);
+  if($("avSave")) $("avSave").addEventListener("click",async()=>{
+    const amt=num($("av_amt").value); if(!(amt>0)){ $("avErr").textContent="Enter an amount."; return; }
+    const on=$("av_on").value||todayISO();
+    $("avSave").disabled=true;
+    const { data:ins, error }=await sb().from("advances").insert({
+      party_kind:$("av_kind").value, vendor_id:$("av_vendor").value||null,
+      payee_text:$("av_payee").value||null, amount:amt, issued_on:on,
+      purpose:$("av_purpose").value||null, created_by:window.OPS.me.id }).select().single();
+    if(error){ $("avSave").disabled=false; $("avErr").textContent=error.message; return; }
+    const { error:tErr }=await sb().from("cash_txns").insert({ account_id:$("av_acct").value, direction:"out",
+      txn_date:on, amount:amt, mode:$("av_mode").value, ref_type:"advance", ref_id:String(ins.id),
+      note:"Advance — "+($("av_purpose").value||""), created_by:window.OPS.me.id });
+    $("avSave").disabled=false;
+    if(tErr){ $("avErr").textContent="Advance saved, but the payment could not be recorded: "+tErr.message; return; }
+    window.OPS.audit("created","advances",ins.id,money(amt)); window.OPS.flashTop("Advance issued ✓"); advances();
+  });
+  if($("svGo")) $("svGo").addEventListener("click",async()=>{
+    const amt=num($("sv_amt").value); if(!(amt>0)){ $("svErr").textContent="Enter an amount."; return; }
+    if(amt>num(e.outstanding)+0.005){ $("svErr").textContent="That is more than the outstanding balance."; return; }
+    const { error }=await sb().rpc("settle_advance",{ p_id:rec.id, p_kind:$("sv_kind").value, p_ref:null,
+      p_amount:amt, p_on:$("sv_on").value||todayISO(), p_note:$("sv_note").value||null });
+    if(error){ $("svErr").textContent=error.message; return; }
+    window.OPS.flashTop("Recorded ✓"); advances();
+  });
+}
+
+/* ========================= POSITION ========================= */
+async function position(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Finance &amp; Accounting</div><h1>Position</h1>
+    <div class="callout">Where the money stands right now — what we owe, what is owed to us, what is sitting as
+      advances, and anything the Day Book has flagged.</div>
+    <div id="poBody" class="muted">Loading…</div>`;
+  await refs();
+  const [pay,rec,adv,flag,uncl]=await Promise.all([
+    sb().from("v_payables_open").select("*"),
+    sb().from("v_receivables_open").select("*"),
+    sb().from("v_advances_open").select("*").eq("status","open"),
+    sb().from("v_accounting_flags").select("*").order("close_date",{ascending:false}).limit(20),
+    sb().from("v_days_unclosed").select("*").order("day",{ascending:false}).limit(20)
+  ]);
+  const P=(pay.data||[]), R=(rec.data||[]).filter(r=>num(r.balance)>0.01), A=(adv.data||[]);
+  const F=(flag.data||[]), U=(uncl.data||[]);
+  const tp=P.reduce((s,r)=>s+num(r.balance),0), tr=R.reduce((s,r)=>s+num(r.balance),0), ta=A.reduce((s,r)=>s+num(r.outstanding),0);
+  const bucket=d=>d<=30?'0–30':d<=60?'31–60':d<=90?'61–90':'>90';
+  const age={}; R.forEach(r=>{ const b=bucket(num(r.age_days)); age[b]=(age[b]||0)+num(r.balance); });
+
+  $("poBody").innerHTML=`
+    <div class="statrow">
+      <div class="stat"><div class="n">${money(tr)}</div><div class="l">Receivable</div></div>
+      <div class="stat" style="background:#fbe0de"><div class="n" style="color:#a3322a">${money(tp)}</div><div class="l">Payable</div></div>
+      <div class="stat" style="background:#fff0db"><div class="n" style="color:#9a5b00">${money(ta)}</div><div class="l">Advances out</div></div>
+      <div class="stat" style="${(F.length||U.length)?'background:#fbe0de':''}"><div class="n" style="${(F.length||U.length)?'color:#a3322a':''}">${F.length+U.length}</div><div class="l">Red flags</div></div>
+    </div>
+    ${(F.length||U.length)?`<div class="card" style="border-left:4px solid #a3322a"><h3>⚑ Needs attention</h3>
+      ${F.length?`<p class="muted" style="margin:-4px 0 6px"><b>Days closed with a difference</b></p>
+        <table><thead><tr><th>Date</th><th>Account</th><th class="num">Difference</th><th>Note</th></tr></thead>
+        <tbody>${F.map(f=>`<tr><td>${fmtDate(f.close_date)}</td><td>${esc(f.account_name)}</td>
+          <td class="num" style="color:#a3322a;font-weight:700">${money(f.difference)}</td><td>${esc(f.note||'')}</td></tr>`).join("")}</tbody></table>`:''}
+      ${U.length?`<p class="muted" style="margin:10px 0 6px"><b>Days with movement that were never closed</b></p>
+        <table><thead><tr><th>Date</th><th>Account</th></tr></thead>
+        <tbody>${U.map(u=>`<tr><td>${fmtDate(u.day)}</td><td>${esc(u.account_name)}</td></tr>`).join("")}</tbody></table>`:''}
+    </div>`:'<div class="callout">No red flags — every day with movement is closed and matched. 🎉</div>'}
+
+    <div class="card"><h3>Receivables ageing</h3>
+      <table><thead><tr><th>0–30</th><th>31–60</th><th>61–90</th><th>&gt;90</th></tr></thead>
+      <tbody><tr>${['0–30','31–60','61–90','>90'].map(b=>`<td class="num" style="${b==='>90'&&age[b]?'color:#a3322a;font-weight:700':''}">${money(age[b]||0)}</td>`).join("")}</tr></tbody></table></div>
+
+    <div class="card"><h3>Payable to vendors</h3>
+      ${P.length?`<div style="overflow:auto"><table><thead><tr><th>Vendor</th><th>Invoice</th><th>Due</th><th class="num">Balance</th><th>Status</th></tr></thead>
+        <tbody>${P.sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||''))).map(r=>`<tr><td><b>${esc(r.vendor_name||'')}</b></td>
+          <td>${esc(r.vendor_invoice_no||'')}</td><td>${r.due_date?fmtDate(r.due_date):'—'}</td>
+          <td class="num"><b>${money(r.balance)}</b></td>
+          <td>${r.status==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>':'<span class="chip issued">'+esc(r.status.replace("_"," "))+'</span>'}</td></tr>`).join("")}</tbody></table></div>`
+        :'<div class="muted">Nothing payable. 🎉</div>'}</div>
+
+    <div class="card"><h3>Advances outstanding</h3>
+      ${A.length?`<table><thead><tr><th>Issued</th><th>To</th><th>Purpose</th><th class="num">Outstanding</th></tr></thead>
+        <tbody>${A.map(a=>`<tr><td>${fmtDate(a.issued_on)}</td><td><b>${esc(a.party_name||'')}</b></td>
+          <td>${esc(a.purpose||'')}</td><td class="num" style="color:#9a5b00;font-weight:700">${money(a.outstanding)}</td></tr>`).join("")}</tbody></table>`
+        :'<div class="muted">No advances outstanding.</div>'}</div>`;
+}
+
+window.OPS.routes.day_book     = dayBook;
 window.OPS.routes.expense_mgmt = expenseMgmt;
+window.OPS.routes.advances     = advances;
+window.OPS.routes.acct_position = position;
 })();
