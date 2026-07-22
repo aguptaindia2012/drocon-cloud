@@ -37,9 +37,9 @@ const SECTIONS = [
   { key:"agreement",  label:"Agreement" },
   { key:"finance",    label:"Finance" },
   { key:"inventory",  label:"Inventory" },
-  { key:"admin",      label:"Administration" },
   { key:"hr",         label:"HR" },
-  { key:"resources",  label:"Resources" },
+  // master records everything else selects from, plus the reference material
+  { key:"resources",  label:"Master Data" },
   { key:"team",       label:"Team & Access" },
   { key:"audit",      label:"Audit" },
   { key:"portal",     label:"Partner Portal" },   // external (invite-only) logins only
@@ -79,21 +79,21 @@ const TOOLS = [
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },
-  // Administration — the master records everything else depends on
-  { key:"clients",       section:"admin", label:"Client",       gate:"perm" },
-  { key:"vendors",       section:"admin", label:"Vendors",      gate:"perm" },
-  { key:"pilots_master", section:"admin", label:"Pilots",       gate:"perm" },
-  { key:"locations",     section:"admin", label:"Locations",    gate:"perm" },
-  { key:"consultants",   section:"admin", label:"Consultants",  gate:"perm" },
   // HR
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",  gate:"perm" },
   { key:"hr_employees",  section:"hr", label:"Employees",          gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",     gate:"perm" },
   { key:"hr_payslips",   section:"hr", label:"Payslips",           gate:"perm" },
-  // Resources (policies, manual & FAQs)
-  { key:"resources",     section:"resources",   label:"Policies",       gate:"all" },
-  { key:"manual",        section:"resources",   label:"User Manual",    gate:"all" },
-  { key:"faqs",          section:"resources",   label:"FAQs",           gate:"all" },
+  // Master Data — the records every other screen selects from, then the
+  // reference material (policies, manual & FAQs)
+  { key:"clients",       section:"resources", label:"Client",       gate:"perm" },
+  { key:"vendors",       section:"resources", label:"Vendors",      gate:"perm" },
+  { key:"pilots_master", section:"resources", label:"Pilots",       gate:"perm" },
+  { key:"locations",     section:"resources", label:"Locations",    gate:"perm" },
+  { key:"consultants",   section:"resources", label:"Consultants",  gate:"perm" },
+  { key:"resources",     section:"resources", label:"Policies",     gate:"all" },
+  { key:"manual",        section:"resources", label:"User Manual",  gate:"all" },
+  { key:"faqs",          section:"resources", label:"FAQs",         gate:"all" },
   // Team & Access + Audit (admin-only)
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
