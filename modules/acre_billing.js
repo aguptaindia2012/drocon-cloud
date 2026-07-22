@@ -14,7 +14,7 @@ const sb = ()=>window.OPS.sb;
 const HSN = "9986";
 const CLIENT_GST = 18;
 
-let side="farmer", rows=[], farmerBySource={}, sel=new Set();
+let side="farmer", rows=[], farmerBySource={}, sel=new Set(), allLocs=[];
 const F = { from:"", to:"" };
 const partyName = c => (c && (c.firm_name || c.name)) || "";
 
@@ -34,15 +34,58 @@ async function view(){
           <option value="farmer" ${side==='farmer'?'selected':''}>Farmer rate — Bill of Supply (0%)</option>
           <option value="client" ${side==='client'?'selected':''}>Client rate — Marketing Expense / Subsidy (18%)</option>
         </select></div>
-        <button class="btn sm" id="abLoad">Find unbilled work</button>
         <div class="spacer"></div>
         <button class="btn sm" id="abCN">↩ Credit note from an acre bill</button>
       </div>
+      <div style="margin-top:10px"><label style="margin-bottom:6px">Locations</label>
+        <div id="abLocs" class="muted" style="border:1px solid var(--line);border-radius:8px;padding:8px;max-height:190px;overflow:auto">Loading locations…</div>
+      </div>
+      <div class="row wrap" style="margin-top:10px">
+        <button class="btn green sm" id="abLoad">Open unbilled acres</button>
+        <button class="btn sm" id="abAll">Select all</button>
+        <button class="btn sm" id="abNone">Clear</button>
+        <span class="muted" id="abSelCount"></span>
+      </div>
     </div>
-    <div id="abBody" class="muted">Set a period and click <b>Find unbilled work</b>.</div>`;
-  $("abLoad").addEventListener("click",()=>{ F.from=$("abFrom").value; F.to=$("abTo").value; side=$("abSide").value; sel.clear(); load(); });
-  $("abSide").addEventListener("change",()=>{ side=$("abSide").value; sel.clear(); if(rows.length) renderPick(); });
+    <div id="abBody" class="muted">Choose the location(s) and period, then click <b>Open unbilled acres</b>.</div>`;
+  $("abSide").addEventListener("change",()=>{ side=$("abSide").value; sel.clear(); renderLocFilter(); $("abBody").innerHTML='<div class="card muted">Component changed — click <b>Open unbilled acres</b> again.</div>'; });
   $("abCN").addEventListener("click",creditList);
+  $("abLoad").addEventListener("click",()=>{ F.from=$("abFrom").value; F.to=$("abTo").value; side=$("abSide").value; load(); });
+  $("abAll").addEventListener("click",()=>{ usableLocs().forEach(l=>sel.add(String(l.id))); renderLocFilter(); });
+  $("abNone").addEventListener("click",()=>{ sel.clear(); renderLocFilter(); });
+
+  const { data, error }=await sb().from("spray_locations")
+    .select("id,name,farmer_rate,client_rate,farmer_bill_to,client_bill_to, fbt:farmer_bill_to(firm_name,name), cbt:client_bill_to(firm_name,name)")
+    .order("name");
+  if(error){ $("abLocs").innerHTML='<span style="color:#a3322a">'+esc(error.message)+'</span>'; return; }
+  allLocs=data||[];
+  renderLocFilter();
+}
+
+/* locations that CAN be billed for the chosen component */
+function usableLocs(){
+  return allLocs.filter(l=> side==="farmer"
+    ? (l.farmer_bill_to && num(l.farmer_rate)>0)
+    : (l.client_bill_to && num(l.client_rate)>0));
+}
+function renderLocFilter(){
+  const host=$("abLocs"); if(!host) return;
+  const ok=usableLocs(), bad=allLocs.filter(l=>!ok.includes(l));
+  if(!allLocs.length){ host.innerHTML='<span style="color:#a3322a">No locations yet — create them under <b>Daily Spray Entry → Locations</b>.</span>'; return; }
+  host.innerHTML = (ok.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px">
+      ${ok.map(l=>{ const party = side==="farmer" ? l.fbt : l.cbt; const rate = side==="farmer"?l.farmer_rate:l.client_rate;
+        return `<label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:0;padding:3px 4px">
+          <input type="checkbox" style="width:auto" data-loc="${l.id}" ${sel.has(String(l.id))?'checked':''}>
+          <span><b>${esc(l.name)}</b> <span class="muted">· ${esc(partyName(party))} · ${money(rate)}/acre</span></span></label>`; }).join("")}
+    </div>`:'<span style="color:#a3322a">No location is set up for this component yet.</span>')
+    + (bad.length?`<div class="small-note" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
+        Not billable for the <b>${side==="farmer"?"farmer":"client"}</b> component (needs a rate above 0 <i>and</i> a billing party on the Location):
+        ${bad.map(l=>esc(l.name)).join(", ")}</div>`:'');
+  host.querySelectorAll("[data-loc]").forEach(cb=>cb.addEventListener("change",()=>{
+    const k=cb.getAttribute("data-loc"); if(cb.checked) sel.add(k); else sel.delete(k);
+    const c=$("abSelCount"); if(c) c.textContent = sel.size?(sel.size+" location(s) selected"):"";
+  }));
+  const c=$("abSelCount"); if(c) c.textContent = sel.size?(sel.size+" location(s) selected"):"";
 }
 
 /* ------------------------------------------------------- credit notes ---- */
@@ -135,14 +178,19 @@ async function makeCredit(doc){
 /* --------------------------------------------------------------- data ---- */
 async function load(){
   const host=$("abBody"); host.innerHTML="Loading…";
-  let q=sb().from("v_acre_billing").select("*").order("entry_date");
+  if(!sel.size){ host.innerHTML='<div class="card muted">Tick at least one <b>location</b> above, then click <b>Open unbilled acres</b>.</div>'; return; }
+  let q=sb().from("v_acre_billing").select("*").in("location_id",[...sel]).order("entry_date");
   if(F.from) q=q.gte("entry_date",F.from);
   if(F.to)   q=q.lte("entry_date",F.to);
   q = side==="farmer" ? q.is("farmer_doc_id",null) : q.is("client_doc_id",null).gt("client_rate",0);
   const { data, error }=await q.range(0,9999);
   if(error){ host.innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
   rows=(data||[]).filter(r=>num(side==="farmer"?r.farmer_rate:r.client_rate)>0);
-  if(!rows.length){ host.innerHTML='<div class="card muted">No unbilled '+(side==="farmer"?"farmer-rate":"client-rate")+' work in that period. 🎉</div>'; return; }
+  if(!rows.length){
+    const names=allLocs.filter(l=>sel.has(String(l.id))).map(l=>l.name).join(", ");
+    host.innerHTML='<div class="card muted">No unbilled '+(side==="farmer"?"farmer-rate":"client-rate")+
+      ' acres for <b>'+esc(names)+'</b>'+((F.from||F.to)?(' between '+esc(F.from||"start")+' and '+esc(F.to||"today")):'')+
+      '.<br><span class="small-note">Either it is all billed already, or there are no acre entries against these locations in that period. Try widening the dates.</span></div>'; return; }
 
   // exact farmer detail for the sub-lines, linked by source_id (set when the
   // day was posted), so names always match the acres being billed
@@ -167,35 +215,31 @@ function billToName(r){ return side==="farmer" ? r.farmer_client_name : r.client
 function rateOf(r){ return num(side==="farmer" ? r.farmer_rate : r.client_rate); }
 
 function renderPick(){
-  // group the unbilled work by location, carrying its billing client
+  // group the unbilled work found for the selected locations
   const byLoc={};
   rows.forEach(r=>{ const k=r.location_id;
     byLoc[k]=byLoc[k]||{ id:k, name:r.location_name, client:billTo(r), clientName:billToName(r), acres:0, value:0, n:0, from:r.entry_date, to:r.entry_date };
     const g=byLoc[k]; g.acres+=num(r.acres); g.value+=num(r.acres)*rateOf(r); g.n++;
     if(r.entry_date<g.from) g.from=r.entry_date; if(r.entry_date>g.to) g.to=r.entry_date;
   });
-  const list=Object.values(byLoc).sort((a,b)=>String(a.clientName||"").localeCompare(String(b.clientName||""))||a.name.localeCompare(b.name));
-  const chosen=list.filter(l=>sel.has(String(l.id)));
+  const chosen=Object.values(byLoc).sort((a,b)=>a.name.localeCompare(b.name));
   const clients=[...new Set(chosen.map(l=>String(l.client||"")))];
   const clash=clients.length>1;
+  const tA=chosen.reduce((s,l)=>s+l.acres,0), tV=chosen.reduce((s,l)=>s+l.value,0);
 
   $("abBody").innerHTML=`
-    <div class="card"><h3>1 · Choose locations</h3>
-      <p class="muted" style="margin-top:-4px">Tick every location to bill. You may combine locations, but they must all bill the <b>same client</b>.</p>
-      <div style="overflow:auto"><table><thead><tr><th></th><th>Location</th><th>Bills to (client)</th><th>Period</th><th class="num">Acres</th><th class="num">Value</th></tr></thead>
-      <tbody>${list.map(l=>`<tr>
-        <td style="text-align:center"><input type="checkbox" style="width:auto" data-loc="${l.id}" ${sel.has(String(l.id))?'checked':''} ${l.client?'':'disabled'}></td>
-        <td><b>${esc(l.name)}</b></td>
-        <td>${l.client?esc(l.clientName||''):'<span class="chip rejected">no billing party set</span>'}</td>
+    <div class="card"><h3>Unbilled acres found</h3>
+      <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Bills to (client)</th><th>Period</th><th class="num">Rows</th><th class="num">Acres</th><th class="num">Value</th></tr></thead>
+      <tbody>${chosen.map(l=>`<tr>
+        <td><b>${esc(l.name)}</b></td><td>${esc(l.clientName||'')}</td>
         <td class="muted">${fmtDate(l.from)} – ${fmtDate(l.to)}</td>
-        <td class="num">${l.acres.toFixed(1)}</td><td class="num">${money(l.value)}</td></tr>`).join("")}</tbody></table></div>
-      ${clash?'<div class="callout warn" style="margin-top:10px">⚠ The ticked locations bill <b>different clients</b>. One invoice can only cover one client — untick until a single client remains.</div>':''}
-      ${list.some(l=>!l.client)?'<div class="small-note" style="margin-top:8px">Locations without a billing party can\'t be billed — set one on the <b>Location</b> first.</div>':''}
+        <td class="num">${l.n}</td><td class="num">${l.acres.toFixed(1)}</td><td class="num">${money(l.value)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="4" class="num"><b>Total</b></td><td class="num"><b>${tA.toFixed(1)}</b></td><td class="num"><b>${money(tV)}</b></td></tr></tfoot></table></div>
+      ${clash?`<div class="callout warn" style="margin-top:10px">⚠ These locations bill <b>different clients</b> (${chosen.map(c=>esc(c.clientName||'?')).join(" / ")}).
+        One document can only cover one client — untick locations above until a single client remains, then open again.</div>`:''}
     </div>
     ${(chosen.length && !clash)?buildPreview(chosen):''}`;
 
-  $("abBody").querySelectorAll("[data-loc]").forEach(cb=>cb.addEventListener("change",()=>{
-    const k=cb.getAttribute("data-loc"); if(cb.checked) sel.add(k); else sel.delete(k); renderPick(); }));
   const gen=$("abGen"); if(gen) gen.addEventListener("click",()=>generate(chosen));
 }
 
@@ -286,7 +330,7 @@ async function generate(chosen){
 
     window.OPS.audit("created","documents",ins.id, number+" · acre billing · "+side);
     window.OPS.flashTop(number+" created ✓ ("+(n||ids.length)+" acre rows marked billed)");
-    sel.clear(); load();
+    load();   // keep the location selection so any remaining work stays visible
   }catch(e){ err.textContent = e.message||String(e); }
   if(btn) btn.disabled=false;
 }
