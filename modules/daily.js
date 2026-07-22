@@ -11,19 +11,28 @@ const { $, esc, num, money, todayISO, fmt, fmtDate } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 
 let drows=[], clients=[], editingId=null;
-function blank(){ return { pilot:"", farmer:"", phone:"", village:"", crop:"", chemical:"", acres:"", crate:"", frate:"", gps:false }; }
+let locs=[], locPilots=[], curLoc=null;
+function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", chemical:"", acres:"", crate:"", frate:"", gps:false }; }
+// one row per pilot currently assigned to the location, rates pre-filled from it
+function rowsForLocation(loc, pilots){
+  const fr = loc && loc.farmer_rate!=null ? loc.farmer_rate : "";
+  const cr = loc && loc.client_rate!=null ? loc.client_rate : "";
+  if(!pilots.length) return [Object.assign(blank(),{ crate:cr, frate:fr })];
+  return pilots.map(p=>Object.assign(blank(),{ pilot:p.name, pilot_id:p.id, crate:cr, frate:fr }));
+}
 
 async function view(editSub){
   editingId = editSub ? editSub.id : null;
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>${editSub?"Edit submission":"Daily Spray Entry"}</h1>
-    <div class="callout">Entered once → on <b>approval</b> it posts to <b>both</b> Farmer &amp; Acre dashboards (kept separate for client reconciliation). Add a row per spray; different rows can have <b>different pilots</b>. Tick <b>GPS</b> where a GPS-tagged image was received. The day is <b>submitted for review</b> — it only counts once a reviewer approves it.</div>
+    <div class="callout">Pick the <b>date</b> and <b>location</b> — the form then lists every pilot assigned to that location, with the location's rates filled in. Enter each pilot's acres one after another. On <b>approval</b> it posts to <b>both</b> Farmer &amp; Acre dashboards. Tick <b>GPS</b> where a GPS-tagged image was received.</div>
     <div class="card">
       <div class="fgrid three">
         <div class="field"><label>Date</label><input id="dDate" type="date" value="${esc(editSub?editSub.entry_date:todayISO())}"></div>
-        <div class="field"><label>Client (from Client list)</label><select id="dClient"><option value="">— select client —</option></select></div>
-        <div class="field"><label>Location (deployment area) *</label><input id="dLoc" placeholder="e.g. Rudrapur" value="${esc(editSub?editSub.location_name:"")}"></div>
+        <div class="field"><label>Location *</label><select id="dLoc"><option value="">— select location —</option></select></div>
+        <div class="field"><label>Client (from the location)</label><input id="dClientName" value="" disabled placeholder="set on the location"></div>
       </div>
+      <div id="dRateNote" class="small-note" style="margin:-6px 0 10px"></div>
       <div class="fgrid three">
         <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("dState",editSub?editSub.state:"")}</div>
         <div class="field"><label>District</label>${window.OPS.geoUI.districtSelect("dDistrict",editSub?editSub.district:"",editSub?editSub.state:"")}</div>
@@ -54,19 +63,43 @@ async function view(editSub){
     const opts=(ps||[]).filter(p=>!p.is_external && p.id!==window.OPS.me.id);
     $("dApprover").innerHTML='<option value="">— select reviewer —</option>'+opts.map(p=>`<option value="${p.id}" ${editSub&&editSub.assigned_approver===p.id?'selected':''}>${esc(p.full_name||p.email)} (${esc(p.role)})</option>`).join("");
   });
-  // client list (drives state/district auto-fill)
-  sb().from("clients").select("id,firm_name,name,state,district").order("firm_name").then(({data})=>{
-    clients=data||[];
-    $("dClient").innerHTML='<option value="">— select client —</option>'+clients.map(c=>`<option value="${c.id}" ${editSub&&editSub.client_id===c.id?'selected':''}>${esc(c.firm_name||c.name)}</option>`).join("");
-    $("dClient").addEventListener("change",()=>{ const c=clients.find(x=>x.id===$("dClient").value);
-      if(c){ if(c.state && $("dState")){ $("dState").value=c.state; const ds=window.OPS.geoUI.districts(c.state); $("dDistrict").innerHTML='<option value="">— select district —</option>'+ds.map(x=>`<option ${c.district===x?'selected':''}>${esc(x)}</option>`).join(""); } }
+  // locations drive everything else: client, rates and the pilot list
+  sb().from("spray_locations")
+    .select("id,name,state,district,farmer_rate,client_rate,is_locked, client:client_id(id,firm_name,name)")
+    .order("name").then(({data})=>{
+      locs=(data||[]).filter(l=>!l.is_locked);
+      $("dLoc").innerHTML='<option value="">— select location —</option>'+
+        locs.map(l=>`<option value="${l.id}" ${editSub&&editSub.location_id===l.id?'selected':''}>${esc(l.name)}</option>`).join("");
+      $("dLoc").addEventListener("change",()=>pickLocation($("dLoc").value, false));
+      if(editSub && editSub.location_id) pickLocation(editSub.location_id, true);
+      else if(!locs.length) $("dRateNote").innerHTML='<span style="color:#a3322a">No open locations. Create one under <b>Locations</b> (and unlock it) first.</span>';
     });
-  });
+}
+
+/* selecting a location fills client + rates and lists its assigned pilots */
+async function pickLocation(locId, keepRows){
+  curLoc = locs.find(l=>String(l.id)===String(locId)) || null;
+  const note=$("dRateNote");
+  if(!curLoc){ locPilots=[]; if(note) note.textContent=""; return; }
+  if($("dClientName")) $("dClientName").value = (curLoc.client && (curLoc.client.firm_name||curLoc.client.name)) || "";
+  if(curLoc.state && $("dState")){
+    $("dState").value=curLoc.state;
+    const ds=window.OPS.geoUI.districts(curLoc.state);
+    $("dDistrict").innerHTML='<option value="">— select district —</option>'+ds.map(x=>`<option ${curLoc.district===x?'selected':''}>${esc(x)}</option>`).join("");
+  }
+  locPilots = (window.OPS.activePilotsFor ? await window.OPS.activePilotsFor(curLoc.id) : []) || [];
+  if(note) note.innerHTML = `Rates from this location — farmer <b>${curLoc.farmer_rate!=null?money(curLoc.farmer_rate):'not set'}</b>/acre, client <b>${money(curLoc.client_rate||0)}</b>/acre. `+
+    (locPilots.length ? `<b>${locPilots.length}</b> pilot(s) assigned here.`
+      : `<span style="color:#a3322a">No pilots assigned to this location — assign them under <b>Pilots</b>.</span>`);
+  if(!keepRows){ drows = rowsForLocation(curLoc, locPilots); renderRows(); }
 }
 function renderRows(){
   const tb=$("dRows").querySelector("tbody");
   tb.innerHTML=drows.map((r,i)=>{ const amt=num(r.acres)*(num(r.crate)+num(r.frate)); return `<tr>
-    <td><input data-i="${i}" data-k="pilot" value="${esc(r.pilot)}"></td>
+    <td>${locPilots.length
+      ? `<select data-i="${i}" data-k="pilot_id"><option value="">— select pilot —</option>${
+          locPilots.map(p=>`<option value="${p.id}" ${String(r.pilot_id)===String(p.id)?'selected':''}>${esc(p.name)}</option>`).join("")}</select>`
+      : `<input data-i="${i}" data-k="pilot" value="${esc(r.pilot)}" placeholder="assign pilots first">`}</td>
     <td><input data-i="${i}" data-k="farmer" value="${esc(r.farmer)}"></td>
     <td><input data-i="${i}" data-k="phone" value="${esc(r.phone)}" style="width:100px"></td>
     <td><input data-i="${i}" data-k="village" value="${esc(r.village)}"></td>
@@ -83,6 +116,14 @@ function renderRows(){
     drows[i][k]= k==="gps"?inp.checked:inp.value;
     if(["acres","crate","frate"].includes(k)){ const tr=inp.closest("tr"); tr.children[9].textContent=money(num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate))); sumRow(); }
   }));
+  // pilot picker: keep the id AND the readable name in step
+  tb.querySelectorAll("select[data-k='pilot_id']").forEach(sel=>sel.addEventListener("change",()=>{
+    const i=+sel.getAttribute("data-i");
+    drows[i].pilot_id = sel.value;
+    const p = locPilots.find(x=>String(x.id)===String(sel.value));
+    drows[i].pilot = p ? p.name : "";
+    sumRow();
+  }));
   tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ drows.splice(+x.getAttribute("data-del"),1); if(!drows.length) drows.push(blank()); renderRows(); }));
   sumRow();
 }
@@ -92,17 +133,21 @@ function sumRow(){ let a=0,amt=0; const pilots=new Set();
 
 async function save(){
   const date=$("dDate").value||todayISO();
-  const clientId=$("dClient").value; const clientName=(clients.find(c=>c.id===clientId)||{}).firm_name||"";
-  const locName=$("dLoc").value.trim(); const state=$("dState").value.trim(), district=$("dDistrict").value.trim();
+  const locId=$("dLoc").value;
+  if(!locId){ $("dErr").textContent="Select the location — it drives the client, the rates and the pilot list."; return; }
+  const loc=locs.find(l=>String(l.id)===String(locId))||curLoc||{};
+  const clientId=(loc.client&&loc.client.id)||null;
+  const clientName=(loc.client&&(loc.client.firm_name||loc.client.name))||null;
+  const locName=loc.name||""; const state=$("dState").value.trim(), district=$("dDistrict").value.trim();
   const approver=$("dApprover").value;
-  if(!locName){ $("dErr").textContent="Location is required (it drives the Acre Tracker)."; return; }
   if(!approver){ $("dErr").textContent="Choose a reviewer to submit this day for approval."; return; }
   const valid=drows.filter(r=>num(r.acres)>0 || String(r.farmer).trim());
   if(!valid.length){ $("dErr").textContent="Add at least one spray (acres or farmer name)."; return; }
+  if(locPilots.length && valid.some(r=>!r.pilot_id)){ $("dErr").textContent="Select a pilot on every row with acres."; return; }
   let a=0,amt=0; valid.forEach(r=>{ a+=num(r.acres); amt+=num(r.acres)*(num(r.crate)+num(r.frate)); });
 
   const rec={ entry_date:date, client_id:clientId||null, client_name:clientName||null,
-    location_name:locName, state:state||null, district:district||null,
+    location_id:locId, location_name:locName, state:state||null, district:district||null,
     rows:valid, total_acres:a, total_amount:amt, spray_count:valid.length,
     approval_status:"submitted", assigned_approver:approver, submitted_by:window.OPS.me.id,
     submitted_at:new Date().toISOString(), reject_note:null };

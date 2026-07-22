@@ -13,7 +13,7 @@ const isApprover = ()=> window.OPS.isAdmin() || (window.OPS.isApprover && window
 
 async function loadLocations(){
   const [l,c]=await Promise.all([
-    sb().from("spray_locations").select("*, client:client_id(firm_name,name)").order("name"),
+    sb().from("spray_locations").select("*, client:client_id(firm_name,name), fbt:farmer_bill_to(firm_name,name), cbt:client_bill_to(firm_name,name)").order("name"),
     sb().from("clients").select("id,firm_name,name").order("firm_name")
   ]);
   locations=l.data||[]; clients=c.data||[];
@@ -29,11 +29,13 @@ async function view(){
     <div id="lList" class="muted">Loading…</div>`;
   $("lNew").addEventListener("click",()=>locForm(null));
   function render(rows){
-    $("lList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District</th><th>State</th><th class="num">Default rate</th><th>Status</th></tr></thead>
+    $("lList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>District / State</th><th class="num">Farmer ₹</th><th>Billed to</th><th class="num">Client ₹</th><th>Billed to</th><th>Status</th></tr></thead>
       <tbody>${rows.map(l=>`<tr class="clickable" data-id="${l.id}"><td><b>${esc(l.name)}</b></td>
-        <td>${l.client?esc(cName(l.client)):'<span class="chip rejected">no client</span>'}</td>
-        <td>${esc(l.district||'')}</td><td>${esc(l.state||'')}</td>
-        <td class="num">${l.rates&&l.rates.default!=null?money(l.rates.default):'—'}</td>
+        <td>${esc([l.district,l.state].filter(Boolean).join(", "))}</td>
+        <td class="num">${l.farmer_rate!=null?money(l.farmer_rate):'—'}</td>
+        <td>${l.fbt?esc(cName(l.fbt)):'<span class="chip rejected">not set</span>'}</td>
+        <td class="num">${num(l.client_rate)>0?money(l.client_rate):'<span class="muted">0</span>'}</td>
+        <td>${num(l.client_rate)>0?(l.cbt?esc(cName(l.cbt)):'<span class="chip rejected">not set</span>'):'<span class="muted">—</span>'}</td>
         <td>${l.is_locked?'<span class="chip executed">🔒 Locked</span>':'<span class="chip approved">Open</span>'}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No locations yet. Add one to start logging acres.</div>';
     $("lList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>locForm(locations.find(x=>String(x.id)===tr.getAttribute("data-id")))));
@@ -62,7 +64,23 @@ function locForm(rec){
       <div class="field"><label>Location name *</label><input id="lName" value="${esc(e.name||'')}" ${locked?'disabled':''}></div>
       <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("lState",e.state||"")}</div>
       <div class="field"><label>District</label>${window.OPS.geoUI.districtSelect("lDist",e.district||"",e.state||"")}</div>
-      <div class="field"><label>Default rate (₹/acre)</label><input id="lRate" type="number" step="any" value="${e.rates&&e.rates.default!=null?e.rates.default:''}" ${locked?'disabled':''}></div>
+    </div>
+    <h3 style="margin-top:14px">Rates &amp; billing</h3>
+    <p class="muted" style="margin-top:-4px">The two rate components are billed <b>separately, to different parties</b>.
+      Leave the client rate at <b>0</b> where there is no client-side component — then only the farmer bill is raised.</p>
+    <div class="fgrid">
+      <div class="field"><label>Farmer rate (₹/acre)</label>
+        <input id="lFarmerRate" type="number" step="any" value="${e.farmer_rate!=null?e.farmer_rate:''}" ${locked?'disabled':''}></div>
+      <div class="field"><label>Bill farmer rate to *</label><select id="lFarmerTo" ${locked?'disabled':''}>
+        <option value="">— select client —</option>
+        ${clients.map(c=>`<option value="${c.id}" ${e.farmer_bill_to===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
+      </select><div class="small-note">0% GST · “Bill of Supply”</div></div>
+      <div class="field"><label>Client rate (₹/acre)</label>
+        <input id="lClientRate" type="number" step="any" value="${e.client_rate!=null?e.client_rate:0}" ${locked?'disabled':''}></div>
+      <div class="field"><label>Bill client rate to</label><select id="lClientTo" ${locked?'disabled':''}>
+        <option value="">— none (client rate is 0) —</option>
+        ${clients.map(c=>`<option value="${c.id}" ${e.client_bill_to===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
+      </select><div class="small-note">18% GST · Marketing Expense / Subsidy</div></div>
     </div>
     <div class="row wrap"><button class="btn green" id="lSave" ${locked?'disabled':''}>${rec?"Save":"Create"}</button><button class="btn" id="lCancel">Cancel</button>
       <div class="spacer"></div>
@@ -83,8 +101,14 @@ function locForm(rec){
   $("lSave").addEventListener("click",async()=>{
     const name=$("lName").value.trim(); if(!name){ $("lErr").textContent="Name required."; return; }
     const client_id=$("lClient").value; if(!client_id){ $("lErr").textContent="Select the client this location belongs to."; return; }
-    const rates={ default: num($("lRate").value)||null };
-    const out={ name, client_id, district:$("lDist").value||null, state:$("lState").value||null, rates };
+    const farmerRate=num($("lFarmerRate").value), clientRate=num($("lClientRate").value);
+    const farmerTo=$("lFarmerTo").value||null, clientTo=$("lClientTo").value||null;
+    if(!farmerTo){ $("lErr").textContent="Select who the farmer rate is billed to."; return; }
+    if(clientRate>0 && !clientTo){ $("lErr").textContent="The client rate is above 0 — choose who it is billed to, or set the rate to 0."; return; }
+    const out={ name, client_id, district:$("lDist").value||null, state:$("lState").value||null,
+      farmer_rate: farmerRate||null, client_rate: clientRate||0,
+      farmer_bill_to: farmerTo, client_bill_to: clientRate>0?clientTo:null,
+      rates: { default: farmerRate||null } };   // keep the legacy field in step
     if(rec){ const { error }=await sb().from("spray_locations").update(out).eq("id",rec.id); if(error){ $("lErr").textContent=error.message; return; } window.OPS.audit("edited","spray_locations",rec.id,name); }
     else { out.created_by=window.OPS.me.id; const { error }=await sb().from("spray_locations").insert(out); if(error){ $("lErr").textContent=error.message; return; } window.OPS.audit("created","spray_locations",name,name); }
     window.OPS.flashTop("Saved ✓"); view();
