@@ -97,7 +97,7 @@ function form(rec){
         If this is a duplicate spelling of another pilot, use <b>Delete duplicate</b> — historic entries keep their
         original text names, so deleting it changes no past data.</div>`:''}
       <div class="fgrid">
-        <div class="field"><label>Vendor (employer) *</label><select id="p_vendor">
+        <div class="field"><label>Vendor (employer) * <a href="#" id="pNewVendor" style="font-weight:400">+ new vendor</a></label><select id="p_vendor">
           <option value="">— select vendor —</option>
           ${vendors.map(v=>`<option value="${v.id}" ${e.vendor_id===v.id?'selected':''}>${esc(vName(v))}</option>`).join("")}
         </select></div>
@@ -119,6 +119,7 @@ function form(rec){
     </div>
     ${rec?`<div class="card" id="plAssign"><h3>Location assignment</h3><div class="muted">Loading…</div></div>`:''}`;
   $("plBack").addEventListener("click",view); $("plCancel").addEventListener("click",view);
+  if($("pNewVendor")) $("pNewVendor").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("vendors"); });
   $("plSave").addEventListener("click",async()=>{
     const out={ vendor_id:$("p_vendor").value||null, name:$("p_name").value.trim(),
       phone:$("p_phone").value.trim()||null, rpc_no:$("p_rpc").value.trim()||null,

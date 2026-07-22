@@ -145,6 +145,17 @@ function makeRegistry(cfg){
         <div class="err" id="rqErr"></div>
       </div>
       <div id="rqApproval"></div>`;
+    // auto-populate the next number in the series for a NEW record (still editable)
+    if(!rec && cfg.autoNumber){
+      const el=$("f_"+cfg.autoNumber.field);
+      if(el && !el.value){
+        el.placeholder="fetching next number…";
+        sb().rpc(cfg.autoNumber.rpc, cfg.autoNumber.args||{}).then(({data,error})=>{
+          if(!error && data && !el.value){ el.value=data; el.title="Next available — edit if you need a different number"; }
+          el.placeholder="";
+        }).catch(()=>{ el.placeholder=""; });
+      }
+    }
     if(cfg.approvable && rec && window.OPS.approvals){ window.OPS.approvals.bar(cfg.table, rec, $("rqApproval"), ()=>{ sb().from(cfg.table).select("*").eq("id",rec.id).single().then(({data})=>form(data||rec)); }); }
     if(cfg.logView && rec && window.OPS.access){ window.OPS.access.log(cfg.table, rec.id, rec[cfg.fields[0].key]||""); }
     // dependent State -> District dropdowns

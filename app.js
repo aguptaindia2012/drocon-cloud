@@ -50,6 +50,8 @@ const TOOLS = [
   { key:"entries",         section:"trackers", label:"Entries",           gate:"perm" },
   { key:"locations",       section:"trackers", label:"Locations",         gate:"perm" },
   { key:"pilots_master",   section:"trackers", label:"Pilots",            gate:"perm" },
+  { key:"vendor_report",   section:"trackers", label:"Vendor Statement",  gate:"perm" },
+  { key:"farmer_bulk",     section:"trackers", label:"Farmer Bulk Entry", gate:"perm" },
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
   // Dashboards (Acre & Farmer trackers are dashboards now; receivables consolidated here)

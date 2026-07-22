@@ -29,7 +29,7 @@ async function view(editSub){
     <div class="card">
       <div class="fgrid three">
         <div class="field"><label>Date</label><input id="dDate" type="date" value="${esc(editSub?editSub.entry_date:todayISO())}"></div>
-        <div class="field"><label>Location *</label><select id="dLoc"><option value="">— select location —</option></select></div>
+        <div class="field"><label>Location * <a href="#" id="dNewLoc" style="font-weight:400">+ new location</a></label><select id="dLoc"><option value="">— select location —</option></select></div>
         <div class="field"><label>Client (from the location)</label><input id="dClientName" value="" disabled placeholder="set on the location"></div>
       </div>
       <div id="dRateNote" class="small-note" style="margin:-6px 0 10px"></div>
@@ -56,6 +56,7 @@ async function view(editSub){
   $("dClear").addEventListener("click",()=> editSub ? window.OPS.openTool("daily_approvals") : view());
   $("dAdd").addEventListener("click",()=>{ drows.push(blank()); renderRows(); });
   $("dSave").addEventListener("click",save);
+  if($("dNewLoc")) $("dNewLoc").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("locations"); });
   window.OPS.geoUI.wire("dState","dDistrict");
   renderRows();
   // reviewer dropdown (any internal user except yourself; admins can also approve from the queue)

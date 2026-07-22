@@ -57,7 +57,7 @@ function locForm(rec){
     <div class="card" style="margin-top:12px"><div class="eyebrow">Daily Spray Entry</div><h1>${rec?"Edit":"New"} location</h1>
     ${locked?'<div class="callout warn">🔒 <b>This location is locked.</b> Details cannot be edited and no pilots can be assigned. An approver must unlock it first.</div>':''}
     <div class="fgrid">
-      <div class="field"><label>Client *</label><select id="lClient" ${locked?'disabled':''}>
+      <div class="field"><label>Client * <a href="#" id="lNewClient" style="font-weight:400">+ new client</a></label><select id="lClient" ${locked?'disabled':''}>
         <option value="">— select client —</option>
         ${clients.map(c=>`<option value="${c.id}" ${e.client_id===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
       </select></div>
@@ -89,6 +89,7 @@ function locForm(rec){
     <div class="err" id="lErr"></div></div>
     ${rec?'<div class="card" id="lPilots"><h3>Pilots at this location</h3><div class="muted">Loading…</div></div>':''}`;
   $("lBack").addEventListener("click",view); $("lCancel").addEventListener("click",view);
+  if($("lNewClient")) $("lNewClient").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("clients"); });
   window.OPS.geoUI.wire("lState","lDist");
   if($("lLock")) $("lLock").addEventListener("click",async()=>{
     const note = locked ? null : prompt("Optional note for locking this location:","");

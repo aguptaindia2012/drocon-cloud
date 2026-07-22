@@ -20,6 +20,7 @@ const MSA_RESPONSIBILITIES = [
 window.OPS.routes.clients = window.OPS.makeRegistry({
   tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"firm_name",
+  autoNumber:{ field:"client_ref", rpc:"next_client_code" },
   searchKeys:["name","firm_name","client_ref","mobile","district","state","gstin"],
   listCols:[
     {key:"firm_name", label:"Party Name", fmt:(v,r)=>esc(v||r.name||"")},
