@@ -38,8 +38,8 @@ const SECTIONS = [
   { key:"finance",    label:"Finance" },
   { key:"inventory",  label:"Inventory" },
   { key:"hr",         label:"HR" },
-  // master records everything else selects from, plus the reference material
-  { key:"resources",  label:"Master Data" },
+  // registers of who/where everything else selects from, plus reference material
+  { key:"resources",  label:"Registers" },
   { key:"team",       label:"Team & Access" },
   { key:"audit",      label:"Audit" },
   { key:"portal",     label:"Partner Portal" },   // external (invite-only) logins only
@@ -57,13 +57,13 @@ const TOOLS = [
   { key:"vendor_report",   section:"trackers", label:"Vendor Statement",  gate:"perm" },
   // (Farmer Bulk Entry is a sub-sub tab under Entries → Farmer sprays)
   // Business Development — Authorized Partners home, orders + sales documents
+  { key:"bd_dashboard",     section:"order", label:"Ongoing Sales",   gate:"perm" },
   { key:"partners",         section:"order", label:"Authorized Partners",      gate:"all" },
   { key:"ap_rates",         section:"order", label:"Authorized Partner Rates", gate:"perm" },
   { key:"partner_invoices", section:"order", label:"Partner Invoices",         gate:"perm" },
   { key:"orders",           section:"order", label:"Order Tracker",   gate:"all" },
   { key:"quotation",        section:"order", label:"Quotation",       gate:"perm" },
   { key:"bom",              section:"order", label:"BOM Calculator",  gate:"perm" },
-  { key:"bd_dashboard",     section:"order", label:"Ongoing Sales",   gate:"perm" },
   // Agreement — dashboard first
   { key:"agreement_dashboard", section:"agreement", label:"Agreement Dashboard", gate:"perm" },
   { key:"agreements",       section:"agreement", label:"Agreements",      gate:"all" },
@@ -84,7 +84,7 @@ const TOOLS = [
   { key:"hr_employees",  section:"hr", label:"Employees",          gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",     gate:"perm" },
   { key:"hr_payslips",   section:"hr", label:"Payslips",           gate:"perm" },
-  // Master Data — the records every other screen selects from, then the
+  // Registers — the records every other screen selects from, then the
   // reference material (policies, manual & FAQs)
   { key:"clients",       section:"resources", label:"Client",       gate:"perm" },
   { key:"vendors",       section:"resources", label:"Vendors",      gate:"perm" },
