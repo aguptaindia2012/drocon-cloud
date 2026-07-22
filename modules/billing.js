@@ -148,6 +148,7 @@ function editor(){
         <select id="dCatPick" style="max-width:320px"><option value="">+ Add from catalogue…</option></select></div>
 
       <div id="dTotals"></div>
+      <div id="dMargin"></div>
 
       <h3 style="margin-top:14px">Terms</h3>
       ${termsHTML(cfg)}
@@ -221,6 +222,51 @@ function renderTotals(){
     <table style="font-size:13px"><tr><td>Sub Total</td><td class="num">${money(t.sub)}</td></tr>${gstLines}
     <tr><td><b style="color:var(--green)">Grand Total</b></td><td class="num"><b style="color:var(--green)">${money(t.total)}</b></td></tr></table>
     <div class="muted" style="margin-top:6px">${window.OPS.docgen.amountInWords(t.total)}</div></div>`;
+  renderMargin();
+}
+
+/* ---------- INTERNAL margin panel (never printed on the document) ----------
+   Uses the cost snapshot (_cb base + _cs shipping) taken when the item was
+   picked from the catalogue, so it reflects the cost at the time of quoting. */
+function marginRows(){
+  return (D.items||[]).map(it=>{
+    const qty=num(it.qty), rate=num(it.rate), disc=num(it.disc);
+    const revenue = qty*rate*(1-disc/100);
+    const unitCost = num(it._cb)+num(it._cs);
+    const cost = qty*unitCost;
+    const known = (it._cb!=null || it._cs!=null) && unitCost>0;
+    return { desc:it.desc||"", qty, revenue, cost, known,
+             profit: revenue-cost, pct: revenue>0 ? ((revenue-cost)/revenue*100) : 0 };
+  }).filter(r=>r.qty>0 || r.revenue>0);
+}
+function renderMargin(){
+  const host=$("dMargin"); if(!host) return;
+  const rows=marginRows();
+  const priced=rows.filter(r=>r.known);
+  if(!rows.length || !priced.length){
+    host.innerHTML = rows.length
+      ? '<div class="card" style="border-left:4px solid var(--line)"><h3>Margin (internal)</h3><p class="muted" style="margin:0">No cost recorded for these items. Add <b>Cost — base</b> and <b>Cost — shipping</b> on the <b>Catalogue</b>, then re-pick the item to see profit here.</p></div>'
+      : "";
+    return;
+  }
+  const rev=priced.reduce((s,r)=>s+r.revenue,0), cst=priced.reduce((s,r)=>s+r.cost,0);
+  const pft=rev-cst, pct=rev>0?(pft/rev*100):0;
+  const col=v=> v<0 ? "#a3322a" : (v<10 ? "#9a5b00" : "#3e6b20");
+  host.innerHTML=`<div class="card no-print" style="border-left:4px solid var(--orange)">
+    <h3>Margin (internal — not printed on the document)</h3>
+    <p class="muted" style="margin-top:-4px">Cost is base + shipping, snapshotted from the Catalogue when each item was added. Shown for pricing and approval only.</p>
+    <div style="overflow:auto"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Margin %</th></tr></thead>
+    <tbody>${rows.map(r=>r.known?`<tr><td>${esc(r.desc)}</td><td class="num">${r.qty}</td>
+      <td class="num">${money(r.revenue)}</td><td class="num">${money(r.cost)}</td>
+      <td class="num" style="font-weight:700;color:${col(r.pct)}">${money(r.profit)}</td>
+      <td class="num" style="font-weight:700;color:${col(r.pct)}">${r.pct.toFixed(1)}%</td></tr>`
+      :`<tr><td>${esc(r.desc)}</td><td class="num">${r.qty}</td><td class="num">${money(r.revenue)}</td>
+      <td colspan="3" class="muted">no cost on the catalogue</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="2" class="num"><b>Total (costed items)</b></td><td class="num"><b>${money(rev)}</b></td>
+      <td class="num"><b>${money(cst)}</b></td>
+      <td class="num" style="color:${col(pct)}"><b>${money(pft)}</b></td>
+      <td class="num" style="color:${col(pct)}"><b>${pct.toFixed(1)}%</b></td></tr></tfoot></table></div>
+    ${pft<0?'<div class="callout warn" style="margin-top:10px">⚠ This document is priced <b>below cost</b>.</div>':''}</div>`;
 }
 
 async function loadPickers(cfg){
@@ -234,8 +280,11 @@ async function loadPickers(cfg){
   $("dCatPick").innerHTML='<option value="">+ Add from catalogue…</option>'+opt.join("");
   $("dCatPick").addEventListener("change",()=>{ const v=$("dCatPick").value; if(!v) return; const [kind,id]=v.split(":");
     const s=(kind==="svc"?svc:spr).find(x=>x.id===id);
-    if(kind==="svc") D.items.push({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0});
-    else D.items.push({desc:s.name,hsn:s.hsn_code||"",gst:num(s.gst_rate),qty:1,rate:num(s.rate_excl_gst),per:s.unit||"",disc:0, _spareId:s.id});
+    // _cb/_cs are the INTERNAL cost snapshot (base + shipping) — used for the
+    // margin panel and approval review only; never printed on the document.
+    const cost={ _cb:num(s.cost_base), _cs:num(s.cost_shipping) };
+    if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0},cost));
+    else D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:num(s.gst_rate),qty:1,rate:num(s.rate_excl_gst),per:s.unit||"",disc:0, _spareId:s.id},cost));
     $("dCatPick").value=""; renderItems(); });
   // party picker
   if(cfg.pickFrom){

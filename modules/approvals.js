@@ -26,6 +26,21 @@ const TYPES = {
       return (d?String(d).slice(0,10):"")+(p?(" · "+p):"")+(a!=null?(" · "+a+" ac"):""); } },
 };
 let invSpares={};   // id -> name cache for the inventory review summary
+/* Internal margin from the cost snapshot on each line (base + shipping).
+   Reviewers see it here; it is never printed on the customer's document. */
+function marginNote(items){
+  const priced=(items||[]).filter(li=>(num(li._cb)+num(li._cs))>0);
+  if(!priced.length) return "";
+  const rev=priced.reduce((s,li)=>s+num(li.qty)*num(li.rate)*(1-num(li.disc)/100),0);
+  const cost=priced.reduce((s,li)=>s+num(li.qty)*(num(li._cb)+num(li._cs)),0);
+  const pft=rev-cost, pct=rev>0?(pft/rev*100):0;
+  const col = pft<0 ? "#a3322a" : (pct<10 ? "#9a5b00" : "#3e6b20");
+  return `<div class="callout" style="margin-top:10px;background:var(--cream);border-left-color:var(--orange)">
+    <b>Margin (internal):</b> revenue ${money(rev)} · cost ${money(cost)} ·
+    <b style="color:${col}">profit ${money(pft)} (${pct.toFixed(1)}%)</b>
+    ${priced.length<(items||[]).length?` <span class="muted">— ${(items.length-priced.length)} line(s) have no catalogue cost</span>`:""}
+    ${pft<0?'<br><b style="color:#a3322a">⚠ Priced below cost.</b>':''}</div>`;
+}
 const labelOf = (table,r)=>{ const l=TYPES[table].label; return typeof l==="function"?l(r):l; };
 
 async function listProfilesCached(){ if(!window.OPS._profilesCache){ const {data}=await sb().from("profiles").select("id,full_name,email,role").order("full_name"); window.OPS._profilesCache=data||[]; } return window.OPS._profilesCache; }
@@ -148,7 +163,8 @@ function summaryHTML(it){
         ${kv("Line items",String(items.length))}${kv("Total",money(t.total))}
         ${r.data&&r.data.fromQuotation?kv("From quotation",r.data.fromQuotation):""}</div>
       ${items.length?`<table class="tight" style="margin-top:8px"><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
-        <tbody>${items.slice(0,15).map(li=>`<tr><td>${esc(li.desc||'')}</td><td class="num">${esc(li.qty??'')}</td><td class="num">${money(li.rate)}</td><td class="num">${money(num(li.qty)*num(li.rate)*(1-num(li.disc)/100))}</td></tr>`).join("")}</tbody></table>`:''}`;
+        <tbody>${items.slice(0,15).map(li=>`<tr><td>${esc(li.desc||'')}</td><td class="num">${esc(li.qty??'')}</td><td class="num">${money(li.rate)}</td><td class="num">${money(num(li.qty)*num(li.rate)*(1-num(li.disc)/100))}</td></tr>`).join("")}</tbody></table>`:''}
+      ${marginNote(items)}`;
   }
   if(it.table==="clients"||it.table==="vendors")
     return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">${kv("Firm",r.firm_name)}${kv("Contact",r.name)}${kv("Mobile",r.mobile)}${kv("Email",r.email)}${kv("GSTIN",r.gstin)}${kv("City",r.city)}${kv("State",r.state)}</div>`;

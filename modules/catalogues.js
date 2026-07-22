@@ -9,23 +9,27 @@ const sb = ()=>window.OPS.sb;
 
 const CATS = {
   service: { table:"service_catalogue", label:"Services", rateKey:"default_rate", hsnKey:"hsn_sac",
-    cols:[["name","Service"],["hsn_sac","HSN/SAC"],["unit","Unit"],["default_rate","Rate",true],["gst_rate","GST%",true]],
+    cols:[["name","Service"],["hsn_sac","HSN/SAC"],["unit","Unit"],["default_rate","Rate",true],["gst_rate","GST%",true],["_cost","Cost",true]],
     fields:[
       {key:"name",label:"Service name",full:true,required:true},
       {key:"hsn_sac",label:"HSN/SAC"},
       {key:"unit",label:"Unit"},
       {key:"default_rate",label:"Default Rate (₹)",type:"number"},
       {key:"gst_rate",label:"GST %",type:"number"},
+      {key:"cost_base",label:"Cost — base (₹)",type:"number"},
+      {key:"cost_shipping",label:"Cost — shipping (₹)",type:"number"},
       {key:"description",label:"Description",type:"textarea",full:true},
     ] },
   spare: { table:"spare_catalogue", label:"Spares", rateKey:"rate_excl_gst", hsnKey:"hsn_code",
-    cols:[["name","Spare"],["hsn_code","HSN"],["unit","Unit"],["rate_excl_gst","Rate excl.GST",true],["gst_rate","GST%",true],["current_stock","Stock",true]],
+    cols:[["name","Spare"],["hsn_code","HSN"],["unit","Unit"],["rate_excl_gst","Rate excl.GST",true],["gst_rate","GST%",true],["_cost","Cost",true],["current_stock","Stock",true]],
     fields:[
       {key:"name",label:"Spare name",full:true,required:true},
       {key:"hsn_code",label:"HSN Code"},
       {key:"unit",label:"Unit"},
       {key:"rate_excl_gst",label:"Rate excl. GST (₹)",type:"number"},
       {key:"gst_rate",label:"GST %",type:"number"},
+      {key:"cost_base",label:"Cost — base (₹)",type:"number"},
+      {key:"cost_shipping",label:"Cost — shipping (₹)",type:"number"},
       {key:"description",label:"Description",type:"textarea",full:true},
     ] },
 };
@@ -51,7 +55,9 @@ async function view(){
   function render(rows){
     $("cList").innerHTML = rows.length ? `<table><thead><tr>${cfg.cols.map(c=>`<th class="${c[2]?'num':''}">${esc(c[1])}</th>`).join("")}<th></th></tr></thead>
       <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.cols.map(c=>{
-        let v=r[c[0]]; if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
+        let v=r[c[0]];
+        if(c[0]==='_cost'){ const t=num(r.cost_base)+num(r.cost_shipping); v = t>0?t:null; }
+        if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
         else if(c[0]==='gst_rate') v=(v==null?'':v+'%'); else if(c[0]==='current_stock') v=(v==null?0:v);
         return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td class="muted">edit ›</td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No items yet.</div>';
