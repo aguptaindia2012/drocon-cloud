@@ -35,11 +35,101 @@ async function view(){
           <option value="client" ${side==='client'?'selected':''}>Client rate — Marketing Expense / Subsidy (18%)</option>
         </select></div>
         <button class="btn sm" id="abLoad">Find unbilled work</button>
+        <div class="spacer"></div>
+        <button class="btn sm" id="abCN">↩ Credit note from an acre bill</button>
       </div>
     </div>
     <div id="abBody" class="muted">Set a period and click <b>Find unbilled work</b>.</div>`;
   $("abLoad").addEventListener("click",()=>{ F.from=$("abFrom").value; F.to=$("abTo").value; side=$("abSide").value; sel.clear(); load(); });
   $("abSide").addEventListener("change",()=>{ side=$("abSide").value; sel.clear(); if(rows.length) renderPick(); });
+  $("abCN").addEventListener("click",creditList);
+}
+
+/* ------------------------------------------------------- credit notes ---- */
+/* Mirrors the billing flow: pick an acre-raised document, credit all or part of
+   it, and the credited acre rows are released so they can be billed again. */
+async function creditList(){
+  const host=$("abBody"); host.innerHTML="Loading acre bills…";
+  const { data, error }=await sb().from("documents").select("*")
+    .eq("doc_type","invoice").order("doc_date",{ascending:false}).limit(300);
+  if(error){ host.innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
+  const docs=(data||[]).filter(d=>d.data && d.data.source==="acre_billing");
+  host.innerHTML=`<div class="card"><h3>Credit note — choose the acre bill to credit</h3>
+    <p class="muted" style="margin-top:-4px">Crediting releases those acre rows so the work can be billed again correctly.</p>
+    ${docs.length?`<div style="overflow:auto"><table><thead><tr><th>Number</th><th>Date</th><th>Party</th><th>Type</th><th class="num">Total</th></tr></thead>
+      <tbody>${docs.map(d=>`<tr class="clickable" data-doc="${d.id}"><td><b>${esc(d.number)}</b></td><td>${fmtDate(d.doc_date)}</td>
+        <td>${esc((d.party_snapshot||{}).firmName||'')}</td>
+        <td>${d.data.side==="farmer"?'<span class="chip approved">Bill of Supply</span>':'<span class="chip issued">Client rate</span>'}</td>
+        <td class="num">${money((d.totals||{}).total)}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted">No acre-raised bills yet.</div>'}
+    <div class="row" style="margin-top:10px"><button class="btn sm" id="abBack">← Back to billing</button></div></div>`;
+  host.querySelectorAll("[data-doc]").forEach(tr=>tr.addEventListener("click",()=>{
+    const d=docs.find(x=>String(x.id)===tr.getAttribute("data-doc")); if(d) creditForm(d); }));
+  $("abBack").addEventListener("click",view);
+}
+
+function creditForm(doc){
+  const items=doc.line_items||[];
+  const host=$("abBody");
+  const isFarmer = doc.data.side==="farmer";
+  host.innerHTML=`<div class="card"><h3>Credit note against ${esc(doc.number)}</h3>
+    <p class="muted" style="margin-top:-4px">${esc((doc.party_snapshot||{}).firmName||'')} ·
+      ${isFarmer?'Bill of Supply (0%)':'Client rate (18%)'} · tick the day-lines to credit.</p>
+    <div style="overflow:auto"><table><thead><tr><th></th><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+    <tbody>${items.map((it,i)=>`<tr>
+      <td style="text-align:center"><input type="checkbox" style="width:auto" data-cn="${i}" checked></td>
+      <td>${esc(String(it.desc||"").split("\\n")[0])}</td>
+      <td class="num">${esc(it.qty)}</td><td class="num">${money(it.rate)}</td>
+      <td class="num">${money(num(it.qty)*num(it.rate))}</td></tr>`).join("")}</tbody></table></div>
+    <div class="field" style="margin-top:10px"><label>Reason for the credit</label><input id="cnReason" placeholder="e.g. acres over-billed / rate corrected"></div>
+    <div class="row"><button class="btn green" id="cnGo">Generate credit note</button>
+      <button class="btn" id="cnCancel">Cancel</button></div>
+    <div class="err" id="cnErr"></div></div>`;
+  $("cnCancel").addEventListener("click",creditList);
+  $("cnGo").addEventListener("click",()=>makeCredit(doc));
+}
+
+async function makeCredit(doc){
+  const err=$("cnErr"); const btn=$("cnGo"); btn.disabled=true; err.textContent="";
+  try{
+    const picked=[...document.querySelectorAll("[data-cn]")].filter(c=>c.checked).map(c=>+c.getAttribute("data-cn"));
+    if(!picked.length) throw new Error("Tick at least one line to credit.");
+    const items=(doc.line_items||[]).filter((_,i)=>picked.includes(i));
+    const isFarmer = doc.data.side==="farmer";
+    const sub=items.reduce((s,it)=>s+num(it.qty)*num(it.rate),0);
+    const gstTotal = isFarmer ? 0 : Math.round(sub*CLIENT_GST)/100;
+    const fy=fyOf(todayISO());
+    let seq=1; try{ const { data }=await sb().rpc("next_doc_seq",{p_doc_type:"credit_note",p_fy:fy}); if(data) seq=data; }catch(e){}
+    const number="DCB/CN/"+fy+"/"+String(seq).padStart(4,"0");
+
+    const rec={ doc_type:"credit_note", number, fiscal_year:fy, seq, doc_date:todayISO(),
+      party_kind:"client", party_id:doc.party_id, party_snapshot:doc.party_snapshot,
+      related_doc_id:doc.id, line_items:items,
+      totals:{ sub, gstTotal, total: sub+gstTotal },
+      terms:{ delivery:"Credit against "+doc.number+($("cnReason").value?(" — "+$("cnReason").value):"") },
+      status:"issued", approval_status:"draft",
+      data:{ source:"acre_billing", side:doc.data.side, creditOf:doc.number,
+             title: isFarmer ? "Credit Note (Bill of Supply)" : null },
+      created_by:window.OPS.me.id };
+    const { data:ins, error }=await sb().from("documents").insert(rec).select().single();
+    if(error) throw error;
+
+    // release the acre rows that sat behind the credited lines so they can be re-billed
+    const dates=items.map(it=>String(it.desc||"").match(/\(([^)]+)\)/)).filter(Boolean).map(m=>m[1]);
+    let released=0;
+    try{
+      const col = isFarmer ? "farmer_doc_id" : "client_doc_id";
+      const { data:acre }=await sb().from("acre_entries").select("id,entry_date").eq(col,doc.id);
+      const want=new Set(dates.map(d=>new Date(d).toDateString()));
+      const ids=(acre||[]).filter(a=>want.has(new Date(a.entry_date).toDateString())).map(a=>a.id);
+      if(ids.length){ const { data:n }=await sb().rpc("release_acre_rows",{p_ids:ids,p_side:doc.data.side}); released=n||ids.length; }
+    }catch(e){}
+
+    window.OPS.audit("created","documents",ins.id, number+" · credit of "+doc.number);
+    window.OPS.flashTop(number+" created ✓"+(released?(" · "+released+" acre row(s) released"):""));
+    creditList();
+  }catch(e){ err.textContent=e.message||String(e); }
+  if(btn) btn.disabled=false;
 }
 
 /* --------------------------------------------------------------- data ---- */
