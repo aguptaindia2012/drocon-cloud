@@ -1,13 +1,13 @@
 /* DroCon Bharat Agreement Studio — Cloud service worker.
    Caches the app shell so it installs and launches like an app.
    IMPORTANT: never caches your Supabase API responses (those stay live). */
-const VERSION = "dcb-cloud-v74";
+const VERSION = "dcb-cloud-v75";
 const SHELL = [
   "./", "./index.html", "./studio.html", "./manifest.webmanifest",
   "./app.js", "./logo.js", "./docgen.js", "./modules/report.js", "./agreement.js", "./config.js",
   "./modules/geo.js", "./modules/_shared.js", "./modules/access.js", "./modules/approvals.js", "./modules/clients.js", "./modules/vendors.js",
   "./modules/catalogues.js", "./modules/inventory.js", "./modules/bom.js",
-  "./modules/billing.js", "./modules/acre_billing.js", "./modules/receivables.js", "./modules/payments.js",
+  "./modules/billing.js", "./modules/accounting.js", "./modules/acre_billing.js", "./modules/receivables.js", "./modules/payments.js",
   "./modules/farmer.js", "./modules/acre.js", "./modules/daily.js", "./modules/locations.js", "./modules/entries.js",
   "./modules/orders.js", "./modules/pilots.js", "./modules/pilots_master.js", "./modules/vendor_report.js", "./modules/farmer_bulk.js", "./modules/dashboards.js", "./modules/resources.js",
   "./modules/hr.js", "./modules/portal.js", "./modules/manual.js",

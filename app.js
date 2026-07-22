@@ -36,6 +36,7 @@ const SECTIONS = [
   { key:"order",      label:"Business Development" },
   { key:"agreement",  label:"Agreement" },
   { key:"finance",    label:"Finance" },
+  { key:"accounting", label:"Accounting" },
   { key:"inventory",  label:"Inventory" },
   { key:"hr",         label:"HR" },
   // registers of who/where everything else selects from, plus reference material
@@ -76,6 +77,9 @@ const TOOLS = [
   { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
   { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
   { key:"payment_status",section:"finance", label:"Payment Status", gate:"perm" },
+  // Accounting — internal money out + daily reconciliation
+  { key:"day_book",     section:"accounting", label:"Day Book",           gate:"perm" },
+  { key:"expense_mgmt", section:"accounting", label:"Expense Management", gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },
