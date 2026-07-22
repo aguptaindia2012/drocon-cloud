@@ -14,7 +14,7 @@ const sb = ()=>window.OPS.sb;
 const HSN = "9986";
 const CLIENT_GST = 18;
 
-let side="farmer", rows=[], farmerBySource={}, sel=new Set(), allLocs=[];
+let side="farmer", rows=[], farmerBySource={}, sel=new Set(), allLocs=[], selClient=null;
 const F = { from:"", to:"" };
 const partyName = c => (c && (c.firm_name || c.name)) || "";
 
@@ -222,24 +222,39 @@ function renderPick(){
     const g=byLoc[k]; g.acres+=num(r.acres); g.value+=num(r.acres)*rateOf(r); g.n++;
     if(r.entry_date<g.from) g.from=r.entry_date; if(r.entry_date>g.to) g.to=r.entry_date;
   });
-  const chosen=Object.values(byLoc).sort((a,b)=>a.name.localeCompare(b.name));
-  const clients=[...new Set(chosen.map(l=>String(l.client||"")))];
-  const clash=clients.length>1;
-  const tA=chosen.reduce((s,l)=>s+l.acres,0), tV=chosen.reduce((s,l)=>s+l.value,0);
+  const locList=Object.values(byLoc).sort((a,b)=>a.name.localeCompare(b.name));
+
+  // LAYER 2 — group those locations by the client they bill
+  const byCli={};
+  locList.forEach(l=>{ const k=String(l.client||"");
+    byCli[k]=byCli[k]||{ id:l.client, name:l.clientName||"(no billing party)", locs:[], acres:0, value:0 };
+    const g=byCli[k]; g.locs.push(l); g.acres+=l.acres; g.value+=l.value;
+  });
+  const clients=Object.values(byCli).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  // default to the only client, or keep a valid earlier choice
+  if(!selClient || !byCli[String(selClient)]) selClient = clients.length===1 ? String(clients[0].id||"") : null;
+  const picked = selClient ? byCli[String(selClient)] : null;
+  const chosen = picked ? picked.locs : [];
 
   $("abBody").innerHTML=`
-    <div class="card"><h3>Unbilled acres found</h3>
-      <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Bills to (client)</th><th>Period</th><th class="num">Rows</th><th class="num">Acres</th><th class="num">Value</th></tr></thead>
-      <tbody>${chosen.map(l=>`<tr>
-        <td><b>${esc(l.name)}</b></td><td>${esc(l.clientName||'')}</td>
-        <td class="muted">${fmtDate(l.from)} – ${fmtDate(l.to)}</td>
-        <td class="num">${l.n}</td><td class="num">${l.acres.toFixed(1)}</td><td class="num">${money(l.value)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td colspan="4" class="num"><b>Total</b></td><td class="num"><b>${tA.toFixed(1)}</b></td><td class="num"><b>${money(tV)}</b></td></tr></tfoot></table></div>
-      ${clash?`<div class="callout warn" style="margin-top:10px">⚠ These locations bill <b>different clients</b> (${chosen.map(c=>esc(c.clientName||'?')).join(" / ")}).
-        One document can only cover one client — untick locations above until a single client remains, then open again.</div>`:''}
+    <div class="card"><h3>Choose the client to bill</h3>
+      <p class="muted" style="margin-top:-4px">The unbilled work you selected bills ${clients.length>1?`<b>${clients.length} different clients</b> — pick one`:'the client below'}.
+        One document covers one client; bill the others separately afterwards.</p>
+      <div style="overflow:auto"><table><thead><tr><th></th><th>Client</th><th>Locations</th><th class="num">Acres</th><th class="num">Value</th></tr></thead>
+      <tbody>${clients.map(c=>`<tr class="clickable" data-cli="${esc(String(c.id||''))}" ${String(selClient||'')===String(c.id||'')?'style="background:var(--soft-green)"':''}>
+        <td style="text-align:center"><input type="radio" name="abCli" style="width:auto" data-cli-r="${esc(String(c.id||''))}" ${String(selClient||'')===String(c.id||'')?'checked':''} ${c.id?'':'disabled'}></td>
+        <td><b>${esc(c.name)}</b>${c.id?'':' <span class="chip rejected">set a billing party on the Location</span>'}</td>
+        <td>${c.locs.map(l=>esc(l.name)).join(", ")}</td>
+        <td class="num">${c.acres.toFixed(1)}</td><td class="num">${money(c.value)}</td></tr>`).join("")}</tbody></table></div>
     </div>
-    ${(chosen.length && !clash)?buildPreview(chosen):''}`;
+    ${chosen.length?buildPreview(chosen)
+      :'<div class="card muted">Select a client above to build the document.</div>'}`;
 
+  const choose=k=>{ selClient=k; renderPick(); };
+  $("abBody").querySelectorAll("[data-cli-r]").forEach(r=>r.addEventListener("change",()=>choose(r.getAttribute("data-cli-r"))));
+  $("abBody").querySelectorAll("[data-cli]").forEach(tr=>tr.addEventListener("click",e=>{
+    if(e.target && e.target.tagName==="INPUT") return;      // radio handles itself
+    const k=tr.getAttribute("data-cli"); if(k) choose(k); }));
   const gen=$("abGen"); if(gen) gen.addEventListener("click",()=>generate(chosen));
 }
 

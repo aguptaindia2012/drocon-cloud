@@ -52,7 +52,7 @@ label{font-size:12px;font-weight:700;display:block;margin-bottom:4px}
 .nav button{background:none;border:none;border-bottom:3px solid transparent;padding:11px 13px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
 .nav button.active{color:var(--green);border-bottom-color:var(--green)}
 .nav .soon{font-size:9px;background:var(--cream);color:var(--orange);padding:1px 5px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
-.wrap{max-width:1080px;margin:0 auto;padding:22px 18px 70px}
+.wrap{max-width:none;margin:0;padding:22px 1cm 70px}
 h1{font-size:24px;margin:0 0 4px}
 h3{margin:0 0 8px}
 .eyebrow{color:var(--orange);font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:700}
@@ -102,10 +102,12 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 .linetable input,.linetable select{padding:6px 7px;font-size:13px}
 .linetable td{padding:4px 5px}
 .x{cursor:pointer;color:#a3322a;font-weight:900;text-align:center}
-@media(max-width:640px){.fgrid,.fgrid.three{grid-template-columns:1fr}}
+@media(max-width:640px){.fgrid,.fgrid.three{grid-template-columns:1fr}
+  /* 1cm each side is too much on a phone — claw the space back */
+  .wrap{padding:16px 12px 60px}.footinner{padding:0 12px}}
 /* ---- page footer (normal flow: sits at the end of the content, not frozen) ---- */
 .appfooter{border-top:3px solid var(--green);background:#fafbf8;margin-top:28px;padding:20px 22px}
-.footinner{max-width:1080px;margin:0 auto;text-align:center}
+.footinner{max-width:none;margin:0;padding:0 1cm;text-align:center}
 .footsocial{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
 .footsocial a{display:inline-flex;width:34px;height:34px;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:50%;color:var(--green);background:#fff;transition:.15s}
 .footsocial a:hover{background:var(--green);color:#fff;border-color:var(--green)}
