@@ -511,7 +511,29 @@ async function position(){
       ${A.length?`<table><thead><tr><th>Issued</th><th>To</th><th>Purpose</th><th class="num">Outstanding</th></tr></thead>
         <tbody>${A.map(a=>`<tr><td>${fmtDate(a.issued_on)}</td><td><b>${esc(a.party_name||'')}</b></td>
           <td>${esc(a.purpose||'')}</td><td class="num" style="color:#9a5b00;font-weight:700">${money(a.outstanding)}</td></tr>`).join("")}</tbody></table>`
-        :'<div class="muted">No advances outstanding.</div>'}</div>`;
+        :'<div class="muted">No advances outstanding.</div>'}</div>
+    <div id="poTB"></div>`;
+  loadTrialBalance();
+}
+
+/* Trial balance straight from the journal — every movement posts double-entry,
+   so total debits must equal total credits. If they ever differ, something
+   bypassed the journal and needs investigating. */
+async function loadTrialBalance(){
+  const host=$("poTB"); if(!host) return;
+  const { data, error }=await sb().from("v_trial_balance").select("*");
+  if(error || !data || !data.length){ host.innerHTML=""; return; }
+  const dr=data.reduce((s,r)=>s+num(r.debit),0), cr=data.reduce((s,r)=>s+num(r.credit),0);
+  const ok=Math.abs(dr-cr)<0.005;
+  host.innerHTML=`<div class="card"><h3>Trial balance</h3>
+    <p class="muted" style="margin-top:-4px">Built from the journal — every receipt, payment, supplier invoice, expense and advance posts here automatically.</p>
+    <div style="overflow:auto"><table><thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
+    <tbody>${data.map(r=>`<tr><td>${esc(r.account)}</td><td class="num">${money(r.debit)}</td>
+      <td class="num">${money(r.credit)}</td>
+      <td class="num" style="font-weight:700">${money(r.balance)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td><b>Total</b></td><td class="num"><b>${money(dr)}</b></td><td class="num"><b>${money(cr)}</b></td>
+      <td class="num" style="color:${ok?'#3e6b20':'#a3322a'}"><b>${ok?'balanced ✓':money(dr-cr)}</b></td></tr></tfoot></table></div>
+    ${ok?'':'<div class="callout warn" style="margin-top:10px">⚠ The journal does not balance. Something was written without a matching entry — tell the developer.</div>'}</div>`;
 }
 
 window.OPS.routes.day_book     = dayBook;
