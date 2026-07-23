@@ -85,7 +85,9 @@ function recordPayment(x, back){
       <p class="muted">Invoice <b>${esc(x.r.number)}</b> · ${esc(x.party)} · Balance <b>${money(x.balance)}</b></p>
       <div class="fgrid">
         <div class="field"><label>Amount *</label><input id="pAmt" type="number" step="any" value="${x.balance>0?x.balance:''}"></div>
-        <div class="field"><label>Date</label><input id="pDate" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Received into *</label><select id="pAcct"><option value="">— loading —</option></select>
+          <div class="small-note">Which account the money landed in — this is what puts it on the Day Book.</div></div>
+        <div class="field"><label>Date <span class="muted">(the day it actually reached the account)</span></label><input id="pDate" type="date" value="${todayISO()}"></div>
         <div class="field"><label>Mode</label><select id="pMode"><option>UPI</option><option>NEFT/RTGS</option><option>Cash</option><option>Cheque</option><option>Other</option></select></div>
         <div class="field"><label>Note</label><input id="pNote"></div>
       </div>
@@ -93,10 +95,16 @@ function recordPayment(x, back){
       <div class="err" id="pErr"></div>
     </div>`;
   $("pBack").addEventListener("click",back); $("pCancel").addEventListener("click",back);
+  // which account the receipt landed in — without this it never reaches the Day Book
+  sb().from("cash_accounts").select("id,name,kind").eq("is_active",true).order("kind").then(({data,error})=>{
+    if(error || !data || !data.length){ $("pAcct").innerHTML='<option value="">— no accounts set up —</option>'; return; }
+    $("pAcct").innerHTML=data.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("");
+  });
   $("pSave").addEventListener("click",async()=>{
     const amt=num($("pAmt").value); if(amt<=0){ $("pErr").textContent="Enter a positive amount."; return; }
+    const acct=$("pAcct")?$("pAcct").value:null;
     const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:amt, paid_on:$("pDate").value||todayISO(),
-      mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
+      account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
     if(error){ $("pErr").textContent=error.message; return; }
     x.paid+=amt; await recomputeStatus(x);
     window.OPS.audit("payment","document",x.r.id,money(amt)+" via "+$("pMode").value);
