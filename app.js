@@ -70,18 +70,18 @@ const TOOLS = [
   { key:"agreements",       section:"agreement", label:"Agreements",      gate:"all" },
   { key:"new",              section:"agreement", label:"New agreement",   gate:"all" },
   { key:"templates",        section:"agreement", label:"Shared templates",gate:"approver" },
-  // Finance — receivables first
-  { key:"receivables",   section:"finance", label:"Invoice & Receivables", gate:"perm" },
+  // Finance — document generation
   { key:"invoice",       section:"finance", label:"Invoice",        gate:"perm" },
   { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
   { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
   { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
-  { key:"payment_status",section:"finance", label:"Payment Status", gate:"perm" },
-  // Accounting — internal money out + daily reconciliation
-  { key:"day_book",     section:"accounting", label:"Day Book",           gate:"perm" },
-  { key:"expense_mgmt", section:"accounting", label:"Expense Management", gate:"perm" },
-  { key:"advances",      section:"accounting", label:"Advances",           gate:"perm" },
-  { key:"acct_position", section:"accounting", label:"Position",           gate:"perm" },
+  // Accounting — collections, money out, daily reconciliation and the position
+  { key:"day_book",      section:"accounting", label:"Day Book",              gate:"perm" },
+  { key:"payment_status",section:"accounting", label:"Payment Collection",    gate:"perm" },
+  { key:"expense_mgmt",  section:"accounting", label:"Expense Management",     gate:"perm" },
+  { key:"advances",      section:"accounting", label:"Advances",              gate:"perm" },
+  { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
+  { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },

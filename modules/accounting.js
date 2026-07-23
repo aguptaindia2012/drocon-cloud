@@ -472,19 +472,23 @@ async function position(){
     sb().from("v_accounting_flags").select("*").order("close_date",{ascending:false}).limit(20),
     sb().from("v_days_unclosed").select("*").order("day",{ascending:false}).limit(20)
   ]);
+  loadBankBalances();
   const P=(pay.data||[]), R=(rec.data||[]).filter(r=>num(r.balance)>0.01), A=(adv.data||[]);
   const F=(flag.data||[]), U=(uncl.data||[]);
   const tp=P.reduce((s,r)=>s+num(r.balance),0), tr=R.reduce((s,r)=>s+num(r.balance),0), ta=A.reduce((s,r)=>s+num(r.outstanding),0);
   const bucket=d=>d<=30?'0–30':d<=60?'31–60':d<=90?'61–90':'>90';
   const age={}; R.forEach(r=>{ const b=bucket(num(r.age_days)); age[b]=(age[b]||0)+num(r.balance); });
 
+  const net=tr - tp + ta;   // due to us − we owe + advances we can recover
   $("poBody").innerHTML=`
     <div class="statrow">
       <div class="stat"><div class="n">${money(tr)}</div><div class="l">Receivable</div></div>
       <div class="stat" style="background:#fbe0de"><div class="n" style="color:#a3322a">${money(tp)}</div><div class="l">Payable</div></div>
       <div class="stat" style="background:#fff0db"><div class="n" style="color:#9a5b00">${money(ta)}</div><div class="l">Advances out</div></div>
+      <div class="stat" style="background:${net>=0?'var(--soft-green)':'#fbe0de'}"><div class="n" style="color:${net>=0?'#3e6b20':'#a3322a'}">${money(net)}</div><div class="l">Net (receivable − payable + advances)</div></div>
       <div class="stat" style="${(F.length||U.length)?'background:#fbe0de':''}"><div class="n" style="${(F.length||U.length)?'color:#a3322a':''}">${F.length+U.length}</div><div class="l">Red flags</div></div>
     </div>
+    <div id="poBank" class="statrow"></div>
     ${(F.length||U.length)?`<div class="card" style="border-left:4px solid #a3322a"><h3>⚑ Needs attention</h3>
       ${F.length?`<p class="muted" style="margin:-4px 0 6px"><b>Days closed with a difference</b></p>
         <table><thead><tr><th>Date</th><th>Account</th><th class="num">Difference</th><th>Note</th></tr></thead>
@@ -514,6 +518,27 @@ async function position(){
         :'<div class="muted">No advances outstanding.</div>'}</div>
     <div id="poTB"></div>`;
   loadTrialBalance();
+}
+
+/* Live balance of each account = opening + all receipts − all payments to date,
+   so cash on hand sits next to what is owed and owing. */
+async function loadBankBalances(){
+  const host=$("poBank"); if(!host) return;
+  const [{data:accs},{data:closes},{data:txns},{data:rc}]=await Promise.all([
+    sb().from("cash_accounts").select("*").eq("is_active",true).order("kind"),
+    sb().from("day_close").select("account_id,close_date,actual_closing").order("close_date",{ascending:false}),
+    sb().from("cash_txns").select("account_id,direction,amount,txn_date"),
+    sb().from("payments").select("account_id,amount,paid_on")
+  ]);
+  host.innerHTML=(accs||[]).map(a=>{
+    // start from the latest actual close if there is one, else the opening balance
+    const lastClose=(closes||[]).find(c=>c.account_id===a.id);
+    const base = lastClose ? { on:lastClose.close_date, bal:num(lastClose.actual_closing) } : { on:a.opened_on, bal:num(a.opening_balance) };
+    let bal=base.bal;
+    (txns||[]).forEach(t=>{ if(t.account_id===a.id && t.txn_date>base.on) bal += (t.direction==='in'?num(t.amount):-num(t.amount)); });
+    (rc||[]).forEach(p=>{ if(p.account_id===a.id && p.paid_on>base.on) bal += num(p.amount); });
+    return `<div class="stat" style="background:#eef3fb"><div class="n" style="color:var(--blue)">${money(bal)}</div><div class="l">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</div></div>`;
+  }).join("");
 }
 
 /* Trial balance straight from the journal — every movement posts double-entry,
