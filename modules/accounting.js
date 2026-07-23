@@ -149,14 +149,14 @@ function movement(dir){
     <div class="row"><button class="btn green" id="mvSave">Save</button><button class="btn" id="mvCancel">Cancel</button></div>
     <div class="err" id="mvErr"></div></div>`;
   $("mvBack").addEventListener("click",loadDayBack); $("mvCancel").addEventListener("click",loadDayBack);
-  $("mvSave").addEventListener("click",async()=>{
+  $("mvSave").addEventListener("click",()=>window.OPS.once($("mvSave"),async()=>{
     const amt=num($("mvAmt").value); if(!(amt>0)){ $("mvErr").textContent="Enter an amount."; return; }
     const { error }=await sb().from("cash_txns").insert({ account_id:acctId, direction:dir, txn_date:theDate,
       amount:amt, mode:$("mvMode").value, ref_type:$("mvRef").value, note:$("mvNote").value||null,
       created_by:window.OPS.me.id });
-    if(error){ $("mvErr").textContent=error.message; return; }
+    if(error){ $("mvErr").textContent=/duplicate|just recorded/i.test(error.message)?"That exact movement was just recorded — check before re-entering.":error.message; return; }
     window.OPS.flashTop("Saved ✓"); loadDayBack();
-  });
+  }));
 }
 function loadDayBack(){ dayBook(); }
 
@@ -343,20 +343,19 @@ function settle(kind, id, suggested, back){
     <div class="row"><button class="btn green" id="stGo">Record payment</button></div>
     <div class="err" id="stErr"></div></div>`;
   $("stBack").addEventListener("click",back);
-  $("stGo").addEventListener("click",async()=>{
+  $("stGo").addEventListener("click",()=>window.OPS.once($("stGo"),async()=>{
     const amt=num($("st_amt").value); if(!(amt>0)){ $("stErr").textContent="Enter an amount."; return; }
-    $("stGo").disabled=true;
     const { error }=await sb().from("cash_txns").insert({ account_id:$("st_acct").value, direction:"out",
       txn_date:$("st_date").value||todayISO(), amount:amt, mode:$("st_mode").value,
       ref_type:kind, ref_id:String(id), note:$("st_note").value||null, created_by:window.OPS.me.id });
-    if(error){ $("stGo").disabled=false; $("stErr").textContent=error.message; return; }
+    if(error){ $("stErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
     // update the source record's status
     const tbl = kind==="payable" ? "payables" : "expenses";
     const newStatus = kind==="payable" ? (amt>=suggested-0.005 ? "paid" : "part_paid") : "paid";
     await sb().from(tbl).update({ status:newStatus }).eq("id",id);
     window.OPS.audit("paid",tbl,id,money(amt));
     window.OPS.flashTop("Payment recorded ✓"); back();
-  });
+  }));
 }
 
 /* ========================= ADVANCES ========================= */
@@ -431,22 +430,20 @@ function advForm(rec){
       <div class="row" style="margin-top:8px"><button class="btn green" id="svGo">Record</button></div>
       <div class="err" id="svErr"></div></div>`:''}`;
   $("avBack").addEventListener("click",advances); $("avCancel").addEventListener("click",advances);
-  if($("avSave")) $("avSave").addEventListener("click",async()=>{
+  if($("avSave")) $("avSave").addEventListener("click",()=>window.OPS.once($("avSave"),async()=>{
     const amt=num($("av_amt").value); if(!(amt>0)){ $("avErr").textContent="Enter an amount."; return; }
     const on=$("av_on").value||todayISO();
-    $("avSave").disabled=true;
     const { data:ins, error }=await sb().from("advances").insert({
       party_kind:$("av_kind").value, vendor_id:$("av_vendor").value||null,
       payee_text:$("av_payee").value||null, amount:amt, issued_on:on,
       purpose:$("av_purpose").value||null, created_by:window.OPS.me.id }).select().single();
-    if(error){ $("avSave").disabled=false; $("avErr").textContent=error.message; return; }
+    if(error){ $("avErr").textContent=error.message; return; }
     const { error:tErr }=await sb().from("cash_txns").insert({ account_id:$("av_acct").value, direction:"out",
       txn_date:on, amount:amt, mode:$("av_mode").value, ref_type:"advance", ref_id:String(ins.id),
       note:"Advance — "+($("av_purpose").value||""), created_by:window.OPS.me.id });
-    $("avSave").disabled=false;
     if(tErr){ $("avErr").textContent="Advance saved, but the payment could not be recorded: "+tErr.message; return; }
     window.OPS.audit("created","advances",ins.id,money(amt)); window.OPS.flashTop("Advance issued ✓"); advances();
-  });
+  }));
   if($("svGo")) $("svGo").addEventListener("click",async()=>{
     const amt=num($("sv_amt").value); if(!(amt>0)){ $("svErr").textContent="Enter an amount."; return; }
     if(amt>num(e.outstanding)+0.005){ $("svErr").textContent="That is more than the outstanding balance."; return; }

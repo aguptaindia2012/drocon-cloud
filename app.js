@@ -390,6 +390,21 @@ function flashTop(msg){ let t=$("toast"); if(!t){ t=document.createElement("div"
   t.textContent=msg; t.style.opacity="1"; setTimeout(()=>{ t.style.transition="opacity .5s"; t.style.opacity="0"; },1800); }
 window.OPS.flashTop = flashTop;
 
+// Run an async click handler at most once at a time — guards against the
+// double-click / double-submit that was creating duplicate transactions.
+// Disables the button SYNCHRONOUSLY (before the first await), so a second
+// click that arrives microseconds later is ignored. Re-enables when done,
+// unless the handler navigated away.
+function once(btn, fn){
+  if(!btn) return;
+  if(btn.dataset.busy==="1") return;
+  btn.dataset.busy="1"; btn.disabled=true;
+  const label=btn.textContent; btn.textContent="Saving…";
+  Promise.resolve().then(fn).catch(e=>{ console.error(e); })
+    .finally(()=>{ if(document.body.contains(btn)){ btn.dataset.busy=""; btn.disabled=false; btn.textContent=label; } });
+}
+window.OPS.once = once;
+
 /* ===================== Notifications ===================== */
 let _notifs=[];
 async function refreshNotifs(){

@@ -100,16 +100,16 @@ function recordPayment(x, back){
     if(error || !data || !data.length){ $("pAcct").innerHTML='<option value="">— no accounts set up —</option>'; return; }
     $("pAcct").innerHTML=data.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("");
   });
-  $("pSave").addEventListener("click",async()=>{
+  $("pSave").addEventListener("click",()=>window.OPS.once($("pSave"),async()=>{
     const amt=num($("pAmt").value); if(amt<=0){ $("pErr").textContent="Enter a positive amount."; return; }
     const acct=$("pAcct")?$("pAcct").value:null;
     const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:amt, paid_on:$("pDate").value||todayISO(),
       account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
-    if(error){ $("pErr").textContent=error.message; return; }
+    if(error){ $("pErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact receipt was just recorded — check the list before re-entering.":error.message; return; }
     x.paid+=amt; await recomputeStatus(x);
     window.OPS.audit("payment","document",x.r.id,money(amt)+" via "+$("pMode").value);
     window.OPS.flashTop("Payment recorded ✓"); back();
-  });
+  }));
 }
 
 async function managePayments(x, back){
