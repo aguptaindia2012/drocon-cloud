@@ -33,7 +33,8 @@ async function view(){
 /* ---------- dashboard ---------- */
 async function dashboard(){
   const host=$("aBody");
-  const { data }=await sb().from("acre_entries").select("entry_date,acres,amount,pilot_name, loc:location_id(name,state)").limit(20000);
+  const { data }=await sb().from("acre_entries")
+    .select("entry_date,acres,amount,pilot_name,pilot_id, pilot:pilot_id(name), loc:location_id(name,state)").limit(20000);
   const rows=data||[];
   if(!rows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
   const totA=rows.reduce((s,r)=>s+num(r.acres),0), totR=rows.reduce((s,r)=>s+num(r.amount),0);
@@ -57,15 +58,23 @@ async function dashboard(){
                                : {key:"red",   label:"Red",    color:"#a3322a", bg:"#fbe0de"};
   const since=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
   const last7=rows.filter(r=>r.entry_date>=since);
-  const byLoc={}; const days=new Set();
+  // Prefer the linked master pilot; otherwise tidy the typed name so trailing
+  // spaces / casing don't split one person across two rows.
+  const pilotKey=r=>{
+    const nm=((r.pilot&&r.pilot.name)||r.pilot_name||"").replace(/\s+/g," ").trim();
+    return nm || "(unassigned)";
+  };
+  const byLoc={}; const days=new Set(); const dayTotals={};
   last7.forEach(r=>{ const d=r.entry_date; days.add(d);
-    const k=(r.loc&&r.loc.name)||"(none)"; const p=r.pilot_name||"(unassigned)";
+    const k=(r.loc&&r.loc.name)||"(none)"; const p=pilotKey(r);
+    dayTotals[d]=(dayTotals[d]||0)+num(r.acres);
     byLoc[k]=byLoc[k]||{days:{},pilots:{}};
     byLoc[k].days[d]=(byLoc[k].days[d]||0)+num(r.acres);
     byLoc[k].pilots[p]=byLoc[k].pilots[p]||{};
     byLoc[k].pilots[p][d]=(byLoc[k].pilots[p][d]||0)+num(r.acres);
   });
   const dayList=[...days].sort();
+  const grandTotal=dayList.reduce((s,d)=>s+(dayTotals[d]||0),0);
   // every pilot-day that fell short of the minimum
   const below=[];
   Object.keys(byLoc).forEach(k=>Object.keys(byLoc[k].pilots).forEach(p=>{
@@ -93,7 +102,12 @@ async function dashboard(){
         <b style="color:#a3322a;background:#fbe0de;padding:1px 5px;border-radius:4px">red at ${WARN_ACRES-1} or less</b> —
         anything not green is a day the client fell short of the daily minimum. A dot (·) means no entry that day.</p>
       ${dayList.length?`<div style="overflow:auto"><table><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
-      <tbody>${Object.keys(byLoc).sort().map(k=>{
+      <tbody>
+        <tr style="background:var(--charcoal);color:#fff">
+          <td><b>ALL LOCATIONS — daily total</b></td>
+          ${dayList.map(d=>`<td class="num"><b>${dayTotals[d]?dayTotals[d].toFixed(1):'·'}</b></td>`).join("")}
+          <td class="num"><b>${grandTotal.toFixed(1)}</b></td></tr>
+        ${Object.keys(byLoc).sort().map(k=>{
         const L=byLoc[k]; const tot=dayList.reduce((s,d)=>s+(L.days[d]||0),0);
         const locRow=`<tr style="background:var(--grey)"><td><b>${esc(k)}</b></td>${dayList.map(d=>`<td class="num">${L.days[d]?L.days[d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`;
         const pilotRows=Object.keys(L.pilots).sort().map(p=>{
