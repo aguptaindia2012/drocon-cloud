@@ -101,7 +101,7 @@ async function dashboard(){
         <b style="color:#9a5b00;background:#fff0db;padding:1px 5px;border-radius:4px">yellow at ${WARN_ACRES}–${MIN_ACRES-1}</b>,
         <b style="color:#a3322a;background:#fbe0de;padding:1px 5px;border-radius:4px">red at ${WARN_ACRES-1} or less</b> —
         anything not green is a day the client fell short of the daily minimum. A dot (·) means no entry that day.</p>
-      ${dayList.length?`<div style="overflow:auto"><table><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
+      ${dayList.length?`<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
       <tbody>
         <tr style="background:var(--charcoal);color:#fff">
           <td><b>ALL LOCATIONS — daily total</b></td>

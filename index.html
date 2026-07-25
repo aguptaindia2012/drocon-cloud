@@ -95,6 +95,11 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 button.navcard-h:hover{background:#e4efe3}
 button.navcard-h:hover .eyebrow{color:var(--green)}
 .navcard-badge{background:var(--orange);color:#fff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700}
+.tt-bar{display:flex;align-items:center;gap:8px;margin:4px 0 6px}
+.tt-filter{width:220px;max-width:60%;padding:5px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px}
+.tt-count{font-size:12px}
+.tt-arr{color:var(--green);font-weight:900}
+thead th[data-ttdir]{color:var(--green)}
 .navlist{display:flex;flex-direction:column}
 .navrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:11px 16px;font-family:inherit;font-size:14px;font-weight:700;color:var(--charcoal);cursor:pointer;transition:background .12s}
 .navrow:last-child{border-bottom:none}
@@ -220,6 +225,7 @@ button.navcard-h:hover .eyebrow{color:var(--green)}
 <script src="agreement.js"></script>
 <script src="modules/geo.js"></script>
 <script src="modules/_shared.js"></script>
+<script src="modules/tabletools.js"></script>
 <script src="modules/access.js"></script>
 <script src="modules/approvals.js"></script>
 <script src="modules/clients.js"></script>

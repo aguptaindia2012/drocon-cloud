@@ -166,7 +166,7 @@ function renderGrid(){
     return `<tr><td style="position:sticky;left:0;background:var(--paper,#fff);white-space:nowrap"><b>${esc(e.name)}</b></td>${tds.join("")}</tr>`;
   }).join("");
   $("atGrid").innerHTML=`<div style="overflow:auto;max-height:64vh;border:1px solid var(--line,#ddd);border-radius:8px">
-    <table style="border-collapse:collapse;font-size:13px"><thead><tr>${head.join("")}</tr></thead><tbody>${rowsHtml}</tbody></table></div>
+    <table class="tt-skip" style="border-collapse:collapse;font-size:13px"><thead><tr>${head.join("")}</tr></thead><tbody>${rowsHtml}</tbody></table></div>
     <div class="muted" style="margin-top:6px;font-size:12px">Legend: <b>P</b> Present · <b>A</b> Absent (day off — netted against comp-off, LOP only if balance runs out) · <b>W</b> Worked on day off (earns comp-off) · <b>·</b> weekly off/holiday. Click to cycle, then <b>Save attendance</b>.</div>`;
   $("atGrid").querySelectorAll("td[data-k]").forEach(td=>td.addEventListener("click",()=>{
     const k=td.getAttribute("data-k"), isoD=td.getAttribute("data-d");
