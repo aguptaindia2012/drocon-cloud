@@ -161,7 +161,14 @@ async function loadUnbilled(){
   host.innerHTML=`<div class="card" style="border-left:4px solid var(--orange)">
     <h3>⚠ Acre work not yet billed</h3>
     <p class="muted" style="margin-top:-4px">Sprayed acres with no invoice raised against them.
-      Oldest outstanding: <b>${oldest?fmtDate(oldest):'—'}</b>. Raise these in <b>Finance → Acre Invoicing</b>.</p>
+      Oldest outstanding: <b>${oldest?fmtDate(oldest):'—'}</b>. Raise new work in <b>Finance → Acre Invoicing</b> — or, if it was already billed manually outside the app, clear it below.</p>
+    ${window.OPS.isApprover&&window.OPS.isApprover()?`<div class="card" style="background:var(--soft-green);border:none;margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <b>Already billed manually?</b>
+      <span class="muted" style="font-size:12px">Mark everything up to</span>
+      <input id="acOvrDate" type="date" value="${todayISO()}" style="width:auto">
+      <button class="btn green sm" id="acOvr">✓ Mark as already billed</button>
+      <span class="muted" style="font-size:12px">— clears it from this list &amp; the invoicing picker, creates no invoice, and is reversible.</span>
+    </div>`:''}
     <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Farmer bill to</th><th class="num">Farmer acres</th><th class="num">Farmer value</th><th>Client bill to</th><th class="num">Client value</th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td><b>${esc(r.location_name||'')}</b></td>
       <td>${r.farmer_client_name?esc(r.farmer_client_name):'<span class="chip rejected">not set</span>'}</td>
@@ -169,12 +176,7 @@ async function loadUnbilled(){
       <td class="num" style="color:#9a5b00;font-weight:700">${money(r.farmer_value)}</td>
       <td>${num(r.client_rows)>0?(r.client_client_name?esc(r.client_client_name):'<span class="chip rejected">not set</span>'):'<span class="muted">—</span>'}</td>
       <td class="num">${num(r.client_rows)>0?money(r.client_value):'<span class="muted">—</span>'}</td></tr>`).join("")}</tbody>
-    <tfoot><tr><td colspan="3" class="num"><b>Total unbilled</b></td><td class="num"><b>${money(fVal)}</b></td><td></td><td class="num"><b>${money(cVal)}</b></td></tr></tfoot></table></div>
-    ${window.OPS.isApprover&&window.OPS.isApprover()?`<div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px dashed var(--line,#ddd);padding-top:10px">
-      <span class="muted" style="font-size:12px">Billed these outside the app? Mark old work as already billed to clear the backlog (reversible; no invoice is created):</span>
-      <label style="margin:0">up to</label><input id="acOvrDate" type="date" value="${todayISO()}" style="width:auto">
-      <button class="btn sm" id="acOvr">✓ Mark as already billed</button>
-    </div>`:''}</div>`;
+    <tfoot><tr><td colspan="3" class="num"><b>Total unbilled</b></td><td class="num"><b>${money(fVal)}</b></td><td></td><td class="num"><b>${money(cVal)}</b></td></tr></tfoot></table></div></div>`;
   const ob=$("acOvr");
   if(ob) ob.addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
     const cutoff=$("acOvrDate").value; if(!cutoff){ alert("Pick a cut-off date."); return; }
