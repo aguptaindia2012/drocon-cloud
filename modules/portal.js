@@ -347,9 +347,9 @@ function wordInvoice(r){
 }
 
 /* ---------- partner login invites (admin/manager) ---------- */
-async function inviteManager(){
+async function inviteManager(back){
   const m=$("main");
-  m.innerHTML=`<button class="btn sm" id="ivBack">← Back to Invoice Approvals</button>
+  m.innerHTML=`<button class="btn sm" id="ivBack">← Back</button>
     <div class="card" style="margin-top:12px">
       <div class="eyebrow">Partners</div><h1>Partner Logins / Invites</h1>
       <div class="callout">Pre-authorise an external email so the consultant or authorized partner can self-create a login
@@ -367,7 +367,7 @@ async function inviteManager(){
         <div class="spacer"></div><div class="err" id="ivErr"></div></div>
     </div>
     <h3 style="margin-top:18px">Existing invites</h3><div id="ivList" class="muted">Loading…</div>`;
-  $("ivBack").addEventListener("click",managerInvoices);
+  $("ivBack").addEventListener("click", typeof back==="function"?back:managerInvoices);
   async function fillParty(){
     const t=$("ivType").value; const sel=$("ivParty"); sel.innerHTML='<option value="">— none —</option>';
     try{

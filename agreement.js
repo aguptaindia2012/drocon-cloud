@@ -194,12 +194,18 @@ async function runRpc(fn, args, agId){
 async function viewTeam(){
   const m=$("main"); m.innerHTML=`<div class="eyebrow">Administration</div><h1>Team &amp; access</h1>
     <div class="callout">The first person to sign up is the <b>admin</b>. Assign roles, then grant each person access to the specific <b>Administration</b> tools they need.</div>
+    <div class="card" style="background:var(--soft-green);border:none;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <b>External partners &amp; consultants</b>
+      <span class="muted" style="font-size:12px">Invite them to self-create a Partner Portal login (bypasses the staff-domain restriction).</span>
+      <span class="spacer"></span><button class="btn green sm" id="tmInvites">👤 Partner logins &amp; invites</button></div>
     <h3>Roles</h3><div id="teamHost" class="muted">Loading…</div>
     <h3 style="margin-top:22px">Tool access</h3>
     <p class="muted">Pick a section, tick the tools each member may use, then <b>Save changes</b>. Changes across sections are saved together. Admins always have full access.</p>
     <div class="row wrap" style="margin-bottom:8px"><label style="margin:0">Section</label><select id="permSection" style="width:auto"></select>
       <div class="spacer"></div><button class="btn green sm" id="permSave">Save changes</button><span id="permStatus" class="muted"></span></div>
     <div id="permHost" class="muted">Loading…</div>`;
+  const tmi=$("tmInvites");
+  if(tmi) tmi.addEventListener("click",()=>{ if(window.OPS.partnerInvites) window.OPS.partnerInvites(viewTeam); else alert("Partner invites module not loaded."); });
   const ps=await listProfiles();
   $("teamHost").innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead><tbody>
     ${ps.map(p=>`<tr><td>${esc(p.full_name||"")}</td><td>${esc(p.email||"")}</td>
