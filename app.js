@@ -360,9 +360,32 @@ function renderHome(){
     <h1 style="margin-bottom:2px">Welcome${name?(", "+name):""}</h1>
     <p class="muted">Select a module from the directory below. Return here anytime with the 🏠 Home button in the header.</p>
     <div class="card" style="background:var(--soft-green);border:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b>Getting started:</b> ${helpBtns}</div>
+    <div class="homesearch"><input id="homeSearch" type="search" autocomplete="off" placeholder="🔎  Search modules — type to filter, Enter to open"><span id="homeSearchHint" class="muted"></span></div>
     <div class="homegrid">${cards}</div>`;
   $("main").querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-go"))));
   $("main").querySelectorAll(".navcard-h[data-sec]").forEach(b=>b.addEventListener("click",()=>openSection(b.getAttribute("data-sec"))));
+  const hs=$("homeSearch");
+  if(hs){
+    let firstHit=null;
+    const filter=()=>{
+      const q=hs.value.trim().toLowerCase(); firstHit=null; let hits=0;
+      $("main").querySelectorAll(".navcard").forEach(card=>{
+        const secLabel=(card.querySelector(".eyebrow")?card.querySelector(".eyebrow").textContent:"").toLowerCase();
+        let any=false;
+        card.querySelectorAll(".navrow").forEach(row=>{
+          const match=!q || row.textContent.toLowerCase().includes(q) || secLabel.includes(q);
+          row.style.display=match?"":"none"; if(match){ any=true; hits++; if(!firstHit) firstHit=row; }
+        });
+        card.style.display=any?"":"none";
+      });
+      const hint=$("homeSearchHint");
+      const firstLabel=firstHit?(firstHit.querySelector("span")?firstHit.querySelector("span").textContent.trim():firstHit.textContent.trim()):"";
+      if(hint) hint.textContent = q ? (hits?`${hits} match${hits>1?"es":""} · Enter to open “${firstLabel}”`:"no matches") : "";
+    };
+    hs.addEventListener("input",filter);
+    hs.addEventListener("keydown",e=>{ if(e.key==="Enter"&&firstHit) firstHit.click(); else if(e.key==="Escape"){ hs.value=""; filter(); } });
+    setTimeout(()=>hs.focus(),30);
+  }
   renderNav();
 }
 function goHome(){ renderHome(); }
