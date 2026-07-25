@@ -17,8 +17,10 @@ alter table public.acre_entries add column if not exists billed_override_by   uu
 alter table public.acre_entries add column if not exists billed_override_note text;
 
 -- ---- mark as billed (override) --------------------------------------------
+-- location_id is a uuid; drop any earlier bigint[] version to avoid an overload
+drop function if exists public.override_acre_billed(text, date, bigint[], text);
 create or replace function public.override_acre_billed(
-  p_side text, p_cutoff date, p_location_ids bigint[] default null, p_note text default null)
+  p_side text, p_cutoff date, p_location_ids uuid[] default null, p_note text default null)
 returns integer language plpgsql security definer set search_path = public as $$
 declare n integer := 0; m integer;
 begin
@@ -51,11 +53,12 @@ begin
             n||' row(s) marked billed (override) · '||p_side||' · up to '||p_cutoff);
   return n;
 end $$;
-grant execute on function public.override_acre_billed(text, date, bigint[], text) to authenticated;
+grant execute on function public.override_acre_billed(text, date, uuid[], text) to authenticated;
 
 -- ---- undo the override (reversible) ---------------------------------------
+drop function if exists public.clear_acre_billing_override(text, bigint[]);
 create or replace function public.clear_acre_billing_override(
-  p_side text, p_location_ids bigint[] default null)
+  p_side text, p_location_ids uuid[] default null)
 returns integer language plpgsql security definer set search_path = public as $$
 declare n integer := 0; m integer;
 begin
@@ -76,7 +79,7 @@ begin
     values (auth.uid(), 'acre_billing_override_cleared', 'acre_entries', '', n||' row(s) reverted · '||p_side);
   return n;
 end $$;
-grant execute on function public.clear_acre_billing_override(text, bigint[]) to authenticated;
+grant execute on function public.clear_acre_billing_override(text, uuid[]) to authenticated;
 
 -- ---- views now treat an override as billed --------------------------------
 create or replace view public.v_acre_unbilled as
