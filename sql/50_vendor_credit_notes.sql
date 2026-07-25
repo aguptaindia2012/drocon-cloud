@@ -29,7 +29,10 @@ create policy pcredit_write on public.payable_credits for insert to authenticate
 create policy pcredit_del   on public.payable_credits for delete to authenticated using (public.is_internal());
 
 -- Open payables now net payments AND credits.
-create or replace view public.v_payables_open as
+-- DROP first: the column order changes (paid/credited added before balance),
+-- and CREATE OR REPLACE cannot reorder existing view columns.
+drop view if exists public.v_payables_open;
+create view public.v_payables_open as
   select p.*, coalesce(v.firm_name, v.name) as vendor_name,
          coalesce((select sum(c.amount) from public.cash_txns c
                     where c.ref_type='payable' and c.ref_id = p.id::text), 0) as paid,
