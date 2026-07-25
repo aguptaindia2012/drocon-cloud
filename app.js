@@ -346,7 +346,7 @@ function renderHome(){
     if(!tools.length) return;
     const badge = (s.key==="reviews" && window.OPS.reviewCount) ? `<span class="navcard-badge">🔔 ${window.OPS.reviewCount}</span>` : "";
     cards+=`<div class="card navcard">
-      <button class="navcard-h" data-sec="${s.key}" style="width:100%;background:none;border:none;padding:0;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
+      <button class="navcard-h" data-sec="${s.key}">
         <span class="eyebrow">${esc(s.label)} ›</span>${badge}</button>
       <div class="navlist">
         ${tools.map(t=>`<button class="navrow" data-go="${t.key}"><span>${esc(t.label)}</span><span class="navrow-arrow">›</span></button>`).join("")}

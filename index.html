@@ -91,7 +91,9 @@ tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 /* ---- formal landing directory (Home) ---- */
 .homegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:14px;align-items:start}
 .navcard{padding:0;overflow:hidden}
-.navcard-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 16px;background:var(--soft-green);border-bottom:1px solid var(--line)}
+.navcard-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 16px;background:var(--soft-green);border:none;border-bottom:1px solid var(--line);width:100%;font-family:inherit;color:inherit;text-align:left;cursor:pointer;transition:background .12s}
+button.navcard-h:hover{background:#e4efe3}
+button.navcard-h:hover .eyebrow{color:var(--green)}
 .navcard-badge{background:var(--orange);color:#fff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700}
 .navlist{display:flex;flex-direction:column}
 .navrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:11px 16px;font-family:inherit;font-size:14px;font-weight:700;color:var(--charcoal);cursor:pointer;transition:background .12s}
