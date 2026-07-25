@@ -27,35 +27,40 @@ async function incentives(){
       <label style="margin:0">Month</label><input id="inMonth" type="month" value="${ym}" style="width:auto">
       <label style="margin:0 0 0 10px">Pay via</label><select id="inMode" style="width:auto"><option>Bank</option><option>UPI</option><option>Cash</option></select>
       <div class="spacer"></div><button class="btn green sm" id="inSave">Save / recompute</button></div>
-    <div class="callout">Acreage is summed automatically from approved acre entries for the month. <b>Tier 1</b> ≥ ${TIER1_ACRES} acres = ${money(TIER1_AMT)}, <b>Tier 2</b> ≥ ${TIER2_ACRES} acres = ${money(TIER2_AMT)} (highest tier only). <b>No-Crash Bonus</b> ${money(NOCRASH_AMT)} when crashes = 0 and acreage ≥ ${NOCRASH_MIN_ACRES}. Minor-incident waiver applies when the month's repair cost ≤ ${money(MINOR_REPAIR_CAP)}. Enter crashes &amp; repair cost, Save, then Pay.</div>
+    <div class="callout">Lists DroCon employees whose designation includes "Pilot". Acreage is summed automatically from approved acre entries, matched to the employee by name. <b>Tier 1</b> ≥ ${TIER1_ACRES} acres = ${money(TIER1_AMT)}, <b>Tier 2</b> ≥ ${TIER2_ACRES} acres = ${money(TIER2_AMT)} (highest tier only). <b>No-Crash Bonus</b> ${money(NOCRASH_AMT)} when crashes = 0 and acreage ≥ ${NOCRASH_MIN_ACRES}. Minor-incident waiver applies when the month's repair cost ≤ ${money(MINOR_REPAIR_CAP)}. Enter crashes &amp; repair cost, Save, then Pay.</div>
     <div id="inBody" class="muted">Loading…</div>`;
   $("inMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("inMonth").value; incentives(); });
   $("inSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,saveIncentives));
   const {first,last}=monthBounds(ym);
-  const [{data:pilots},{data:entries},{data:saved}]=await Promise.all([
-    sb().from("pilots").select("id,name").order("name"),
+  const [{data:emps},{data:pilots},{data:entries},{data:saved}]=await Promise.all([
+    sb().from("employees").select("id,name,designation,emp_type,status").eq("emp_type","employee").order("name"),
+    sb().from("pilots").select("id,name"),
     sb().from("acre_entries").select("acres,pilot_id,pilot_name,approval_status,entry_date").gte("entry_date",first).lte("entry_date",last),
     sb().from("hr_incentives").select("*").eq("period_month",ym),
   ]);
-  const byId={}, byName={};
+  const pilotName={}; (pilots||[]).forEach(p=>pilotName[p.id]=p.name);
+  // acreage summed by pilot NAME — employee-pilots are not in the vendor pilots list
+  const byName={};
   (entries||[]).forEach(e=>{ if((e.approval_status||"approved")!=="approved") return; const a=num(e.acres);
-    if(e.pilot_id) byId[e.pilot_id]=(byId[e.pilot_id]||0)+a; else byName[norm(e.pilot_name)]=(byName[norm(e.pilot_name)]||0)+a; });
-  const savedBy={}; (saved||[]).forEach(s=>savedBy[s.pilot_id]=s);
-  incRows=(pilots||[]).map(p=>{
-    const acres=Math.round(((byId[p.id]||0)+(byName[norm(p.name)]||0))*100)/100;
-    const ex=savedBy[p.id];
-    return { pilot:p, acres, crashes:ex?num(ex.crashes):0, repair:ex?num(ex.repair_cost):0,
+    const nm=norm(e.pilot_name || (e.pilot_id?pilotName[e.pilot_id]:"")); if(!nm) return; byName[nm]=(byName[nm]||0)+a; });
+  const savedBy={}; (saved||[]).forEach(s=>{ if(s.employee_id) savedBy[s.employee_id]=s; });
+  // DroCon employees whose designation marks them a Pilot
+  const empPilots=(emps||[]).filter(e=>/pilot/i.test(e.designation||""));
+  incRows=empPilots.map(e=>{
+    const acres=Math.round((byName[norm(e.name)]||0)*100)/100;
+    const ex=savedBy[e.id];
+    return { emp:e, acres, crashes:ex?num(ex.crashes):0, repair:ex?num(ex.repair_cost):0,
              status:ex?ex.status:null, id:ex?ex.id:null };
-  }).filter(r=>r.acres>0 || savedBy[r.pilot.id]);
+  }).filter(r=>r.acres>0 || savedBy[r.emp.id] || r.emp.status==="active");
   renderIncentives(ym);
 }
 function incCompute(r){ const t=tierOf(r.acres); const noCrash=(num(r.crashes)===0 && r.acres>=NOCRASH_MIN_ACRES)?NOCRASH_AMT:0;
   return { ...t, noCrash, waiver:num(r.repair)<=MINOR_REPAIR_CAP, total:t.amt+noCrash }; }
 function renderIncentives(ym){
-  if(!incRows.length){ $("inBody").innerHTML='<div class="card muted">No pilot acreage found for this month. Approve acre entries first, or check the month.</div>'; return; }
+  if(!incRows.length){ $("inBody").innerHTML='<div class="card muted">No employee-pilots found. In <b>Employees</b>, set the designation to include "Pilot" for DroCon\'s own pilots.</div>'; return; }
   let tot=0;
   const body=incRows.map((r,i)=>{ const c=incCompute(r); tot+=c.total; const paid=r.status==="paid"; return `<tr>
-    <td><b>${esc(r.pilot.name)}</b></td>
+    <td><b>${esc(r.emp.name)}</b><br><span class="muted">${esc(r.emp.designation||'')}</span></td>
     <td class="num">${r.acres}</td>
     <td>${c.tier?`<b>${c.tier==="tier2"?"Tier 2":"Tier 1"}</b> · ${money(c.amt)}`:'<span class="muted">—</span>'}</td>
     <td><input data-crash="${i}" type="number" min="0" step="1" value="${r.crashes}" ${paid?"disabled":""} style="width:56px;text-align:right"></td>
@@ -75,20 +80,20 @@ function reFocus(attr,i){ const el=$("inBody").querySelector(`input[${attr}="${i
 async function saveIncentives(){
   const ym=$("inMonth").value;
   const recs=incRows.filter(r=>r.status!=="paid").map(r=>{ const c=incCompute(r); return {
-    period_month:ym, pilot_id:r.pilot.id, pilot_name:r.pilot.name, acres:r.acres,
+    period_month:ym, employee_id:r.emp.id, pilot_name:r.emp.name, acres:r.acres,
     tier:c.tier, tier_amount:c.amt, crashes:num(r.crashes), repair_cost:num(r.repair),
     minor_waiver:c.waiver, no_crash_bonus:c.noCrash, total:c.total,
     status:r.status||"calculated", created_by:window.OPS.me.id }; });
   if(!recs.length){ window.OPS.flashTop("Nothing to save."); return; }
-  const { error }=await sb().from("hr_incentives").upsert(recs,{onConflict:"period_month,pilot_id"});
+  const { error }=await sb().from("hr_incentives").upsert(recs,{onConflict:"period_month,employee_id"});
   if(error){ alert("Save failed: "+error.message); return; }
   window.OPS.flashTop("Saved "+recs.length+" incentive row(s) ✓"); incentives();
 }
 async function payIncentive(r,ym){
   const c=incCompute(r); const mode=$("inMode").value; const today=todayISO();
-  if(!confirm("Pay "+money(c.total)+" incentive to "+r.pilot.name+" ("+ym+") via "+mode+"?")) return;
+  if(!confirm("Pay "+money(c.total)+" incentive to "+r.emp.name+" ("+ym+") via "+mode+"?")) return;
   await sb().from("accounting_entries").insert([
-    { voucher_date:today, narration:"Pilot incentive "+ym+" — "+r.pilot.name, account:"Pilot Incentives", debit:c.total, credit:0, ref_type:"incentive", ref_id:r.id, created_by:window.OPS.me.id },
+    { voucher_date:today, narration:"Pilot incentive "+ym+" — "+r.emp.name, account:"Pilot Incentives", debit:c.total, credit:0, ref_type:"incentive", ref_id:r.id, created_by:window.OPS.me.id },
     { voucher_date:today, narration:"Incentive paid via "+mode, account:mode, debit:0, credit:c.total, ref_type:"incentive", ref_id:r.id, created_by:window.OPS.me.id },
   ]);
   await sb().from("hr_incentives").update({ status:"paid", paid_on:today, mode }).eq("id",r.id);
