@@ -64,9 +64,10 @@ async function view(){
   function render(){
     const q=($("pSearch").value||"").toLowerCase().trim(); const onlyDue=$("pOnlyDue").checked;
     const list=rows.filter(x=>(!onlyDue||x.balance>0) && (!q || x.r.number.toLowerCase().includes(q) || x.party.toLowerCase().includes(q)));
-    $("pTable").innerHTML = list.length?`<table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+    $("pTable").innerHTML = list.length?`<table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
       <tbody>${list.map(x=>`<tr><td><span class="tag" style="background:${x.r.entity==='IBS'?'var(--blue)':'var(--green)'}">${esc(x.r.entity||'DCB')}</span></td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td>
-        <td class="num">${money(x.gross)}</td><td class="num">${money(x.paid+x.credit)}</td>
+        <td class="num">${money(x.gross)}</td><td class="num">${money(x.paid)}</td>
+        <td class="num">${x.credit>0.005?money(x.credit):'—'}</td>
         <td class="num" style="${x.balance>0?'font-weight:700':''}">${money(x.balance)}</td>
         <td>${window.OPS.statusChip(x.status)}${x.r.approval_status==='submitted'?' <span class="chip in_review">in review</span>':''}</td>
         <td>${x.balance>0?`<button class="btn green sm" data-pay="${x.r.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.r.id}">Payments</button></td></tr>`).join("")}</tbody></table>`

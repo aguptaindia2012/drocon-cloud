@@ -259,16 +259,20 @@ const payStatusChip = st => st==='paid'?'<span class="chip paid">Paid</span>'
   : st==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>'
   : '<span class="chip issued">Unpaid</span>';
 
-// balance = total − everything already paid against it (cash_txns ref_type payable)
+// balance = total − payments (cash_txns) − vendor credit notes (payable_credits)
 async function loadPayables(){
-  const [{data:pys,error},{data:txns}]=await Promise.all([
+  const [{data:pys,error},{data:txns},{data:creds}]=await Promise.all([
     sb().from("payables").select("*, vendor:vendor_id(firm_name,name)").order("invoice_date",{ascending:false}).limit(500),
-    sb().from("cash_txns").select("ref_id,amount").eq("ref_type","payable")
+    sb().from("cash_txns").select("ref_id,amount").eq("ref_type","payable"),
+    sb().from("payable_credits").select("payable_id,amount")
   ]);
   if(error) return { rows:[], error };
-  const paidBy={}; (txns||[]).forEach(t=>{ paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount); });
-  const rows=(pys||[]).map(p=>{ const paid=paidBy[p.id]||0; const bal=Math.round((num(p.total)-paid)*100)/100;
-    return { p, paid, balance:bal, vendor_name:vName(p.vendor) }; });
+  const paidBy={}, credBy={};
+  (txns||[]).forEach(t=>{ paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount); });
+  (creds||[]).forEach(c=>{ credBy[c.payable_id]=(credBy[c.payable_id]||0)+num(c.amount); });
+  const rows=(pys||[]).map(p=>{ const paid=paidBy[p.id]||0, credit=credBy[p.id]||0;
+    const bal=Math.round((num(p.total)-paid-credit)*100)/100;
+    return { p, paid, credit, balance:bal, vendor_name:vName(p.vendor) }; });
   return { rows };
 }
 
@@ -287,11 +291,12 @@ async function listPayables(){
       <label class="muted" style="display:inline"><input type="checkbox" id="pyOnlyDue" style="width:auto" ${_payOnlyDue?'checked':''}> only with balance</label>
       <div class="spacer"></div><span class="muted">Record part or full payments; each one lands on the Day Book.</span></div>
     <div id="pyList">${list.length?`<div style="overflow:auto"><table>
-      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
       <tbody>${list.map(x=>`<tr><td><b>${esc(x.vendor_name)}</b></td>
         <td class="clickable" data-edit="${x.p.id}" style="text-decoration:underline">${esc(x.p.vendor_invoice_no||'(no no.)')}</td>
         <td>${fmtDate(x.p.invoice_date)}</td><td>${x.p.due_date?fmtDate(x.p.due_date):'—'}</td>
         <td class="num">${money(x.p.total)}</td><td class="num">${money(x.paid)}</td>
+        <td class="num">${x.credit>0.005?money(x.credit):'—'}</td>
         <td class="num" style="${x.balance>0.005?'font-weight:700':''}">${money(x.balance)}</td>
         <td>${payStatusChip(x.p.status)}</td>
         <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button></td></tr>`).join("")}</tbody></table></div>`
@@ -306,9 +311,14 @@ async function listPayables(){
 }
 
 async function recomputePayable(id, total){
-  const { data }=await sb().from("cash_txns").select("amount").eq("ref_type","payable").eq("ref_id",String(id));
-  const paid=(data||[]).reduce((s,t)=>s+num(t.amount),0);
-  const status = paid>=num(total)-0.005 ? "paid" : (paid>0 ? "part_paid" : "unpaid");
+  const [{data:tx},{data:cr}]=await Promise.all([
+    sb().from("cash_txns").select("amount").eq("ref_type","payable").eq("ref_id",String(id)),
+    sb().from("payable_credits").select("amount").eq("payable_id",id)
+  ]);
+  const paid=(tx||[]).reduce((s,t)=>s+num(t.amount),0);
+  const credit=(cr||[]).reduce((s,c)=>s+num(c.amount),0);
+  const settled=paid+credit;   // a credit note settles the balance just like a payment
+  const status = settled>=num(total)-0.005 ? "paid" : (settled>0 ? "part_paid" : "unpaid");
   await sb().from("payables").update({ status }).eq("id",id);
 }
 
@@ -344,21 +354,35 @@ function payVendor(x, back){
 /* Payments ledger for a supplier invoice — list, edit, delete */
 async function managePayable(x, back){
   const m=$("main");
-  const { data:txns }=await sb().from("cash_txns").select("*, acct:account_id(name)")
-    .eq("ref_type","payable").eq("ref_id",String(x.p.id)).order("txn_date",{ascending:false});
-  const list=txns||[]; const paid=list.reduce((s,t)=>s+num(t.amount),0); const bal=Math.round((num(x.p.total)-paid)*100)/100;
+  const [{data:txns},{data:creds}]=await Promise.all([
+    sb().from("cash_txns").select("*, acct:account_id(name)").eq("ref_type","payable").eq("ref_id",String(x.p.id)).order("txn_date",{ascending:false}),
+    sb().from("payable_credits").select("*").eq("payable_id",x.p.id).order("credit_date",{ascending:false})
+  ]);
+  const list=txns||[], cList=creds||[];
+  const paid=list.reduce((s,t)=>s+num(t.amount),0), credit=cList.reduce((s,c)=>s+num(c.amount),0);
+  const bal=Math.round((num(x.p.total)-paid-credit)*100)/100;
   m.innerHTML=`<button class="btn sm" id="mpBack">← Back</button>
     <div class="card" style="margin-top:12px"><h1>Payments — ${esc(x.p.vendor_invoice_no||'(no no.)')}</h1>
-    <p class="muted">${esc(x.vendor_name)} · Invoiced ${money(x.p.total)} · Paid ${money(paid)} · Balance <b>${money(bal)}</b></p>
-    <div class="row" style="margin-bottom:8px"><div class="spacer"></div>${bal>0.005?'<button class="btn green sm" id="mpAdd">+ Payment</button>':''}</div>
+    <p class="muted">${esc(x.vendor_name)} · Invoiced ${money(x.p.total)} · Paid ${money(paid)}${credit>0.005?(' · Credit '+money(credit)):''} · Balance <b>${money(bal)}</b></p>
+    <div class="row wrap" style="margin-bottom:8px"><div class="spacer"></div>
+      ${bal>0.005?'<button class="btn green sm" id="mpAdd">+ Payment</button>':''}
+      <button class="btn sm" id="mpCredit">＋ Credit note from vendor</button></div>
+    <h3>Payments</h3>
     ${list.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th class="num">Amount</th><th>From</th><th>Mode</th><th>Note</th><th></th></tr></thead>
       <tbody>${list.map(t=>`<tr><td>${fmtDate(t.txn_date)}</td><td class="num">${money(t.amount)}</td>
         <td>${esc((t.acct&&t.acct.name)||'')}</td><td>${esc(t.mode||'')}</td><td>${esc(t.note||'')}</td>
         <td>${window.OPS.canDelete()||t.created_by===window.OPS.me.id?`<button class="btn sm" data-del="${t.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
-      :'<div class="card muted">No payments recorded.</div>'}</div>`;
+      :'<div class="muted">No payments recorded.</div>'}
+    ${cList.length?`<h3 style="margin-top:16px">Credit notes from the vendor</h3>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Credit no.</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>
+      <tbody>${cList.map(c=>`<tr><td>${fmtDate(c.credit_date)}</td><td>${esc(c.credit_no||'')}</td>
+        <td class="num" style="color:#3e6b20">${money(c.amount)}</td><td>${esc(c.note||'')}</td>
+        <td>${window.OPS.canDelete()||c.created_by===window.OPS.me.id?`<button class="btn sm" data-delc="${c.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`:''}
+    </div>`;
   $("mpBack").addEventListener("click",back);
   const x2={ ...x, balance:bal };
   if($("mpAdd")) $("mpAdd").addEventListener("click",()=>payVendor(x2, ()=>managePayable(x,back)));
+  $("mpCredit").addEventListener("click",()=>creditVendor(x, ()=>managePayable(x,back)));
   m.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
     const t=list.find(z=>String(z.id)===b.getAttribute("data-del")); if(!t||!confirm("Delete this payment of "+money(t.amount)+"?")) return;
     const { error }=await sb().from("cash_txns").delete().eq("id",t.id);
@@ -366,6 +390,40 @@ async function managePayable(x, back){
     await recomputePayable(x.p.id, x.p.total);
     window.OPS.audit("payment_deleted","payables",x.p.id,money(t.amount));
     window.OPS.flashTop("Payment removed ✓"); managePayable(x,back);
+  }));
+  m.querySelectorAll("[data-delc]").forEach(b=>b.addEventListener("click",async()=>{
+    const c=cList.find(z=>String(z.id)===b.getAttribute("data-delc")); if(!c||!confirm("Delete this credit note of "+money(c.amount)+"?")) return;
+    const { error }=await sb().from("payable_credits").delete().eq("id",c.id);
+    if(error){ alert(error.message); return; }
+    await recomputePayable(x.p.id, x.p.total);
+    window.OPS.audit("credit_deleted","payables",x.p.id,money(c.amount));
+    window.OPS.flashTop("Credit note removed ✓"); managePayable(x,back);
+  }));
+}
+
+/* record a credit note received from the vendor against this payable */
+function creditVendor(x, back){
+  const m=$("main");
+  m.innerHTML=`<button class="btn sm" id="cvBack">← Back</button>
+    <div class="card" style="margin-top:12px;max-width:520px"><h1>Vendor credit note</h1>
+    <p class="muted">${esc(x.vendor_name)} · Invoice <b>${esc(x.p.vendor_invoice_no||'(no no.)')}</b> · Balance <b>${money(x.balance)}</b></p>
+    <div class="callout">A credit note from the vendor reduces what we owe — it settles part of the balance without any money moving.</div>
+    <div class="fgrid">
+      <div class="field"><label>Credit note no.</label><input id="cv_no"></div>
+      <div class="field"><label>Date</label><input type="date" id="cv_date" value="${todayISO()}"></div>
+      <div class="field"><label>Amount *</label><input type="number" step="0.01" id="cv_amt" value="${x.balance>0?x.balance:''}"></div>
+      <div class="field full"><label>Note</label><input id="cv_note"></div>
+    </div>
+    <div class="row"><button class="btn green" id="cvGo">Record credit note</button><button class="btn" id="cvCancel">Cancel</button></div>
+    <div class="err" id="cvErr"></div></div>`;
+  $("cvBack").addEventListener("click",back); $("cvCancel").addEventListener("click",back);
+  $("cvGo").addEventListener("click",()=>window.OPS.once($("cvGo"),async()=>{
+    const amt=num($("cv_amt").value); if(!(amt>0)){ $("cvErr").textContent="Enter an amount."; return; }
+    const { error }=await sb().from("payable_credits").insert({ payable_id:x.p.id, credit_no:$("cv_no").value||null,
+      credit_date:$("cv_date").value||todayISO(), amount:amt, note:$("cv_note").value||null, created_by:window.OPS.me.id });
+    if(error){ $("cvErr").textContent=error.message; return; }
+    await recomputePayable(x.p.id, x.p.total);
+    window.OPS.audit("credit","payables",x.p.id,money(amt)); window.OPS.flashTop("Credit note recorded ✓"); back();
   }));
 }
 
