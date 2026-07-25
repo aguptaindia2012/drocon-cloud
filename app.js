@@ -232,7 +232,13 @@ async function diagnoseConnection(){
   try{
     const r=await fetch(url+"/auth/v1/health",{ headers:{ apikey:key, Authorization:"Bearer "+key } });
     if(r.ok){ box.style.color="var(--green)";
-      box.innerHTML="✓ Reached the server successfully. The connection is fine — if sign-in still fails it's the email/password (or email-confirmation), not the network."; }
+      box.innerHTML="✓ Reached the server successfully. The connection is fine — if sign-in still fails it's the email/password (or email-confirmation), not the network.";
+      // Reconcile: a "couldn't reach server" auth error is now disproven — replace it.
+      const ae=$("auErr");
+      if(ae && /reach the server|network|connection/i.test(ae.textContent||"")){
+        ae.innerHTML='<span style="color:#9a5b00">The network is fine — this is a sign-in issue, not connectivity. If you are <b>creating</b> an account, this email may already be registered: use <b>Sign in</b> instead. Otherwise check the password, or whether email confirmation is still pending.</span>';
+      }
+    }
     else{ box.style.color="#9a5b00";
       box.innerHTML="⚠ Reached the server but it replied HTTP "+r.status+". The project is up; the API key in config.js may be wrong or auth is misconfigured."; }
   }catch(e){
