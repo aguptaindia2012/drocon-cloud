@@ -75,13 +75,13 @@ const TOOLS = [
   { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
   { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
   { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
-  // Accounting — collections, money out, daily reconciliation and the position
+  // Accounting — dashboards first (daily cash-flow review), then the ledgers
+  { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
+  { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
   { key:"day_book",      section:"accounting", label:"Day Book",              gate:"perm" },
   { key:"payment_status",section:"accounting", label:"Payment Collection",    gate:"perm" },
   { key:"expense_mgmt",  section:"accounting", label:"Expense Management",     gate:"perm" },
   { key:"advances",      section:"accounting", label:"Advances",              gate:"perm" },
-  { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
-  { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },
