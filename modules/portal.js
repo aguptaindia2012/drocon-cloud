@@ -21,15 +21,20 @@ const todayISO = ()=> new Date().toISOString().slice(0,10);
 async function apRates(){
   const m=$("main"); const admin=window.OPS.isAdmin();
   m.innerHTML=`<div class="eyebrow">Partners · Authorized Partner</div><h1>Authorized Partner rate cards</h1>
-    <div class="callout">Each authorized partner can have their <b>own commission rate card</b>. Choose a partner below (or the
-      <b>Standard card</b> used as the default). On each invoice the partner enters the <b>actual per-acre rate received from the
-      farmer</b>; the matching slab then splits it — partner keeps <b>Partner %</b>, DroCon Bharat retains <b>DroCon %</b> (overridable).
-      Partners are onboarded and listed in <b>Business Development → Authorized Partners</b>.</div>
+    <div class="callout">Each authorized partner is billed on one of two models. <b>Commission slabs</b>: the partner enters the per-acre rate received from the farmer and the matching slab splits it (Partner % / DroCon %). <b>Full Client Rate</b>: the partner is paid 100% of the client rate for every acre and DroCon's margin is the daily <b>Acreage Contribution</b> (in kind). Partners are onboarded in <b>Business Development → Authorized Partners</b>.</div>
     <div class="row wrap" style="margin:8px 0;align-items:flex-end">
       <div class="field" style="max-width:340px;margin:0"><label>Rate card for</label>
         <select id="arPartner"><option value="">— Standard (default) card —</option></select></div>
+      <div class="field" style="max-width:300px;margin:0"><label>Billing model</label>
+        <select id="arModel" ${admin?"":"disabled"}><option value="commission">Commission slabs (% split)</option><option value="full_client_rate">Full Client Rate + Acreage Contribution</option></select></div>
       ${admin?'<button class="btn sm" id="arSeed" title="Replace this card with the standard slabs">Copy standard slabs</button>':''}
     </div>
+    <div id="arFcr" class="row wrap" style="margin:2px 0 8px;gap:12px;align-items:flex-end;display:none">
+      <div class="field" style="margin:0;max-width:170px"><label>Order threshold (acre)</label><input id="arThr" type="number" step="any" ${admin?"":"disabled"}></div>
+      <div class="field" style="margin:0;max-width:190px"><label>Contribution if &gt; threshold (acre/day)</label><input id="arAbove" type="number" step="any" ${admin?"":"disabled"}></div>
+      <div class="field" style="margin:0;max-width:190px"><label>Contribution if ≤ threshold (acre/day)</label><input id="arUpto" type="number" step="any" ${admin?"":"disabled"}></div>
+    </div>
+    <div id="arSlabNote" class="muted" style="font-size:12px;margin-bottom:4px"></div>
     <div id="arBody" class="muted">Loading…</div>
     ${admin?'<div class="row" style="margin-top:10px"><button class="btn green" id="arSave">Save rate card</button><div class="spacer"></div><div class="err" id="arErr"></div></div>':'<div class="muted">Read-only — only an admin can edit rate cards.</div>'}`;
   // partner picker
@@ -56,8 +61,26 @@ async function apRates(){
     $("arBody").querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ slabs.splice(+b.getAttribute("data-del"),1); draw(); }));
     if($("arAdd")) $("arAdd").addEventListener("click",()=>{ slabs.push({slab:"",rate_upto:null,partner_pct:null,drocon_pct:null}); draw(); });
   }
+  async function loadBillingOwn(pid){ let q=sb().from("partner_billing").select("*"); q=pid?q.eq("partner_id",pid):q.is("partner_id",null); const {data}=await q.limit(1); return (data&&data[0])||null; }
+  function syncModel(){
+    const fcr = $("arModel") && $("arModel").value==="full_client_rate";
+    if($("arFcr")) $("arFcr").style.display = fcr?"flex":"none";
+    if($("arBody")) $("arBody").style.display = fcr?"none":"";
+    if($("arSeed")) $("arSeed").style.display = fcr?"none":"";
+    if($("arSlabNote")) $("arSlabNote").textContent = fcr
+      ? "This partner is paid the full client rate; the % slabs below are not used. DroCon's margin is the daily Acreage Contribution set above."
+      : "";
+  }
   async function loadCard(){
     const pid=$("arPartner").value;
+    // billing model + params
+    const bown=await loadBillingOwn(pid||null);
+    if($("arModel")) $("arModel").value = bown?bown.model:"commission";
+    if($("arThr"))   $("arThr").value   = bown?bown.threshold_acres:7;
+    if($("arAbove")) $("arAbove").value = bown?bown.contribution_above:1;
+    if($("arUpto"))  $("arUpto").value  = bown?bown.contribution_upto:0.5;
+    syncModel();
+    // commission slabs
     let q=sb().from("partner_rates").select("*").eq("party_type","authorized_partner").order("rate_upto",{nullsFirst:false});
     q = pid ? q.eq("partner_id",pid) : q.is("partner_id",null);
     const { data }=await q; slabs=(data||[]).map(r=>({id:r.id,slab:r.slab,rate_upto:r.rate_upto,partner_pct:r.partner_pct,drocon_pct:r.drocon_pct}));
@@ -65,6 +88,7 @@ async function apRates(){
     draw();
   }
   $("arPartner").addEventListener("change",loadCard);
+  if($("arModel")) $("arModel").addEventListener("change",syncModel);
   if($("arSeed")) $("arSeed").addEventListener("click",()=>{ slabs=STD.map(s=>Object.assign({},s)); draw(); });
   if($("arSave")) $("arSave").addEventListener("click",async()=>{
     const pid=$("arPartner").value||null;
@@ -75,7 +99,17 @@ async function apRates(){
     const recs=slabs.filter(s=>String(s.slab||"").trim()).map(s=>({ party_type:"authorized_partner", partner_id:pid,
       slab:s.slab, rate_upto:s.rate_upto, partner_pct:s.partner_pct, drocon_pct:s.drocon_pct, created_by:window.OPS.me.id }));
     if(recs.length){ const ins=await sb().from("partner_rates").insert(recs); if(ins.error){ $("arErr").textContent=ins.error.message; return; } }
-    window.OPS.audit("partner_rate_card","partner_rates",pid||"standard",recs.length+" slab(s)");
+    // billing model + acreage-contribution params (delete-then-insert; null partner_id can't upsert)
+    if($("arModel")){
+      let bdq=sb().from("partner_billing").delete(); bdq = pid ? bdq.eq("partner_id",pid) : bdq.is("partner_id",null); await bdq;
+      const brow={ partner_id:pid, model:$("arModel").value,
+        threshold_acres:num($("arThr").value)||7,
+        contribution_above:($("arAbove").value===""?1:num($("arAbove").value)),
+        contribution_upto:($("arUpto").value===""?0.5:num($("arUpto").value)),
+        created_by:window.OPS.me.id, updated_at:new Date().toISOString() };
+      const bins=await sb().from("partner_billing").insert(brow); if(bins.error){ $("arErr").textContent=bins.error.message; return; }
+    }
+    window.OPS.audit("partner_rate_card","partner_rates",pid||"standard",($("arModel")?$("arModel").value+" · ":"")+recs.length+" slab(s)");
     window.OPS.flashTop("Rate card saved ✓");
   });
   loadCard();
@@ -100,15 +134,27 @@ function resolveCommission(rate, slabs){
   for(const s of asc){ if(s.rate_upto==null || rate<=Number(s.rate_upto)) return Number(s.drocon_pct)||0; }
   return asc.length ? (Number(asc[asc.length-1].drocon_pct)||0) : 0;
 }
+// Billing model + acreage-contribution parameters for a partner (own row, else
+// Standard/null row, else the negotiated defaults).
+const BILLING_DEFAULT={ model:"commission", threshold_acres:7, contribution_above:1.0, contribution_upto:0.5 };
+async function loadBilling(partnerId){
+  const pick=async(pid)=>{ let q=sb().from("partner_billing").select("*"); q=pid?q.eq("partner_id",pid):q.is("partner_id",null); const {data}=await q.limit(1); return (data&&data[0])||null; };
+  let b = partnerId ? await pick(partnerId) : null;
+  if(!b) b = await pick(null);
+  if(!b) return Object.assign({},BILLING_DEFAULT);
+  return { model:b.model||"commission", threshold_acres:num(b.threshold_acres)||7,
+           contribution_above:(b.contribution_above==null?1:num(b.contribution_above)),
+           contribution_upto:(b.contribution_upto==null?0.5:num(b.contribution_upto)) };
+}
 
 /* ---------------------------------------------------------------------------
    Line-item editor (shared by submit form + manager on-behalf)
    kind: 'authorized_partner' (agent invoice) | 'consultant' (timesheet)
    --------------------------------------------------------------------------- */
-function blankRow(kind){
-  return kind==="consultant"
-    ? {date:todayISO(),description:"",hours:"",rate:"",amount:0}
-    : {date:todayISO(),farmer:"",mobile:"",rate:"",acre:"",amount:0,comm_rate:"",comm_amount:0};
+function blankRow(kind, model){
+  if(kind==="consultant") return {date:todayISO(),description:"",hours:"",rate:"",amount:0};
+  if(model==="full_client_rate") return {date:todayISO(),acres:"",rate:"",waived:false,amount:0,contrib_acres:0,comm_amount:0};
+  return {date:todayISO(),farmer:"",mobile:"",rate:"",acre:"",amount:0,comm_rate:"",comm_amount:0};
 }
 function rowsToTotals(kind, rows){
   let gross=0, comm=0;
@@ -116,11 +162,17 @@ function rowsToTotals(kind, rows){
   return { gross, commission_total:comm, net_payable: gross-comm };
 }
 
-function lineEditor(host, kind, rows, slabs, onChange){
+function lineEditor(host, kind, rows, ctx, onChange){
+  ctx = ctx||{}; const billing = ctx.billing||BILLING_DEFAULT, slabs = ctx.slabs||[];
+  const isFCR = kind==="authorized_partner" && billing.model==="full_client_rate";
   function recalc(){
     rows.forEach(r=>{
       if(kind==="consultant"){ r.amount = num(r.hours)*num(r.rate); }
-      else {
+      else if(isFCR){
+        r.amount = num(r.rate)*num(r.acres);                  // gross = client rate × acres
+        r.contrib_acres = r.waived ? 0 : (num(r.acres) > num(billing.threshold_acres) ? num(billing.contribution_above) : num(billing.contribution_upto));
+        r.comm_amount = Math.round(r.contrib_acres*num(r.rate)*100)/100;   // DroCon margin (in kind)
+      } else {
         r.amount = num(r.rate)*num(r.acre);
         const cr = r.comm_rate!=="" && r.comm_rate!=null ? num(r.comm_rate) : resolveCommission(num(r.rate), slabs);
         r.comm_rate = cr;
@@ -133,6 +185,8 @@ function lineEditor(host, kind, rows, slabs, onChange){
     recalc();
     const head = kind==="consultant"
       ? `<th>Date</th><th>Description</th><th class="num">Hours</th><th class="num">Rate ₹/hr</th><th class="num">Amount ₹</th><th></th>`
+      : isFCR
+      ? `<th>Date</th><th class="num">Acres sprayed</th><th class="num">Client rate ₹/acre</th><th title="Downtime waiver">Waive</th><th class="num">Gross ₹</th><th class="num">Contrib. (acre)</th><th class="num">DroCon margin ₹</th><th class="num">Net ₹</th><th></th>`
       : `<th>Date</th><th>Farmer</th><th>Mobile</th><th class="num">Rate ₹/acre</th><th class="num">Acre</th><th class="num">Amount ₹</th><th class="num">Comm %</th><th class="num">Comm ₹</th><th></th>`;
     const body = rows.map((r,i)=> kind==="consultant"
       ? `<tr data-i="${i}">
@@ -141,6 +195,17 @@ function lineEditor(host, kind, rows, slabs, onChange){
           <td class="num"><input type="number" step="any" data-k="hours" value="${esc(r.hours)}" style="width:80px"></td>
           <td class="num"><input type="number" step="any" data-k="rate" value="${esc(r.rate)}" style="width:90px"></td>
           <td class="num">${money(r.amount)}</td>
+          <td><button class="btn sm" data-del="${i}">✕</button></td></tr>`
+      : isFCR
+      ? `<tr data-i="${i}">
+          <td><input type="date" data-k="date" value="${esc(r.date||"")}"></td>
+          <td class="num"><input type="number" step="any" data-k="acres" value="${esc(r.acres)}" style="width:80px"></td>
+          <td class="num"><input type="number" step="any" data-k="rate" value="${esc(r.rate)}" style="width:90px"></td>
+          <td style="text-align:center"><input type="checkbox" data-k="waived" ${r.waived?"checked":""} title="No Acreage Contribution this day (downtime)"></td>
+          <td class="num">${money(r.amount)}</td>
+          <td class="num">${num(r.contrib_acres).toFixed(1)}</td>
+          <td class="num">${money(r.comm_amount)}</td>
+          <td class="num">${money(num(r.amount)-num(r.comm_amount))}</td>
           <td><button class="btn sm" data-del="${i}">✕</button></td></tr>`
       : `<tr data-i="${i}">
           <td><input type="date" data-k="date" value="${esc(r.date||"")}"></td>
@@ -153,13 +218,15 @@ function lineEditor(host, kind, rows, slabs, onChange){
           <td class="num">${money(r.comm_amount)}</td>
           <td><button class="btn sm" data-del="${i}">✕</button></td></tr>`).join("");
     host.innerHTML = `<table class="tight"><thead><tr>${head}</tr></thead><tbody>${body||""}</tbody></table>
-      <div class="row" style="margin-top:8px"><button class="btn sm" id="peAdd">+ Add row</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="peAdd">+ Add ${isFCR?"day":"row"}</button></div>`;
     host.querySelectorAll("input[data-k]").forEach(inp=>{
-      inp.addEventListener("input",()=>{ const tr=inp.closest("tr"); const i=+tr.getAttribute("data-i"); rows[i][inp.getAttribute("data-k")]=inp.value; });
+      const k=inp.getAttribute("data-k");
+      if(inp.type==="checkbox"){ inp.addEventListener("change",()=>{ const i=+inp.closest("tr").getAttribute("data-i"); rows[i][k]=inp.checked; draw(); }); return; }
+      inp.addEventListener("input",()=>{ const i=+inp.closest("tr").getAttribute("data-i"); rows[i][k]=inp.value; });
       inp.addEventListener("change",draw);
     });
     host.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ rows.splice(+b.getAttribute("data-del"),1); draw(); }));
-    $("peAdd").addEventListener("click",()=>{ rows.push(blankRow(kind)); draw(); });
+    $("peAdd").addEventListener("click",()=>{ rows.push(blankRow(kind, billing.model)); draw(); });
   }
   draw();
   return { rows, totals:()=>rowsToTotals(kind,rows) };
@@ -181,12 +248,12 @@ async function portalSubmit(){
         <div class="field"><label>Invoice number (your ref)</label><input id="piNum" placeholder="e.g. AP/2026/07"></div>
         <div class="field"><label>Period</label><input id="piPeriod" placeholder="e.g. Jun 2026"></div>
       </div>
-      <h3 style="margin:14px 0 4px">${kind==="consultant"?"Timesheet lines":"Acres sprayed"}</h3>
-      ${kind==="authorized_partner"?'<div class="muted" style="margin-bottom:6px">Enter the <b>actual per-acre rate you received from the farmer</b> on each row. The commission % is filled automatically from the standard slabs (you can override it if your contract differs).</div>':''}
+      <h3 style="margin:14px 0 4px">${kind==="consultant"?"Timesheet lines":"Daily lines"}</h3>
+      ${kind==="authorized_partner"?'<div class="muted" id="piNote2" style="margin-bottom:6px"></div>':''}
       <div id="piRows"></div>
       <div class="row" style="margin-top:12px;gap:24px;flex-wrap:wrap">
         <div><div class="eyebrow">Gross</div><b id="piGross">₹0</b></div>
-        ${kind==="authorized_partner"?'<div><div class="eyebrow">DroCon commission</div><b id="piComm">₹0</b></div>':''}
+        ${kind==="authorized_partner"?'<div><div class="eyebrow" id="piCommLabel">DroCon commission</div><b id="piComm">₹0</b></div>':''}
         <div><div class="eyebrow">Net payable to you</div><b id="piNet" style="color:var(--green)">₹0</b></div>
       </div>
       <div class="field full" style="margin-top:10px"><label>Note (optional)</label><textarea id="piNote" placeholder="Anything the team should know"></textarea></div>
@@ -196,15 +263,21 @@ async function portalSubmit(){
       </div>
       ${kind==="consultant"?'<div class="muted" style="margin-top:8px">All fees are exclusive of GST. TDS is deducted at source per the Income-tax Act, 1961 at the time of payment.</div>':''}
     </div>`;
-  const slabs = kind==="authorized_partner" ? await loadSlabs(p.party_id) : [];
-  const rows = [blankRow(kind)];
-  const ed = lineEditor($("piRows"), kind, rows, slabs, t=>{
+  const billing = kind==="authorized_partner" ? await loadBilling(p.party_id) : {model:"commission"};
+  const isFCR = billing.model==="full_client_rate";
+  const slabs = (kind==="authorized_partner" && !isFCR) ? await loadSlabs(p.party_id) : [];
+  if($("piCommLabel")) $("piCommLabel").textContent = isFCR ? "DroCon margin (in kind)" : "DroCon commission";
+  if($("piNote2")) $("piNote2").innerHTML = isFCR
+    ? `Enter the <b>acres sprayed</b> and the <b>client rate</b> for each operating day. You are paid the <b>full client rate</b> for every acre; DroCon's margin is the daily <b>Acreage Contribution</b> (<b>${billing.contribution_above}</b> acre when the day's order exceeds <b>${billing.threshold_acres}</b> acres, else <b>${billing.contribution_upto}</b> acre), valued at the client rate. Tick <b>Waive</b> on a downtime day (no work available, or drone damage per the agreement).`
+    : `Enter the <b>actual per-acre rate you received from the farmer</b> on each row. The commission % is filled automatically from the standard slabs (you can override it if your contract differs).`;
+  const rows = [blankRow(kind, billing.model)];
+  const ed = lineEditor($("piRows"), kind, rows, {slabs, billing}, t=>{
     $("piGross").textContent=money(t.gross);
     if($("piComm")) $("piComm").textContent=money(t.commission_total);
     $("piNet").textContent=money(t.net_payable);
   });
   $("piSend").addEventListener("click",async()=>{
-    const clean = rows.filter(r=> kind==="consultant" ? (r.description||num(r.hours)||num(r.rate)) : (r.farmer||num(r.acre)||num(r.rate)));
+    const clean = rows.filter(r=> kind==="consultant" ? (r.description||num(r.hours)||num(r.rate)) : isFCR ? (num(r.acres)||num(r.rate)) : (r.farmer||num(r.acre)||num(r.rate)));
     if(!clean.length){ $("piErr").textContent="Add at least one line."; return; }
     const t = rowsToTotals(kind, clean);
     const rec = {
@@ -212,6 +285,7 @@ async function portalSubmit(){
       submitted_by:window.OPS.me.id,
       invoice_number:$("piNum").value.trim()||null, period:$("piPeriod").value.trim()||null,
       line_items:clean, gross:t.gross, commission_total:t.commission_total, net_payable:t.net_payable,
+      billing_model:(kind==="authorized_partner"?billing.model:"commission"),
       status:"submitted", manager_note:null
     };
     $("piSend").disabled=true;
@@ -279,19 +353,23 @@ async function managerInvoices(){
   }
   function card(r){
     const isAP=r.party_type==="authorized_partner";
+    const isFCR = isAP && r.billing_model==="full_client_rate";
     const li=r.line_items||[];
-    const head = isAP ? `<th>Date</th><th>Farmer</th><th>Mobile</th><th class="num">Rate</th><th class="num">Acre</th><th class="num">Amount</th><th class="num">Comm ₹</th>`
-                      : `<th>Date</th><th>Description</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th>`;
-    const body = li.map(x=> isAP
-      ? `<tr><td>${esc(x.date||"")}</td><td>${esc(x.farmer||"")}</td><td>${esc(window.OPS.helpers.maskPhone(x.mobile))}</td><td class="num">${money(x.rate)}</td><td class="num">${esc(x.acre||"")}</td><td class="num">${money(x.amount)}</td><td class="num">${money(x.comm_amount)}</td></tr>`
-      : `<tr><td>${esc(x.date||"")}</td><td>${esc(x.description||"")}</td><td class="num">${esc(x.hours||"")}</td><td class="num">${money(x.rate)}</td><td class="num">${money(x.amount)}</td></tr>`).join("");
+    const head = !isAP ? `<th>Date</th><th>Description</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th>`
+      : isFCR ? `<th>Date</th><th class="num">Acres</th><th class="num">Rate</th><th class="num">Gross</th><th class="num">Contrib.</th><th class="num">DroCon margin</th><th class="num">Net</th>`
+      : `<th>Date</th><th>Farmer</th><th>Mobile</th><th class="num">Rate</th><th class="num">Acre</th><th class="num">Amount</th><th class="num">Comm ₹</th>`;
+    const body = li.map(x=> !isAP
+      ? `<tr><td>${esc(x.date||"")}</td><td>${esc(x.description||"")}</td><td class="num">${esc(x.hours||"")}</td><td class="num">${money(x.rate)}</td><td class="num">${money(x.amount)}</td></tr>`
+      : isFCR
+      ? `<tr><td>${esc(x.date||"")}</td><td class="num">${esc(x.acres||"")}</td><td class="num">${money(x.rate)}</td><td class="num">${money(x.amount)}</td><td class="num">${num(x.contrib_acres).toFixed(1)}${x.waived?' <span class="muted">(waived)</span>':''}</td><td class="num">${money(x.comm_amount)}</td><td class="num">${money(num(x.amount)-num(x.comm_amount))}</td></tr>`
+      : `<tr><td>${esc(x.date||"")}</td><td>${esc(x.farmer||"")}</td><td>${esc(window.OPS.helpers.maskPhone(x.mobile))}</td><td class="num">${money(x.rate)}</td><td class="num">${esc(x.acre||"")}</td><td class="num">${money(x.amount)}</td><td class="num">${money(x.comm_amount)}</td></tr>`).join("");
     return `<div class="card" id="inv_${r.id}" style="margin-bottom:12px">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div><div class="eyebrow">${isAP?"Authorized Partner":"Consultant"} · ${esc(r.party_name||"")}</div>
           <h3 style="margin:2px 0">${esc(r.invoice_number||"(no number)")} · ${esc(r.period||"")}</h3>
           <div class="muted">Submitted ${fmt(r.created_at)} ${invChip(r.status)}</div></div>
         <div style="text-align:right"><div class="eyebrow">Net payable</div><b style="font-size:18px">${money(r.net_payable)}</b>
-          ${isAP?`<div class="muted">Gross ${money(r.gross)} · Comm ${money(r.commission_total)}</div>`:''}</div>
+          ${isAP?`<div class="muted">Gross ${money(r.gross)} · ${isFCR?"DroCon margin":"Comm"} ${money(r.commission_total)}</div>`:''}</div>
       </div>
       <table class="tight" style="margin-top:8px"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
       <div class="field full" style="margin-top:8px"><label>Manager note (sent to partner)</label><input id="mn_${r.id}" value="${esc(r.manager_note||"")}"></div>
@@ -325,21 +403,26 @@ window.OPS.routes.partner_invoices = managerInvoices;
 
 function wordInvoice(r){
   const isAP=r.party_type==="authorized_partner";
+  const isFCR = isAP && r.billing_model==="full_client_rate";
   const li=r.line_items||[];
-  const headers = isAP ? ["Date","Farmer Name","Farmer Mobile","Rate ₹","Acre","Amount ₹","Comm %","Commission ₹"]
-                       : ["Date","Description","Hours","Rate ₹/hr","Amount ₹"];
-  const body = li.map(x=> isAP
-    ? [x.date||"", x.farmer||"", x.mobile||"", money(x.rate), x.acre||"", money(x.amount), (x.comm_rate||"")+"%", money(x.comm_amount)]
-    : [x.date||"", x.description||"", x.hours||"", money(x.rate), money(x.amount)]);
-  const totRow = isAP ? ["","","","","Totals", money(r.gross), "", money(r.commission_total)]
-                      : ["","","","Total", money(r.gross)];
+  const headers = !isAP ? ["Date","Description","Hours","Rate ₹/hr","Amount ₹"]
+    : isFCR ? ["Date","Acres sprayed","Client rate ₹","Gross ₹","Contribution (acre)","DroCon margin ₹","Net ₹"]
+    : ["Date","Farmer Name","Farmer Mobile","Rate ₹","Acre","Amount ₹","Comm %","Commission ₹"];
+  const body = li.map(x=> !isAP
+    ? [x.date||"", x.description||"", x.hours||"", money(x.rate), money(x.amount)]
+    : isFCR
+    ? [x.date||"", x.acres||"", money(x.rate), money(x.amount), num(x.contrib_acres).toFixed(1)+(x.waived?" (waived)":""), money(x.comm_amount), money(num(x.amount)-num(x.comm_amount))]
+    : [x.date||"", x.farmer||"", x.mobile||"", money(x.rate), x.acre||"", money(x.amount), (x.comm_rate||"")+"%", money(x.comm_amount)]);
+  const totRow = !isAP ? ["","","","Total", money(r.gross)]
+    : isFCR ? ["","","Totals", money(r.gross), "", money(r.commission_total), money(r.net_payable)]
+    : ["","","","","Totals", money(r.gross), "", money(r.commission_total)];
   body.push(totRow);
-  const sections=[{ heading:(isAP?"Acres Sprayed":"Consultancy Services"),
+  const sections=[{ heading:(isAP?(isFCR?"Daily Acreage (Full Client Rate)":"Acres Sprayed"):"Consultancy Services"),
     note:`Partner: ${r.party_name||""}   ·   Invoice ${r.invoice_number||"—"}   ·   Period ${r.period||"—"}   ·   Status: ${r.status}`,
     table:{headers, rows:body} }];
   sections.push({ heading:"Settlement", table:{ headers:["Description","Amount ₹"], rows:[
-    ["Gross", money(r.gross)],
-    ...(isAP?[["Less: DroCon commission", money(r.commission_total)]]:[]),
+    ["Gross (full client rate)", money(r.gross)],
+    ...(isAP?[["Less: DroCon "+(isFCR?"Acreage Contribution (in kind)":"commission"), money(r.commission_total)]]:[]),
     ["Net payable to partner", money(r.net_payable)],
   ]}});
   if(r.manager_note) sections.push({ heading:"Note", note:r.manager_note });
