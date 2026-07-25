@@ -90,8 +90,11 @@ const TOOLS = [
   { key:"hr_attendance", section:"hr", label:"Attendance",         gate:"perm" },
   { key:"hr_compoff",    section:"hr", label:"Comp-offs",          gate:"perm" },
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",  gate:"perm" },
+  { key:"hr_revisions",  section:"hr", label:"Salary Revisions",   gate:"perm" },
   { key:"hr_records",    section:"hr", label:"Salary Records",     gate:"perm" },
   { key:"hr_payslips",   section:"hr", label:"Payslips",           gate:"perm" },
+  { key:"hr_incentives", section:"hr", label:"Incentives",         gate:"perm" },
+  { key:"hr_bonuses",    section:"hr", label:"Bonuses",            gate:"perm" },
   // Registers — the records every other screen selects from, then the
   // reference material (policies, manual & FAQs)
   { key:"clients",       section:"resources", label:"Client",       gate:"perm" },

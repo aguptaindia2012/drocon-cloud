@@ -23,6 +23,24 @@ function dowOf(isoDate){ return new Date(isoDate+"T00:00:00Z").getUTCDay(); }
 function quarterEnd(isoDate){ const d=new Date(isoDate+"T00:00:00Z"); const q=Math.floor(d.getUTCMonth()/3);
   return iso(new Date(Date.UTC(d.getUTCFullYear(), q*3+3, 0))); }
 
+/* DroCon's 12 mandatory paid holidays (HR Policy v2.0). Only the three
+   National days have fixed Gregorian dates; festival dates are set each year
+   by the team. Names are the standard reference; dates are filled per year. */
+const DROCON_HOLIDAYS = [
+  {name:"Republic Day", fixed:"01-26"},
+  {name:"Maha Shivaratri"},
+  {name:"Holi / Dhulandi"},
+  {name:"Ram Navami"},
+  {name:"Independence Day", fixed:"08-15"},
+  {name:"Janmashtami / Gokulashtami"},
+  {name:"Raksha Bandhan"},
+  {name:"Ganesh Chaturthi"},
+  {name:"Gandhi Jayanti", fixed:"10-02"},
+  {name:"Dussehra / Vijayadashami"},
+  {name:"Diwali / Deepavali"},
+  {name:"Guru Nanak Jayanti / Kartik Purnima"},
+];
+
 /* status cell display: code + colour */
 const CELL = {
   present:   {t:"",  bg:"",                 fg:""},
@@ -78,10 +96,13 @@ function renderHolidays(){
       <input id="hDate" type="date" min="${att.ym}-01" max="${dateInMonth(att.ym,monthDays(att.ym))}" style="width:auto">
       <input id="hName" placeholder="Holiday name (e.g. Independence Day)" style="min-width:240px">
       <button class="btn sm" id="hAdd">+ Add holiday</button>
+      <button class="btn sm ghost" id="hStd">DroCon standard holidays…</button>
     </div>
     ${hs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${hs.map(h=>`<span class="chip" style="background:#fff4d6;border:1px solid #e6cf7a;padding:3px 8px;border-radius:12px;font-size:12px">
        ${fmtDate(h.holiday_date)} · ${esc(h.name)} <a href="#" data-delh="${h.id}" style="color:#a11;text-decoration:none;font-weight:700">×</a></span>`).join("")}</div>`
-      :'<span class="muted">No holidays declared for this month.</span>'}</div>`;
+      :'<span class="muted">No holidays declared for this month.</span>'}</div>
+    <div id="atStd"></div>`;
+  $("hStd").addEventListener("click",stdHolidays);
   $("hAdd").addEventListener("click",async()=>{
     const d=$("hDate").value, n=$("hName").value.trim();
     if(!d){ alert("Pick a date."); return; }
@@ -94,6 +115,31 @@ function renderHolidays(){
   $("atHol").querySelectorAll("[data-delh]").forEach(a=>a.addEventListener("click",async ev=>{
     ev.preventDefault(); if(!confirm("Remove this holiday? Comp-offs already earned for it stay unless you also clear that day's attendance.")) return;
     await sb().from("hr_holidays").delete().eq("id",a.getAttribute("data-delh")); attendance();
+  }));
+}
+
+function stdHolidays(){
+  const yr=(att.ym||todayISO()).slice(0,4);
+  $("atStd").innerHTML=`<div class="card" style="padding:12px;margin-top:10px">
+    <div class="row"><b>DroCon standard holidays</b><label style="margin:0 0 0 10px">Year</label><input id="stYear" type="number" value="${yr}" style="width:92px"></div>
+    <p class="muted" style="font-size:12px">Enter the date your team has fixed for each holiday this year. The three National days are pre-filled; festival dates change every year. Blank rows are skipped. Saving adds them to the holiday calendar (existing dates are updated).</p>
+    <div id="stRows"></div>
+    <div class="row" style="margin-top:8px"><button class="btn green sm" id="stSave">Save standard holidays</button><button class="btn sm ghost" id="stClose">Close</button></div></div>`;
+  const renderRows=()=>{ const y=$("stYear").value||yr;
+    $("stRows").innerHTML=`<div style="overflow:auto"><table><tbody>${DROCON_HOLIDAYS.map((h,i)=>`<tr>
+      <td style="white-space:nowrap;padding-right:12px">${esc(h.name)}</td>
+      <td><input data-std="${i}" type="date" value="${h.fixed?(y+"-"+h.fixed):""}" min="${y}-01-01" max="${y}-12-31"></td></tr>`).join("")}</tbody></table></div>`; };
+  renderRows();
+  $("stYear").addEventListener("change",renderRows);
+  $("stClose").addEventListener("click",()=>{ $("atStd").innerHTML=""; });
+  $("stSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const recs=[]; $("stRows").querySelectorAll("input[data-std]").forEach(inp=>{ const d=inp.value;
+      if(d) recs.push({ holiday_date:d, name:DROCON_HOLIDAYS[+inp.getAttribute("data-std")].name, created_by:window.OPS.me.id }); });
+    if(!recs.length){ alert("Enter at least one date."); return; }
+    const { error }=await sb().from("hr_holidays").upsert(recs,{onConflict:"holiday_date"});
+    if(error){ alert("Save failed: "+error.message); return; }
+    window.OPS.audit&&window.OPS.audit("set","standard_holidays",$("stYear").value,recs.length+" dates");
+    window.OPS.flashTop("Saved "+recs.length+" standard holiday date(s) ✓"); attendance();
   }));
 }
 

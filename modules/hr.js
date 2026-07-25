@@ -22,6 +22,13 @@ function sundays(a,b){ let n=0; const d=new Date(a); while(d<=b){ if(d.getUTCDay
 function parseISO(s){ return s?new Date(s+"T00:00:00Z"):null; }
 function quarterEndISO(isoDate){ const d=new Date(isoDate+"T00:00:00Z"); const q=Math.floor(d.getUTCMonth()/3);
   return new Date(Date.UTC(d.getUTCFullYear(), q*3+3, 0)).toISOString().slice(0,10); }
+// Salary in force for a month = latest revision effective on/before month-end,
+// else the employee's base monthly_salary. revByEmp arrays are ascending.
+function effectiveSalary(e, monthEnd, revByEmp){
+  const cut=iso(monthEnd); let val=num(e.monthly_salary);
+  (revByEmp[e.id]||[]).forEach(r=>{ if(r.effective_from<=cut) val=num(r.monthly_salary); });
+  return val;
+}
 
 /* ---------- month lock (sql/52) ---------- */
 async function monthLock(ym){
@@ -158,14 +165,17 @@ async function salaryCalc(){
   $("scLock").innerHTML=lockBadge(lock);
   if(lock){ const b=$("scSave"); b.disabled=true; b.title="Month is locked — reopen it in Salary Records to recalculate."; b.textContent="Locked 🔒"; }
   const mb=monthBounds(ym);
-  const [{data:emps},{data:runs},{data:absents}]=await Promise.all([
+  const [{data:emps},{data:runs},{data:absents},{data:revs}]=await Promise.all([
     sb().from("employees").select("*").eq("status","active").eq("emp_type","employee").order("name"),
     sb().from("salary_runs").select("*").eq("period_month",ym),
     sb().from("hr_attendance").select("employee_id").eq("status","absent")
-      .gte("work_date",iso(mb.start)).lte("work_date",iso(mb.end)) ]);
+      .gte("work_date",iso(mb.start)).lte("work_date",iso(mb.end)),
+    sb().from("hr_salary_revisions").select("employee_id,effective_from,monthly_salary").order("effective_from") ]);
   const runByEmp={}; (runs||[]).forEach(r=>runByEmp[r.employee_id]=r);
   // Absent days marked in Attendance auto-fill LOP for months not yet saved.
   const lopByEmp={}; (absents||[]).forEach(a=>lopByEmp[a.employee_id]=(lopByEmp[a.employee_id]||0)+1);
+  // Dated salary escalations — the rate in force for this month.
+  const revByEmp={}; (revs||[]).forEach(r=>{ (revByEmp[r.employee_id]=revByEmp[r.employee_id]||[]).push(r); });
   // who is engaged this month
   const active=(emps||[]).filter(e=>{
     const doj=parseISO(e.doj), dol=parseISO(e.dol);
@@ -183,17 +193,19 @@ async function salaryCalc(){
     // saved run keeps its (possibly hand-tuned) LOP; a fresh month seeds LOP
     // from Absent days marked in Attendance.
     const lop=ex?num(ex.lop_days):(lopByEmp[e.id]||0);
-    return { emp:e, ps:iso(ps), pe:iso(pe), monthDays:mb.days, working:wd, off, lop, status:ex?ex.status:null, id:ex?ex.id:null };
+    // a saved run keeps its snapshot rate; a fresh month uses the escalation in force.
+    const rate=ex?num(ex.monthly_salary):effectiveSalary(e, mb.end, revByEmp);
+    return { emp:e, rate, ps:iso(ps), pe:iso(pe), monthDays:mb.days, working:wd, off, lop, status:ex?ex.status:null, id:ex?ex.id:null };
   });
   renderCalc();
 }
-function compute(r){ const eff=Math.max(0,num(r.working)-num(r.lop)); const mw=r.monthDays?eff/r.monthDays:0; return { mw, net:Math.round(num(r.emp.monthly_salary)*mw) }; }
+function compute(r){ const eff=Math.max(0,num(r.working)-num(r.lop)); const mw=r.monthDays?eff/r.monthDays:0; return { mw, net:Math.round(num(r.rate)*mw) }; }
 function renderCalc(){
   if(!calcRows.length){ $("scBody").innerHTML='<div class="card muted">No active employees engaged this month. Add them in <b>Employees & Consultants</b>.</div>'; return; }
   let totNet=0;
   const body=calcRows.map((r,i)=>{ const c=compute(r); totNet+=c.net; return `<tr>
     <td><b>${esc(r.emp.name)}</b><br><span class="muted">${esc(r.emp.designation||'')}</span></td>
-    <td class="num">${money(r.emp.monthly_salary)}</td>
+    <td class="num">${money(r.rate)}${num(r.rate)!==num(r.emp.monthly_salary)?' <span class="muted" title="escalated rate in force for this month">▲</span>':''}</td>
     <td class="muted">${r.ps.slice(8)}–${r.pe.slice(8)}</td>
     <td class="num">${r.working}</td><td class="num">${r.off}</td>
     <td><input data-i="${i}" type="number" step="any" value="${r.lop}" style="width:64px;text-align:right"></td>
@@ -214,7 +226,7 @@ async function saveMonth(){
     // default and trips the not-null constraint. onConflict matches on the
     // (employee_id, period_month) unique index, so id isn't needed anyway.
     employee_id:r.emp.id, period_month:ym, period_start:r.ps, period_end:r.pe,
-    monthly_salary:num(r.emp.monthly_salary), working_days:r.working, off_days:r.off, lop_days:num(r.lop),
+    monthly_salary:num(r.rate), working_days:r.working, off_days:r.off, lop_days:num(r.lop),
     month_days:r.monthDays, month_worked:c.mw, net_payable:c.net,
     status:r.status||"calculated", created_by:window.OPS.me.id }; });
   // upsert by (employee_id, period_month)
@@ -297,6 +309,55 @@ async function reopenMonth(ym){
   window.OPS.audit&&window.OPS.audit("reopened","salary_month",ym,note);
   window.OPS.flashTop("Month "+ym+" reopened — correct the entries, then lock it again."); records();
 }
+/* ============================ Salary Revisions (escalations) ============================ */
+let revEmp=null;
+async function revisions(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">HR</div><h1>Salary Revisions</h1>
+    <div class="callout">Record dated salary escalations. The Salary Calculator automatically applies the rate in force for the month it runs, so past months keep their original figures.</div>
+    <div class="row" style="margin:10px 0"><label style="margin:0">Employee</label>
+      <select id="reEmp" style="min-width:260px"><option value="">— select —</option></select></div>
+    <div id="reBody" class="muted"></div>`;
+  const { data:emps }=await sb().from("employees").select("id,name,designation,monthly_salary,emp_type").eq("emp_type","employee").order("name");
+  const sel=$("reEmp"); (emps||[]).forEach(e=>{ const o=document.createElement("option"); o.value=e.id; o.textContent=e.name+(e.designation?" — "+e.designation:""); sel.appendChild(o); });
+  if(revEmp && (emps||[]).some(e=>e.id===revEmp)) sel.value=revEmp;
+  sel.addEventListener("change",()=>{ revEmp=sel.value; loadRev((emps||[]).find(e=>e.id===revEmp)); });
+  if(sel.value) loadRev((emps||[]).find(e=>e.id===sel.value));
+}
+async function loadRev(emp){
+  if(!emp){ $("reBody").innerHTML=""; return; }
+  const { data:revs }=await sb().from("hr_salary_revisions").select("*").eq("employee_id",emp.id).order("effective_from",{ascending:false});
+  const cur=(revs||[]).find(r=>r.effective_from<=todayISO());
+  $("reBody").innerHTML=`
+    <div class="card" style="max-width:540px">
+      <p class="muted">Base salary on record: <b>${money(emp.monthly_salary)}</b>${cur?` · currently in force: <b>${money(cur.monthly_salary)}</b> (from ${fmtDate(cur.effective_from)})`:''}</p>
+      <div class="fgrid">
+        <div class="field"><label>Effective from *</label><input id="reFrom" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>New monthly salary (₹) *</label><input id="reAmt" type="number" step="any"></div>
+        <div class="field" style="grid-column:1/-1"><label>Reason</label><input id="reReason" placeholder="Annual increment / promotion / correction"></div>
+      </div>
+      <button class="btn green" id="reAdd">Add revision</button><div class="err" id="reErr"></div>
+    </div>
+    ${(revs||[]).length?`<div style="overflow:auto;margin-top:12px"><table><thead><tr><th>Effective from</th><th class="num">Monthly salary</th><th>Reason</th><th></th></tr></thead>
+      <tbody>${revs.map(r=>`<tr${r===cur?' style="background:#e2f6e6"':''}><td>${fmtDate(r.effective_from)}${r===cur?' <span class="muted">(in force)</span>':''}</td><td class="num">${money(r.monthly_salary)}</td><td>${esc(r.reason||'')}</td>
+        <td><button class="btn sm ghost" data-delr="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted" style="margin-top:10px">No revisions yet — the base salary applies.</div>'}`;
+  $("reAdd").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const from=$("reFrom").value, amt=num($("reAmt").value);
+    if(!from){ $("reErr").textContent="Pick an effective date."; return; }
+    if(amt<=0){ $("reErr").textContent="Enter the new monthly salary."; return; }
+    const { error }=await sb().from("hr_salary_revisions").insert({ employee_id:emp.id, effective_from:from, monthly_salary:amt, reason:$("reReason").value.trim()||null, created_by:window.OPS.me.id });
+    if(error){ $("reErr").textContent=error.message; return; }
+    if(from<=todayISO()){ await sb().from("employees").update({monthly_salary:amt}).eq("id",emp.id); emp.monthly_salary=amt; }
+    window.OPS.audit&&window.OPS.audit("revised","salary",emp.id,money(amt)+" from "+from);
+    window.OPS.flashTop("Salary revision saved ✓"); loadRev(emp);
+  }));
+  $("reBody").querySelectorAll("[data-delr]").forEach(b=>b.addEventListener("click",async()=>{
+    if(!confirm("Delete this revision?")) return;
+    await sb().from("hr_salary_revisions").delete().eq("id",b.getAttribute("data-delr")); loadRev(emp);
+  }));
+}
+
 function payRun(x){
   const run=x.r;
   const m=$("main");
@@ -407,6 +468,7 @@ async function payslips(){
 }
 
 window.OPS.routes.hr_salary = salaryCalc;
+window.OPS.routes.hr_revisions = revisions;
 window.OPS.routes.hr_records = records;
 window.OPS.routes.hr_payslips = payslips;
 })();
