@@ -43,10 +43,9 @@ const DROCON_HOLIDAYS = [
 
 /* status cell display: code + colour */
 const CELL = {
-  present:   {t:"",  bg:"",                 fg:""},
+  present:   {t:"P", bg:"",                 fg:"var(--muted,#999)"},
   off:       {t:"·", bg:"var(--paper2,#f2f2f2)", fg:"var(--muted,#888)"},
   absent:    {t:"A", bg:"#fde2e1",          fg:"#a11"},
-  comp_used: {t:"C", bg:"#e1ecfd",          fg:"#1552a1"},
   worked_off:{t:"W", bg:"#e2f6e6",          fg:"#137a2e"},
 };
 
@@ -63,7 +62,7 @@ async function attendance(){
       <div class="spacer"></div>
       <button class="btn green sm" id="atSave">Save attendance</button>
     </div>
-    <div class="callout">Declare this month's <b>holidays first</b> (Sundays are automatic), then mark attendance. A normal day is <b>Present</b> by default — click a cell to cycle. Working a Sunday/holiday (<b>W</b>) earns a comp-off; <b>A</b> = Absent (becomes LOP in salary); <b>C</b> = Comp-off taken.</div>
+    <div class="callout">Declare this month's <b>holidays first</b> (Sundays are automatic), then mark attendance. Click a cell to cycle: <b>P</b> Present ↔ <b>A</b> Absent (a day off taken); on a Sunday/holiday, <b>W</b> = Worked (earns a comp-off). Absences are netted against the comp-off balance — paid while the balance lasts, then LOP. Manage the balance in <b>Comp-offs</b>.</div>
     <div id="atHol"></div>
     <div id="atGrid" class="muted" style="margin-top:14px">Loading…</div>`;
   $("atMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("atMonth").value; attendance(); });
@@ -145,13 +144,13 @@ function stdHolidays(){
 
 function cellState(k,isoDate){
   const st=att.work[k];
-  if(st==="absent"||st==="comp_used"||st==="worked_off") return st;
+  if(st==="absent"||st==="worked_off") return st;
   const off = dowOf(isoDate)===0 || (isoDate in holidaySet());
   return off?"off":"present";
 }
 function nextState(cur,off){
-  if(off) return cur==="worked_off"?"":"worked_off";          // off day: Off <-> Worked
-  return cur==="absent"?"comp_used":cur==="comp_used"?"":"absent"; // work day: Present->A->C->Present
+  if(off) return cur==="worked_off"?"":"worked_off";   // off day: Off <-> Worked (W)
+  return cur==="absent"?"":"absent";                    // work day: Present (P) <-> Absent (A)
 }
 
 function renderGrid(){
@@ -168,7 +167,7 @@ function renderGrid(){
   }).join("");
   $("atGrid").innerHTML=`<div style="overflow:auto;max-height:64vh;border:1px solid var(--line,#ddd);border-radius:8px">
     <table style="border-collapse:collapse;font-size:13px"><thead><tr>${head.join("")}</tr></thead><tbody>${rowsHtml}</tbody></table></div>
-    <div class="muted" style="margin-top:6px;font-size:12px">Legend: <b>A</b> Absent (LOP) · <b>C</b> Comp-off taken · <b>W</b> Worked on day off (earns comp-off) · <b>·</b> weekly off/holiday · blank Present. Click to cycle, then <b>Save attendance</b>.</div>`;
+    <div class="muted" style="margin-top:6px;font-size:12px">Legend: <b>P</b> Present · <b>A</b> Absent (day off — netted against comp-off, LOP only if balance runs out) · <b>W</b> Worked on day off (earns comp-off) · <b>·</b> weekly off/holiday. Click to cycle, then <b>Save attendance</b>.</div>`;
   $("atGrid").querySelectorAll("td[data-k]").forEach(td=>td.addEventListener("click",()=>{
     const k=td.getAttribute("data-k"), isoD=td.getAttribute("data-d");
     const off = dowOf(isoD)===0 || (isoD in holidaySet());
@@ -209,38 +208,35 @@ async function compoff(){
     <div class="callout">A comp-off must be used or encashed before the end of the calendar quarter it was earned in. <b style="color:#a11">Red</b> = already lapsed, <b style="color:#b8860b">amber</b> = expires this quarter — encash it now or remind the employee to take it.</div>
     <div id="coBody" class="muted">Loading…</div>`;
   $("coMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("coMonth").value; compoff(); });
-  const [{data:emps},{data:credits},{data:used}]=await Promise.all([
+  const [{data:emps},{data:credits},{data:absAll}]=await Promise.all([
     sb().from("employees").select("id,name,designation,monthly_salary").eq("status","active").eq("emp_type","employee").order("name"),
     sb().from("hr_comp_offs").select("*").order("earned_on"),
-    sb().from("hr_attendance").select("employee_id").eq("status","comp_used"),
+    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent"),
   ]);
-  const usedBy={}; (used||[]).forEach(u=>usedBy[u.employee_id]=(usedBy[u.employee_id]||0)+1);
   const credBy={}; (credits||[]).forEach(c=>{ (credBy[c.employee_id]=credBy[c.employee_id]||[]).push(c); });
+  const absBy={}; (absAll||[]).forEach(a=>{ (absBy[a.employee_id]=absBy[a.employee_id]||[]).push(a.work_date); });
   const today=todayISO(), qEnd=quarterEnd(today);
 
   const rows=(emps||[]).map(e=>{
-    const list=(credBy[e.id]||[]).slice().sort((a,b)=>a.earned_on.localeCompare(b.earned_on));
-    const open=list.filter(c=>!c.encashed_on);       // not yet encashed
-    let usedLeft=usedBy[e.id]||0;
-    // FIFO: the oldest open credits are the ones consumed by comp_used days
-    const avail=[];
-    open.forEach(c=>{ if(usedLeft>0){ usedLeft--; } else avail.push(c); });
-    const lapsed = avail.filter(c=>c.expires_on < today);
-    const expiring = avail.filter(c=>c.expires_on >= today && c.expires_on <= qEnd);
-    return { e, earned:list.length, used:usedBy[e.id]||0, encashed:list.filter(c=>c.encashed_on).length,
-             available:avail.length, avail, lapsed, expiring };
+    const sim=window.OPS.simulateLeave(credBy[e.id]||[], absBy[e.id]||[], today);
+    const open=sim.credits.filter(c=>c.status==="open");            // available to use / encash
+    const expiring=open.filter(c=>c.expires_on<=qEnd);              // must act before quarter-end
+    const lapsedCount=sim.credits.filter(c=>c.status==="lapsed").length;
+    return { e, earned:sim.earned, taken:sim.taken, covered:sim.coveredTotal, lop:sim.lopTotal,
+             encashed:sim.encashed, available:sim.available, avail:open, lapsed:[], expiring, lapsedCount };
   });
-  const anyEarned=rows.some(r=>r.earned>0);
+  const anyEarned=rows.some(r=>r.earned>0 || r.taken>0);
   $("coBody").innerHTML = anyEarned ? `<div style="overflow:auto"><table><thead><tr>
-      <th>Employee</th><th class="num">Earned</th><th class="num">Taken</th><th class="num">Encashed</th>
+      <th>Employee</th><th class="num">Earned</th><th class="num">Taken</th><th class="num">Covered</th><th class="num">LOP</th><th class="num">Encashed</th>
       <th class="num">Available</th><th class="num">Lapsable</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td><b>${esc(r.e.name)}</b><br><span class="muted">${esc(r.e.designation||'')}</span></td>
-      <td class="num">${r.earned}</td><td class="num">${r.used}</td><td class="num">${r.encashed}</td>
+      <td class="num">${r.earned}</td><td class="num">${r.taken}</td><td class="num">${r.covered}</td>
+      <td class="num">${r.lop?`<span style="color:#a11;font-weight:700">${r.lop}</span>`:'—'}</td><td class="num">${r.encashed}</td>
       <td class="num"><b>${r.available}</b></td>
-      <td class="num">${(r.lapsed.length+r.expiring.length)?`<span style="color:${r.lapsed.length?'#a11':'#b8860b'};font-weight:700">${r.lapsed.length+r.expiring.length}</span>`:'—'}</td>
+      <td class="num">${r.expiring.length?`<span style="color:#b8860b;font-weight:700">${r.expiring.length}</span>`:'—'}${r.lapsedCount?` <span class="muted" title="already lapsed">(+${r.lapsedCount} lost)</span>`:''}</td>
       <td>${r.available?`<button class="btn sm" data-mng="${r.e.id}">Manage</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
-    : '<div class="card muted">No comp-offs earned yet. They appear when someone is marked <b>W</b> (worked on a Sunday/holiday) in <b>Attendance</b>.</div>';
+    : '<div class="card muted">No comp-offs or leave yet. Comp-offs appear when someone is marked <b>W</b> (worked on a Sunday/holiday) in <b>Attendance</b>; absences (<b>A</b>) draw them down.</div>';
   $("coBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>manageEmp(rows.find(r=>r.e.id===b.getAttribute("data-mng")))));
 }
 

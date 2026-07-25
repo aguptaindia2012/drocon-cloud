@@ -95,6 +95,7 @@ const TOOLS = [
   { key:"hr_payslips",   section:"hr", label:"Payslips",           gate:"perm" },
   { key:"hr_incentives", section:"hr", label:"Incentives",         gate:"perm" },
   { key:"hr_bonuses",    section:"hr", label:"Bonuses",            gate:"perm" },
+  { key:"hr_fnf",        section:"hr", label:"Final Settlement",   gate:"perm" },
   // Registers — the records every other screen selects from, then the
   // reference material (policies, manual & FAQs)
   { key:"clients",       section:"resources", label:"Client",       gate:"perm" },
