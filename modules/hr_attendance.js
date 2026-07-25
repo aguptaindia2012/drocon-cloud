@@ -41,6 +41,7 @@ async function attendance(){
   m.innerHTML=`<div class="eyebrow">HR</div><h1>Attendance</h1>
     <div class="row" style="margin:10px 0">
       <label style="margin:0">Month</label><input id="atMonth" type="month" value="${ym}" style="width:auto">
+      <span id="atLock"></span>
       <div class="spacer"></div>
       <button class="btn green sm" id="atSave">Save attendance</button>
     </div>
@@ -58,6 +59,12 @@ async function attendance(){
   ]);
   att.ym=ym; att.emps=emps||[]; att.holidays=hol||[]; att.orig={}; att.work={};
   (rows||[]).forEach(r=>{ const k=r.employee_id+"|"+r.work_date; att.orig[k]=r.status; att.work[k]=r.status; });
+  const lock = window.OPS.hrMonthLock ? await window.OPS.hrMonthLock(ym) : null;
+  att.locked=!!lock;
+  if($("atLock")) $("atLock").innerHTML = lock
+    ? `<span class="chip" style="background:#fde2e1;border:1px solid #e6a0a0;color:#a11;padding:3px 10px;border-radius:12px;font-weight:700">🔒 Locked — reopen in Salary Records to edit</span>`
+    : `<span class="chip" style="background:#e2f6e6;border:1px solid #a6d9b4;color:#137a2e;padding:3px 10px;border-radius:12px">Open</span>`;
+  if(lock){ const b=$("atSave"); if(b){ b.disabled=true; b.textContent="Locked 🔒"; b.title="This month is locked."; } }
   renderHolidays(); renderGrid();
 }
 

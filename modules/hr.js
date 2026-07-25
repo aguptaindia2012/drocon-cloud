@@ -20,6 +20,71 @@ const iso = d => d.toISOString().slice(0,10);
 function daysInclusive(a,b){ if(b<a) return 0; return Math.floor((b-a)/86400000)+1; }
 function sundays(a,b){ let n=0; const d=new Date(a); while(d<=b){ if(d.getUTCDay()===0) n++; d.setUTCDate(d.getUTCDate()+1); } return n; }
 function parseISO(s){ return s?new Date(s+"T00:00:00Z"):null; }
+function quarterEndISO(isoDate){ const d=new Date(isoDate+"T00:00:00Z"); const q=Math.floor(d.getUTCMonth()/3);
+  return new Date(Date.UTC(d.getUTCFullYear(), q*3+3, 0)).toISOString().slice(0,10); }
+
+/* ---------- month lock (sql/52) ---------- */
+async function monthLock(ym){
+  const { data }=await sb().from("hr_month_locks").select("*").eq("period_month",ym).maybeSingle();
+  return (data&&data.status==="locked")?data:null;
+}
+window.OPS.hrMonthLock = monthLock;
+function lockBadge(lock){ return lock
+  ? `<span class="chip" style="background:#fde2e1;border:1px solid #e6a0a0;color:#a11;padding:3px 10px;border-radius:12px;font-weight:700">🔒 Locked ${lock.locked_at?('· '+fmtDate(lock.locked_at.slice(0,10))):''}</span>`
+  : `<span class="chip" style="background:#e2f6e6;border:1px solid #a6d9b4;color:#137a2e;padding:3px 10px;border-radius:12px">Open</span>`; }
+
+/* ---------- attendance + comp-off context for a month ---------- */
+async function hrMonthContext(ym){
+  const mb=monthBounds(ym), first=iso(mb.start), last=iso(mb.end);
+  const [{data:att},{data:hol},{data:credits},{data:usedAll}]=await Promise.all([
+    sb().from("hr_attendance").select("employee_id,work_date,status").gte("work_date",first).lte("work_date",last),
+    sb().from("hr_holidays").select("holiday_date").gte("holiday_date",first).lte("holiday_date",last),
+    sb().from("hr_comp_offs").select("*"),
+    sb().from("hr_attendance").select("employee_id").eq("status","comp_used"),
+  ]);
+  let sun=0; { const d=new Date(mb.start); while(d<=mb.end){ if(d.getUTCDay()===0) sun++; d.setUTCDate(d.getUTCDate()+1);} }
+  const holCount=(hol||[]).length, offDays=sun+holCount;
+  const attBy={}; (att||[]).forEach(a=>{ const o=attBy[a.employee_id]=attBy[a.employee_id]||{absent:0,comp_used:0,worked_off:0}; if(o[a.status]!=null) o[a.status]++; });
+  const usedBy={}; (usedAll||[]).forEach(u=>usedBy[u.employee_id]=(usedBy[u.employee_id]||0)+1);
+  const credBy={}; (credits||[]).forEach(c=>{ (credBy[c.employee_id]=credBy[c.employee_id]||[]).push(c); });
+  const today=todayISO(), qEnd=quarterEndISO(today);
+  function balance(empId){
+    const list=(credBy[empId]||[]).slice().sort((a,b)=>a.earned_on.localeCompare(b.earned_on));
+    const open=list.filter(c=>!c.encashed_on); let usedLeft=usedBy[empId]||0; const avail=[];
+    open.forEach(c=>{ if(usedLeft>0) usedLeft--; else avail.push(c); });
+    return { earned:list.length, used:usedBy[empId]||0, encashed:list.filter(c=>c.encashed_on).length,
+      available:avail.length, lapsed:avail.filter(c=>c.expires_on<today).length,
+      expiring:avail.filter(c=>c.expires_on>=today&&c.expires_on<=qEnd).length };
+  }
+  return { mb, sun, holCount, offDays, attBy, balance };
+}
+
+/* Day-by-day attendance as a downloadable Word sheet (for verify & discuss). */
+async function attendanceDoc(emp, ym){
+  const mb=monthBounds(ym), first=iso(mb.start), last=iso(mb.end);
+  const [{data:att},{data:hol}]=await Promise.all([
+    sb().from("hr_attendance").select("work_date,status").eq("employee_id",emp.id).gte("work_date",first).lte("work_date",last),
+    sb().from("hr_holidays").select("holiday_date,name").gte("holiday_date",first).lte("holiday_date",last),
+  ]);
+  const byDate={}; (att||[]).forEach(a=>byDate[a.work_date]=a.status);
+  const holBy={}; (hol||[]).forEach(h=>holBy[h.holiday_date]=h.name);
+  const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const LABEL={absent:"Absent (LOP)",comp_used:"Comp-off taken",worked_off:"Worked (comp-off earned)"};
+  let present=0,absent=0,comp=0,worked=0; const rows=[];
+  for(let d=1;d<=mb.days;d++){ const isoD=ym+"-"+String(d).padStart(2,"0"), dow=new Date(isoD+"T00:00:00Z").getUTCDay();
+    const st=byDate[isoD], off=dow===0||holBy[isoD]; let label;
+    if(st){ label=LABEL[st]; if(st==="absent")absent++; else if(st==="comp_used")comp++; else if(st==="worked_off")worked++; }
+    else if(off){ label=dow===0?"Weekly off":("Holiday — "+holBy[isoD]); }
+    else { label="Present"; present++; }
+    rows.push([String(d), DOW[dow], label]);
+  }
+  window.OPS.docgen.generateReport({ title:"Attendance — "+emp.name+" — "+ym, sections:[
+    {heading:"Employee", table:{headers:["Field","Value"], rows:[["Name",emp.name],["Designation",emp.designation||""],["Month",ym]]}},
+    {heading:"Summary", table:{headers:["Metric","Days"], rows:[
+      ["Present",String(present)],["Absent (LOP)",String(absent)],["Comp-off taken",String(comp)],["Worked on day off (comp earned)",String(worked)]]}},
+    {heading:"Day-by-day", table:{headers:["Date","Day","Status"], rows}},
+  ]});
+}
 
 /* ============================ Employees ============================ */
 window.OPS.routes.hr_employees = window.OPS.makeRegistry({
@@ -81,6 +146,7 @@ async function salaryCalc(){
   m.innerHTML=`<div class="eyebrow">HR</div><h1>Salary Calculator</h1>
     <div class="row" style="margin:10px 0">
       <label style="margin:0">Month</label><input id="scMonth" type="month" value="${ym}" style="width:auto">
+      <span id="scLock"></span>
       <div class="spacer"></div>
       <button class="btn green sm" id="scSave">Save / Recalculate month</button>
     </div>
@@ -88,6 +154,9 @@ async function salaryCalc(){
     <div id="scBody" class="muted">Loading…</div>`;
   $("scMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("scMonth").value; salaryCalc(); });
   $("scSave").addEventListener("click",saveMonth);
+  const lock=await monthLock(ym);
+  $("scLock").innerHTML=lockBadge(lock);
+  if(lock){ const b=$("scSave"); b.disabled=true; b.title="Month is locked — reopen it in Salary Records to recalculate."; b.textContent="Locked 🔒"; }
   const mb=monthBounds(ym);
   const [{data:emps},{data:runs},{data:absents}]=await Promise.all([
     sb().from("employees").select("*").eq("status","active").eq("emp_type","employee").order("name"),
@@ -161,11 +230,22 @@ async function records(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">HR</div><h1>Salary Records</h1>
     <div class="row" style="margin:10px 0"><label style="margin:0">Month</label><input id="rMonth" type="month" value="${ym}" style="width:auto">
+      <span id="rLock"></span><span id="rLockBtn"></span>
       <div class="spacer"></div><button class="btn sm" id="rLedger">Accounting ledger</button></div>
     <div id="rBody" class="muted">Loading…</div>`;
   $("rMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("rMonth").value; records(); });
   $("rLedger").addEventListener("click",ledger);
   const { data:runs }=await sb().from("salary_runs").select("*, emp:employee_id(name,designation,emp_type)").eq("period_month",ym).order("created_at");
+  const lock=await monthLock(ym);
+  $("rLock").innerHTML=lockBadge(lock);
+  const approver = window.OPS.isApprover && window.OPS.isApprover();
+  if(lock){
+    if(approver){ $("rLockBtn").innerHTML=`<button class="btn sm" id="rReopen">Reopen month</button>`; $("rReopen").addEventListener("click",()=>reopenMonth(ym)); }
+    else $("rLockBtn").innerHTML=`<span class="muted" style="font-size:12px">Frozen — an approver can reopen it.</span>`;
+  } else if((runs||[]).length){
+    if(approver){ $("rLockBtn").innerHTML=`<button class="btn sm" id="rLockNow">🔒 Post all &amp; lock month</button>`; $("rLockNow").addEventListener("click",e=>window.OPS.once(e.currentTarget,()=>lockMonth(ym,runs||[]))); }
+    else $("rLockBtn").innerHTML=`<span class="muted" style="font-size:12px">An approver locks the month after posting.</span>`;
+  }
   const ids=(runs||[]).map(r=>r.id);
   let payBy={};
   if(ids.length){ const { data:pays }=await sb().from("salary_payments").select("salary_run_id,amount").in("salary_run_id",ids);
@@ -188,14 +268,34 @@ async function records(){
   $("rBody").querySelectorAll("[data-post]").forEach(b=>b.addEventListener("click",()=>postRun(rows.find(x=>String(x.r.id)===b.getAttribute("data-post")).r)));
   $("rBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payRun(rows.find(x=>String(x.r.id)===b.getAttribute("data-pay")))));
 }
-async function postRun(run){
-  if(!confirm("Post "+money(run.net_payable)+" salary expense to accounts?")) return;
+async function doPost(run){
   await sb().from("accounting_entries").insert([
     { voucher_date:todayISO(), narration:"Salary "+run.period_month+" — "+(run.emp&&run.emp.name||""), account:"Salaries & Wages", debit:num(run.net_payable), credit:0, ref_type:"salary_run", ref_id:run.id, created_by:window.OPS.me.id },
     { voucher_date:todayISO(), narration:"Salary payable "+run.period_month, account:"Salaries Payable", debit:0, credit:num(run.net_payable), ref_type:"salary_run", ref_id:run.id, created_by:window.OPS.me.id },
   ]);
   await sb().from("salary_runs").update({status:"posted"}).eq("id",run.id);
-  window.OPS.audit("posted","salary_run",run.id,money(run.net_payable)); window.OPS.flashTop("Posted to accounts ✓"); records();
+  window.OPS.audit&&window.OPS.audit("posted","salary_run",run.id,money(run.net_payable));
+}
+async function postRun(run){
+  if(!confirm("Post "+money(run.net_payable)+" salary expense to accounts?")) return;
+  await doPost(run); window.OPS.flashTop("Posted to accounts ✓"); records();
+}
+async function lockMonth(ym, runs){
+  const pending=(runs||[]).filter(r=>r.status==="calculated");
+  if(!confirm("Post "+pending.length+" un-posted run(s) and LOCK "+ym+"?\n\nAttendance, salary figures and payslips for this month will be frozen. An approver can reopen it later to make corrections.")) return;
+  for(const run of pending) await doPost(run);
+  const { error }=await sb().from("hr_month_locks").upsert({ period_month:ym, status:"locked", locked_by:window.OPS.me.id, locked_at:new Date().toISOString(), reopened_by:null, reopened_at:null, reopen_note:null },{onConflict:"period_month"});
+  if(error){ alert("Lock failed: "+error.message); return; }
+  window.OPS.audit&&window.OPS.audit("locked","salary_month",ym,pending.length+" posted");
+  window.OPS.flashTop("Month "+ym+" posted & locked 🔒"); records();
+}
+async function reopenMonth(ym){
+  const note=prompt("Reopen "+ym+" for correction?\nThis unfreezes attendance, salary and payslips for the month. Add a reason (audited):","");
+  if(note===null) return;
+  const { error }=await sb().from("hr_month_locks").update({ status:"reopened", reopened_by:window.OPS.me.id, reopened_at:new Date().toISOString(), reopen_note:note }).eq("period_month",ym);
+  if(error){ alert("Reopen failed: "+error.message); return; }
+  window.OPS.audit&&window.OPS.audit("reopened","salary_month",ym,note);
+  window.OPS.flashTop("Month "+ym+" reopened — correct the entries, then lock it again."); records();
 }
 function payRun(x){
   const run=x.r;
@@ -247,14 +347,18 @@ async function payslips(){
   const admin=window.OPS.isAdmin();
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">HR</div><h1>Payslips</h1>
-    <div class="callout">Generated from the month's salary run; deductions come from each employee's setup. ${admin?"Generate, then Approve, then download.":"Only an admin can generate/approve payslips."}</div>
+    <div class="callout">Generated from the month's salary run; deductions come from each employee's setup. Each payslip carries the month's attendance summary and comp-off (leave) balance, and attendance is separately downloadable for verification. ${admin?"Generate, then Approve, then download.":"Only an admin can generate/approve payslips."}</div>
     <div class="row" style="margin:10px 0"><label style="margin:0">Month</label><input id="psMonth" type="month" value="${ym}" style="width:auto">
+      <span id="psLock"></span>
       <div class="spacer"></div>${admin?'<button class="btn green sm" id="psGen">Generate for month</button>':''}</div>
     <div id="psBody" class="muted">Loading…</div>`;
   $("psMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("psMonth").value; payslips(); });
-  const [{data:runs},{data:slips}]=await Promise.all([
+  const [{data:runs},{data:slips},ctx,lock]=await Promise.all([
     sb().from("salary_runs").select("*, emp:employee_id(name,designation,emp_type,deductions_text)").eq("period_month",ym),
-    sb().from("payslips").select("*").eq("period_month",ym) ]);
+    sb().from("payslips").select("*").eq("period_month",ym),
+    hrMonthContext(ym), monthLock(ym) ]);
+  $("psLock").innerHTML=lockBadge(lock);
+  if(lock && $("psGen")){ const g=$("psGen"); g.disabled=true; g.title="Month is locked — reopen it in Salary Records to regenerate."; g.textContent="Locked 🔒"; }
   const empRuns=(runs||[]).filter(r=>!r.emp || r.emp.emp_type!=="consultant");
   const slipBy={}; (slips||[]).forEach(s=>slipBy[s.employee_id]=s);
   if($("psGen")) $("psGen").addEventListener("click",async()=>{
@@ -272,17 +376,30 @@ async function payslips(){
       return `<tr><td><b>${esc(x.r.emp.name)}</b><br><span class="muted">${esc(x.r.emp.designation||'')}</span></td>
         <td class="num">${money(s?s.base:x.r.net_payable)}</td><td class="num">${s?money(ded):'—'}</td><td class="num">${s?money(s.net):'—'}</td>
         <td>${s?window.OPS.statusChip(s.status==='approved'?'approved':'draft'):'<span class="muted">not generated</span>'}</td>
-        <td>${s&&admin&&s.status!=='approved'?`<button class="btn green sm" data-appr="${s.id}">Approve</button> `:''}${s&&s.status==='approved'?`<button class="btn blue sm" data-word="${x.r.employee_id}">Word</button>`:''}</td></tr>`; }).join("")}</tbody></table></div>`
+        <td><button class="btn sm" data-att="${x.r.employee_id}">Attendance</button> ${s&&admin&&s.status!=='approved'?`<button class="btn green sm" data-appr="${s.id}">Approve</button> `:''}${s&&s.status==='approved'?`<button class="btn blue sm" data-word="${x.r.employee_id}">Word</button>`:''}</td></tr>`; }).join("")}</tbody></table></div>`
     : '<div class="card muted">No employee salary runs for this month. Use Salary Calculator first.</div>';
   $("psBody").querySelectorAll("[data-appr]").forEach(b=>b.addEventListener("click",async()=>{
     const { error }=await sb().from("payslips").update({status:"approved",approved_by:window.OPS.me.id,approved_at:new Date().toISOString()}).eq("id",b.getAttribute("data-appr"));
     if(error){ alert(error.message); return; } window.OPS.audit("approved","payslip",b.getAttribute("data-appr"),""); window.OPS.flashTop("Approved ✓"); payslips();
   }));
+  $("psBody").querySelectorAll("[data-att]").forEach(b=>b.addEventListener("click",()=>{
+    const x=rows.find(z=>z.r.employee_id===b.getAttribute("data-att")); if(x) attendanceDoc(x.r.emp, ym);
+  }));
   $("psBody").querySelectorAll("[data-word]").forEach(b=>b.addEventListener("click",()=>{
     const x=rows.find(z=>z.r.employee_id===b.getAttribute("data-word")); const s=x.slip; if(!s) return;
     const ded=(s.deductions||[]);
+    const bal=ctx.balance(x.r.employee_id), a=ctx.attBy[x.r.employee_id]||{absent:0,comp_used:0,worked_off:0};
+    const workingDays=ctx.mb.days-ctx.offDays, present=Math.max(0,workingDays-a.absent-a.comp_used);
     window.OPS.docgen.generateReport({ title:"Payslip — "+x.r.emp.name+" — "+ym, sections:[
       {heading:"Employee", table:{headers:["Field","Value"], rows:[["Name",x.r.emp.name],["Designation",x.r.emp.designation||""],["Pay period",ym]]}},
+      {heading:"Attendance ("+ym+")", table:{headers:["Metric","Days"], rows:[
+        ["Calendar days",String(ctx.mb.days)],["Weekly offs + holidays",String(ctx.offDays)],
+        ["Present",String(present)],["Absent (LOP)",String(a.absent)],["Comp-off taken",String(a.comp_used)],
+        ["Worked on day off (comp earned)",String(a.worked_off)]]}},
+      {heading:"Comp-off / leave balance", table:{headers:["Metric","Count"], rows:[
+        ["Earned to date",String(bal.earned)],["Taken",String(bal.used)],["Encashed",String(bal.encashed)],
+        ["Available",String(bal.available)],["Lapsing this quarter",String(bal.expiring+bal.lapsed)]]},
+        note: bal.available?"Comp-offs must be used or encashed before the end of the quarter they were earned in.":""},
       {heading:"Pay details", table:{headers:["Component","Amount (₹)"], rows:[["Earned (base)", money(s.base)], ...ded.map(d=>["Less: "+d.name, "-"+money(d.amount)]), ["Net Pay", money(s.net)]]},
         note: window.OPS.docgen.amountInWords(s.net)},
     ]});
