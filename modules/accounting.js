@@ -298,9 +298,11 @@ async function listPayables(){
       :'<div class="card muted">No supplier invoices'+(_payOnlyDue?' with a balance':'')+'.</div>'}</div>`;
   $("pyOnlyDue").addEventListener("change",()=>{ _payOnlyDue=$("pyOnlyDue").checked; listPayables(); });
   const find=id=>rows.find(x=>String(x.p.id)===id);
+  // back must rebuild the whole Expense Management page — the payment screens
+  // replace all of #main, so refilling #emBody alone would target a dead node.
   $("emBody").querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>payForm(find(el.getAttribute("data-edit")).p)));
-  $("emBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payVendor(find(b.getAttribute("data-pay")), listPayables)));
-  $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), listPayables)));
+  $("emBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payVendor(find(b.getAttribute("data-pay")), expenseMgmt)));
+  $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), expenseMgmt)));
 }
 
 async function recomputePayable(id, total){
