@@ -69,6 +69,8 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 td.num,th.num{text-align:right}
+/* numeric input columns: align the field under its right-aligned heading */
+table td:has(> input[type="number"]){text-align:right}
 tr.clickable:hover{background:var(--soft-green);cursor:pointer}
 .callout{background:var(--soft-green);border-left:3px solid var(--green);padding:10px 12px;border-radius:6px;font-size:13px;margin-bottom:14px}
 .callout.warn{background:var(--cream);border-left-color:var(--orange)}
