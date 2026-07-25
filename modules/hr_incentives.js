@@ -26,17 +26,19 @@ async function incentives(){
     <div class="row" style="margin:10px 0">
       <label style="margin:0">Month</label><input id="inMonth" type="month" value="${ym}" style="width:auto">
       <label style="margin:0 0 0 10px">Pay via</label><select id="inMode" style="width:auto"><option>Bank</option><option>UPI</option><option>Cash</option></select>
-      <div class="spacer"></div><button class="btn green sm" id="inSave">Save / recompute</button></div>
+      <div class="spacer"></div><button class="btn sm ghost" id="inAlias">Name aliases…</button><button class="btn green sm" id="inSave">Save / recompute</button></div>
     <div class="callout">Lists DroCon employees whose designation includes "Pilot". Acreage is summed automatically from approved acre entries, matched to the employee by name. <b>Tier 1</b> ≥ ${TIER1_ACRES} acres = ${money(TIER1_AMT)}, <b>Tier 2</b> ≥ ${TIER2_ACRES} acres = ${money(TIER2_AMT)} (highest tier only). <b>No-Crash Bonus</b> ${money(NOCRASH_AMT)} when crashes = 0 and acreage ≥ ${NOCRASH_MIN_ACRES}. Minor-incident waiver applies when the month's repair cost ≤ ${money(MINOR_REPAIR_CAP)}. Enter crashes &amp; repair cost, Save, then Pay.</div>
     <div id="inBody" class="muted">Loading…</div>`;
   $("inMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("inMonth").value; incentives(); });
   $("inSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,saveIncentives));
+  $("inAlias").addEventListener("click",()=>manageAliases($("inMonth").value));
   const {first,last}=monthBounds(ym);
-  const [{data:emps},{data:pilots},{data:entries},{data:saved}]=await Promise.all([
+  const [{data:emps},{data:pilots},{data:entries},{data:saved},{data:aliases}]=await Promise.all([
     sb().from("employees").select("id,name,designation,emp_type,status").eq("emp_type","employee").order("name"),
     sb().from("pilots").select("id,name"),
     sb().from("acre_entries").select("acres,pilot_id,pilot_name,approval_status,entry_date").gte("entry_date",first).lte("entry_date",last),
     sb().from("hr_incentives").select("*").eq("period_month",ym),
+    sb().from("hr_pilot_aliases").select("employee_id,alias"),
   ]);
   const pilotName={}; (pilots||[]).forEach(p=>pilotName[p.id]=p.name);
   // acreage summed by pilot NAME — employee-pilots are not in the vendor pilots list
@@ -44,10 +46,14 @@ async function incentives(){
   (entries||[]).forEach(e=>{ if((e.approval_status||"approved")!=="approved") return; const a=num(e.acres);
     const nm=norm(e.pilot_name || (e.pilot_id?pilotName[e.pilot_id]:"")); if(!nm) return; byName[nm]=(byName[nm]||0)+a; });
   const savedBy={}; (saved||[]).forEach(s=>{ if(s.employee_id) savedBy[s.employee_id]=s; });
+  // extra names that resolve to an employee via an alias
+  const aliasByEmp={}; (aliases||[]).forEach(a=>{ (aliasByEmp[a.employee_id]=aliasByEmp[a.employee_id]||[]).push(norm(a.alias)); });
   // DroCon employees whose designation marks them a Pilot
   const empPilots=(emps||[]).filter(e=>/pilot/i.test(e.designation||""));
   incRows=empPilots.map(e=>{
-    const acres=Math.round((byName[norm(e.name)]||0)*100)/100;
+    const own=byName[norm(e.name)]||0;
+    const viaAlias=(aliasByEmp[e.id]||[]).reduce((s,al)=>s+(byName[al]||0),0);
+    const acres=Math.round((own+viaAlias)*100)/100;
     const ex=savedBy[e.id];
     return { emp:e, acres, crashes:ex?num(ex.crashes):0, repair:ex?num(ex.repair_cost):0,
              status:ex?ex.status:null, id:ex?ex.id:null };
@@ -99,6 +105,58 @@ async function payIncentive(r,ym){
   await sb().from("hr_incentives").update({ status:"paid", paid_on:today, mode }).eq("id",r.id);
   window.OPS.audit&&window.OPS.audit("paid","incentive",r.id,money(c.total));
   window.OPS.flashTop("Incentive paid ✓"); incentives();
+}
+
+/* ============================ Pilot name aliases ============================ */
+async function manageAliases(ym){
+  ym = ym || ymNow();
+  const {first,last}=monthBounds(ym), m=$("main");
+  m.innerHTML=`<button class="btn sm" id="alBack">← Back to Incentives</button>
+    <h1 style="margin-top:12px">Pilot name aliases</h1>
+    <div class="callout">Map the pilot names that appear in acre entries to the matching DroCon employee-pilot, so historical or mis-spelled names still count toward the right person's incentive. Showing names from <b>${ym}</b>.</div>
+    <div id="alBody" class="muted">Loading…</div>`;
+  $("alBack").addEventListener("click",incentives);
+  const [{data:emps},{data:pilots},{data:entries},{data:aliases}]=await Promise.all([
+    sb().from("employees").select("id,name,designation,emp_type").eq("emp_type","employee").order("name"),
+    sb().from("pilots").select("id,name"),
+    sb().from("acre_entries").select("acres,pilot_id,pilot_name,approval_status,entry_date").gte("entry_date",first).lte("entry_date",last),
+    sb().from("hr_pilot_aliases").select("*"),
+  ]);
+  const pilotName={}; (pilots||[]).forEach(p=>pilotName[p.id]=p.name);
+  const empPilots=(emps||[]).filter(e=>/pilot/i.test(e.designation||""));
+  const empByName={}, empById={}; empPilots.forEach(e=>{ empByName[norm(e.name)]=e; empById[e.id]=e; });
+  const aliasByNorm={}; (aliases||[]).forEach(a=>aliasByNorm[norm(a.alias)]=a);
+  const acresByName={}, displayName={};
+  (entries||[]).forEach(e=>{ if((e.approval_status||"approved")!=="approved") return; const raw=e.pilot_name||(e.pilot_id?pilotName[e.pilot_id]:""); const nm=norm(raw); if(!nm) return;
+    acresByName[nm]=(acresByName[nm]||0)+num(e.acres); if(!displayName[nm]) displayName[nm]=raw; });
+  const names=Object.keys(acresByName).sort((a,b)=>acresByName[b]-acresByName[a]);
+  const opts=empPilots.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("");
+  const rowFor=nm=>{
+    const directEmp=empByName[nm], aliasRow=aliasByNorm[nm], aliasEmp=aliasRow?empById[aliasRow.employee_id]:null;
+    const status = directEmp?`<span style="color:#137a2e">✓ ${esc(directEmp.name)} <span class="muted">(name match)</span></span>`
+      : aliasEmp?`<span style="color:#137a2e">✓ ${esc(aliasEmp.name)} <span class="muted">(alias)</span></span> <a href="#" data-unalias="${nm}" style="color:#a11">remove</a>`
+      : aliasRow?`<span class="muted">aliased to a non-pilot employee</span> <a href="#" data-unalias="${nm}" style="color:#a11">remove</a>`
+      : `<span style="color:#a11;font-weight:700">unmapped</span>`;
+    const picker=(directEmp||aliasRow)?'' : `<select data-map="${esc(nm)}"><option value="">— map to —</option>${opts}</select>`;
+    return `<tr><td><b>${esc(displayName[nm])}</b></td><td class="num">${Math.round(acresByName[nm]*100)/100}</td><td>${status}</td><td>${picker}</td></tr>`;
+  };
+  $("alBody").innerHTML = names.length ? `<div style="overflow:auto"><table><thead><tr><th>Name in acre entries</th><th class="num">Acres (${ym})</th><th>Maps to</th><th></th></tr></thead>
+      <tbody>${names.map(rowFor).join("")}</tbody></table></div>
+      <div class="row" style="margin-top:8px"><button class="btn green sm" id="alSave">Save mappings</button></div>`
+    : '<div class="card muted">No pilot names in acre entries for this month.</div>';
+  if($("alSave")) $("alSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const recs=[]; $("alBody").querySelectorAll("select[data-map]").forEach(sel=>{ if(sel.value){ const nm=sel.getAttribute("data-map"); recs.push({ employee_id:sel.value, alias:displayName[nm]||nm, created_by:window.OPS.me.id }); } });
+    if(!recs.length){ alert("Pick at least one mapping."); return; }
+    const { error }=await sb().from("hr_pilot_aliases").insert(recs);
+    if(error){ alert(error.message); return; }
+    window.OPS.audit&&window.OPS.audit("mapped","pilot_alias",ym,recs.length+" name(s)");
+    window.OPS.flashTop("Saved "+recs.length+" alias(es) ✓"); manageAliases(ym);
+  }));
+  $("alBody").querySelectorAll("[data-unalias]").forEach(a=>a.addEventListener("click",async ev=>{
+    ev.preventDefault(); const row=aliasByNorm[a.getAttribute("data-unalias")]; if(!row) return;
+    if(!confirm("Remove this alias?")) return;
+    await sb().from("hr_pilot_aliases").delete().eq("id",row.id); manageAliases(ym);
+  }));
 }
 
 /* ============================ Ad-hoc Bonuses ============================ */
