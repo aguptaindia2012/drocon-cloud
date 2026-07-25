@@ -254,32 +254,117 @@ function expForm(rec){
   if($("exPay")) $("exPay").addEventListener("click",()=>settle("expense",rec.id,num(rec.total),expenseMgmt));
 }
 
+const payStatusChip = st => st==='paid'?'<span class="chip paid">Paid</span>'
+  : st==='part_paid'?'<span class="chip partial">Part paid</span>'
+  : st==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>'
+  : '<span class="chip issued">Unpaid</span>';
+
+// balance = total − everything already paid against it (cash_txns ref_type payable)
+async function loadPayables(){
+  const [{data:pys,error},{data:txns}]=await Promise.all([
+    sb().from("payables").select("*, vendor:vendor_id(firm_name,name)").order("invoice_date",{ascending:false}).limit(500),
+    sb().from("cash_txns").select("ref_id,amount").eq("ref_type","payable")
+  ]);
+  if(error) return { rows:[], error };
+  const paidBy={}; (txns||[]).forEach(t=>{ paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount); });
+  const rows=(pys||[]).map(p=>{ const paid=paidBy[p.id]||0; const bal=Math.round((num(p.total)-paid)*100)/100;
+    return { p, paid, balance:bal, vendor_name:vName(p.vendor) }; });
+  return { rows };
+}
+
+let _payOnlyDue=true;
 async function listPayables(){
-  const { data, error }=await sb().from("v_payables_open").select("*").order("invoice_date",{ascending:false}).limit(300);
-  const { data:paid }=await sb().from("payables").select("*, vendor:vendor_id(firm_name,name)").eq("status","paid").order("invoice_date",{ascending:false}).limit(100);
+  const { rows, error }=await loadPayables();
   if(error){ $("emBody").innerHTML='<div class="card">'+esc(error.message)+'</div>'; return; }
-  const open=data||[];
-  const tot=open.reduce((s,r)=>s+num(r.balance),0);
+  const outstanding=rows.filter(x=>x.balance>0.005).reduce((s,x)=>s+x.balance,0);
+  const list=rows.filter(x=>!_payOnlyDue || x.balance>0.005);
   $("emBody").innerHTML=`
-    ${open.length?`<div class="statrow"><div class="stat"><div class="n">${money(tot)}</div><div class="l">Payable outstanding</div></div>
-      <div class="stat"><div class="n">${open.length}</div><div class="l">Open invoices</div></div></div>`:''}
-    <div class="card"><h3>Open supplier invoices</h3>
-    ${open.length?`<div style="overflow:auto"><table>
-      <thead><tr><th>Vendor</th><th>Their invoice no.</th><th>Date</th><th>Due</th><th class="num">Total</th><th class="num">Balance</th><th>Status</th></tr></thead>
-      <tbody>${open.map(r=>`<tr class="clickable" data-id="${r.id}"><td><b>${esc(r.vendor_name||'')}</b></td>
-        <td>${esc(r.vendor_invoice_no||'')}</td><td>${fmtDate(r.invoice_date)}</td>
-        <td>${r.due_date?fmtDate(r.due_date):'—'}</td><td class="num">${money(r.total)}</td>
-        <td class="num"><b>${money(r.balance)}</b></td>
-        <td>${r.status==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>':(r.status==='part_paid'?'<span class="chip partial">Part paid</span>':'<span class="chip issued">Unpaid</span>')}</td></tr>`).join("")}</tbody></table></div>`
-      :'<div class="muted">Nothing outstanding. 🎉</div>'}</div>
-    ${(paid&&paid.length)?`<div class="card"><h3>Recently paid</h3><div style="overflow:auto"><table>
-      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th class="num">Total</th></tr></thead>
-      <tbody>${paid.map(r=>`<tr class="clickable" data-pid="${r.id}"><td>${esc(vName(r.vendor))}</td><td>${esc(r.vendor_invoice_no||'')}</td>
-        <td>${fmtDate(r.invoice_date)}</td><td class="num">${money(r.total)}</td></tr>`).join("")}</tbody></table></div></div>`:''}`;
-  $("emBody").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>
-    payForm(open.find(x=>String(x.id)===tr.getAttribute("data-id")))));
-  $("emBody").querySelectorAll("[data-pid]").forEach(tr=>tr.addEventListener("click",()=>
-    payForm((paid||[]).find(x=>String(x.id)===tr.getAttribute("data-pid")))));
+    <div class="statrow">
+      <div class="stat" style="background:#fbe0de"><div class="n" style="color:#a3322a">${money(outstanding)}</div><div class="l">Payable outstanding</div></div>
+      <div class="stat"><div class="n">${rows.filter(x=>x.balance>0.005).length}</div><div class="l">Open invoices</div></div>
+    </div>
+    <div class="row wrap" style="margin-bottom:8px">
+      <label class="muted" style="display:inline"><input type="checkbox" id="pyOnlyDue" style="width:auto" ${_payOnlyDue?'checked':''}> only with balance</label>
+      <div class="spacer"></div><span class="muted">Record part or full payments; each one lands on the Day Book.</span></div>
+    <div id="pyList">${list.length?`<div style="overflow:auto"><table>
+      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+      <tbody>${list.map(x=>`<tr><td><b>${esc(x.vendor_name)}</b></td>
+        <td class="clickable" data-edit="${x.p.id}" style="text-decoration:underline">${esc(x.p.vendor_invoice_no||'(no no.)')}</td>
+        <td>${fmtDate(x.p.invoice_date)}</td><td>${x.p.due_date?fmtDate(x.p.due_date):'—'}</td>
+        <td class="num">${money(x.p.total)}</td><td class="num">${money(x.paid)}</td>
+        <td class="num" style="${x.balance>0.005?'font-weight:700':''}">${money(x.balance)}</td>
+        <td>${payStatusChip(x.p.status)}</td>
+        <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button></td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="card muted">No supplier invoices'+(_payOnlyDue?' with a balance':'')+'.</div>'}</div>`;
+  $("pyOnlyDue").addEventListener("change",()=>{ _payOnlyDue=$("pyOnlyDue").checked; listPayables(); });
+  const find=id=>rows.find(x=>String(x.p.id)===id);
+  $("emBody").querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>payForm(find(el.getAttribute("data-edit")).p)));
+  $("emBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payVendor(find(b.getAttribute("data-pay")), listPayables)));
+  $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), listPayables)));
+}
+
+async function recomputePayable(id, total){
+  const { data }=await sb().from("cash_txns").select("amount").eq("ref_type","payable").eq("ref_id",String(id));
+  const paid=(data||[]).reduce((s,t)=>s+num(t.amount),0);
+  const status = paid>=num(total)-0.005 ? "paid" : (paid>0 ? "part_paid" : "unpaid");
+  await sb().from("payables").update({ status }).eq("id",id);
+}
+
+/* + Payment against a supplier invoice — mirrors Payment Status */
+function payVendor(x, back){
+  const m=$("main");
+  m.innerHTML=`<button class="btn sm" id="vpBack">← Back</button>
+    <div class="card" style="margin-top:12px;max-width:520px"><h1>Record payment</h1>
+    <p class="muted">${esc(x.vendor_name)} · Invoice <b>${esc(x.p.vendor_invoice_no||'(no no.)')}</b> · Balance <b>${money(x.balance)}</b></p>
+    <div class="callout warn">Enter the date the money <b>actually left the account</b> — not the date a cheque was handed over.</div>
+    <div class="fgrid">
+      <div class="field"><label>Amount *</label><input type="number" step="0.01" id="vp_amt" value="${x.balance>0?x.balance:''}"></div>
+      <div class="field"><label>Paid from *</label><select id="vp_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("")}</select></div>
+      <div class="field"><label>Date paid *</label><input type="date" id="vp_date" value="${todayISO()}"></div>
+      <div class="field"><label>Mode</label><select id="vp_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
+      <div class="field full"><label>Note</label><input id="vp_note"></div>
+    </div>
+    <div class="row"><button class="btn green" id="vpGo">Record payment</button><button class="btn" id="vpCancel">Cancel</button></div>
+    <div class="err" id="vpErr"></div></div>`;
+  $("vpBack").addEventListener("click",back); $("vpCancel").addEventListener("click",back);
+  $("vpGo").addEventListener("click",()=>window.OPS.once($("vpGo"),async()=>{
+    const amt=num($("vp_amt").value); if(!(amt>0)){ $("vpErr").textContent="Enter an amount."; return; }
+    const { error }=await sb().from("cash_txns").insert({ account_id:$("vp_acct").value, direction:"out",
+      txn_date:$("vp_date").value||todayISO(), amount:amt, mode:$("vp_mode").value,
+      ref_type:"payable", ref_id:String(x.p.id), note:$("vp_note").value||("Payment — "+(x.p.vendor_invoice_no||"")),
+      created_by:window.OPS.me.id });
+    if(error){ $("vpErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
+    await recomputePayable(x.p.id, x.p.total);
+    window.OPS.audit("paid","payables",x.p.id,money(amt)); window.OPS.flashTop("Payment recorded ✓"); back();
+  }));
+}
+
+/* Payments ledger for a supplier invoice — list, edit, delete */
+async function managePayable(x, back){
+  const m=$("main");
+  const { data:txns }=await sb().from("cash_txns").select("*, acct:account_id(name)")
+    .eq("ref_type","payable").eq("ref_id",String(x.p.id)).order("txn_date",{ascending:false});
+  const list=txns||[]; const paid=list.reduce((s,t)=>s+num(t.amount),0); const bal=Math.round((num(x.p.total)-paid)*100)/100;
+  m.innerHTML=`<button class="btn sm" id="mpBack">← Back</button>
+    <div class="card" style="margin-top:12px"><h1>Payments — ${esc(x.p.vendor_invoice_no||'(no no.)')}</h1>
+    <p class="muted">${esc(x.vendor_name)} · Invoiced ${money(x.p.total)} · Paid ${money(paid)} · Balance <b>${money(bal)}</b></p>
+    <div class="row" style="margin-bottom:8px"><div class="spacer"></div>${bal>0.005?'<button class="btn green sm" id="mpAdd">+ Payment</button>':''}</div>
+    ${list.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th class="num">Amount</th><th>From</th><th>Mode</th><th>Note</th><th></th></tr></thead>
+      <tbody>${list.map(t=>`<tr><td>${fmtDate(t.txn_date)}</td><td class="num">${money(t.amount)}</td>
+        <td>${esc((t.acct&&t.acct.name)||'')}</td><td>${esc(t.mode||'')}</td><td>${esc(t.note||'')}</td>
+        <td>${window.OPS.canDelete()||t.created_by===window.OPS.me.id?`<button class="btn sm" data-del="${t.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="card muted">No payments recorded.</div>'}</div>`;
+  $("mpBack").addEventListener("click",back);
+  const x2={ ...x, balance:bal };
+  if($("mpAdd")) $("mpAdd").addEventListener("click",()=>payVendor(x2, ()=>managePayable(x,back)));
+  m.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
+    const t=list.find(z=>String(z.id)===b.getAttribute("data-del")); if(!t||!confirm("Delete this payment of "+money(t.amount)+"?")) return;
+    const { error }=await sb().from("cash_txns").delete().eq("id",t.id);
+    if(error){ alert(error.message); return; }
+    await recomputePayable(x.p.id, x.p.total);
+    window.OPS.audit("payment_deleted","payables",x.p.id,money(t.amount));
+    window.OPS.flashTop("Payment removed ✓"); managePayable(x,back);
+  }));
 }
 
 function payForm(rec){
@@ -324,7 +409,12 @@ function payForm(rec){
     window.OPS.audit(rec?"edited":"created","payables",rec?rec.id:"new",out.vendor_invoice_no||"");
     window.OPS.flashTop("Saved ✓"); expenseMgmt();
   });
-  if($("pyPay")) $("pyPay").addEventListener("click",()=>settle("payable",rec.id,num(rec.balance!=null?rec.balance:rec.total),expenseMgmt));
+  if($("pyPay")) $("pyPay").addEventListener("click",async()=>{
+    const { data }=await sb().from("cash_txns").select("amount").eq("ref_type","payable").eq("ref_id",String(rec.id));
+    const paid=(data||[]).reduce((s,t)=>s+num(t.amount),0);
+    const bal=Math.round((num(rec.total)-paid)*100)/100;
+    payVendor({ p:rec, paid, balance:bal, vendor_name:vName(rec.vendor||vendors.find(v=>v.id===rec.vendor_id)) }, expenseMgmt);
+  });
 }
 
 /* settle a payable or expense — records the money movement on the chosen date */
