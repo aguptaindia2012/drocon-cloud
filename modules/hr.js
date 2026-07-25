@@ -84,15 +84,19 @@ async function salaryCalc(){
       <div class="spacer"></div>
       <button class="btn green sm" id="scSave">Save / Recalculate month</button>
     </div>
-    <div class="callout">Net = Monthly Salary × (engaged days − LOP days) ÷ days in month. Enter <b>LOP days</b> (loss-of-pay / unauthorised absence); joining/leaving mid-month is handled automatically.</div>
+    <div class="callout">Net = Monthly Salary × (engaged days − LOP days) ÷ days in month. <b>LOP days</b> are pre-filled from Absent days marked in <b>Attendance</b> for months not yet saved — adjust if needed. Joining/leaving mid-month is handled automatically.</div>
     <div id="scBody" class="muted">Loading…</div>`;
   $("scMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("scMonth").value; salaryCalc(); });
   $("scSave").addEventListener("click",saveMonth);
   const mb=monthBounds(ym);
-  const [{data:emps},{data:runs}]=await Promise.all([
+  const [{data:emps},{data:runs},{data:absents}]=await Promise.all([
     sb().from("employees").select("*").eq("status","active").eq("emp_type","employee").order("name"),
-    sb().from("salary_runs").select("*").eq("period_month",ym) ]);
+    sb().from("salary_runs").select("*").eq("period_month",ym),
+    sb().from("hr_attendance").select("employee_id").eq("status","absent")
+      .gte("work_date",iso(mb.start)).lte("work_date",iso(mb.end)) ]);
   const runByEmp={}; (runs||[]).forEach(r=>runByEmp[r.employee_id]=r);
+  // Absent days marked in Attendance auto-fill LOP for months not yet saved.
+  const lopByEmp={}; (absents||[]).forEach(a=>lopByEmp[a.employee_id]=(lopByEmp[a.employee_id]||0)+1);
   // who is engaged this month
   const active=(emps||[]).filter(e=>{
     const doj=parseISO(e.doj), dol=parseISO(e.dol);
@@ -107,7 +111,9 @@ async function salaryCalc(){
     const wd=daysInclusive(ps,pe);
     const off=sundays(ps,pe);
     const ex=runByEmp[e.id];
-    const lop=ex?num(ex.lop_days):0;
+    // saved run keeps its (possibly hand-tuned) LOP; a fresh month seeds LOP
+    // from Absent days marked in Attendance.
+    const lop=ex?num(ex.lop_days):(lopByEmp[e.id]||0);
     return { emp:e, ps:iso(ps), pe:iso(pe), monthDays:mb.days, working:wd, off, lop, status:ex?ex.status:null, id:ex?ex.id:null };
   });
   renderCalc();
