@@ -133,7 +133,12 @@ function renderCalc(){
 async function saveMonth(){
   const ym=$("scMonth").value;
   const recs=calcRows.map(r=>{ const c=compute(r); return {
-    id:r.id||undefined, employee_id:r.emp.id, period_month:ym, period_start:r.ps, period_end:r.pe,
+    // NB: never send `id`. In a mixed upsert array (some rows already saved,
+    // some new) supabase-js pads every row to the same key set, so new rows
+    // would get an explicit id:null — which overrides the gen_random_uuid()
+    // default and trips the not-null constraint. onConflict matches on the
+    // (employee_id, period_month) unique index, so id isn't needed anyway.
+    employee_id:r.emp.id, period_month:ym, period_start:r.ps, period_end:r.pe,
     monthly_salary:num(r.emp.monthly_salary), working_days:r.working, off_days:r.off, lop_days:num(r.lop),
     month_days:r.monthDays, month_worked:c.mw, net_payable:c.net,
     status:r.status||"calculated", created_by:window.OPS.me.id }; });
