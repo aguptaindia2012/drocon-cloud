@@ -182,7 +182,8 @@ async function load(){
   let q=sb().from("v_acre_billing").select("*").in("location_id",[...sel]).order("entry_date");
   if(F.from) q=q.gte("entry_date",F.from);
   if(F.to)   q=q.lte("entry_date",F.to);
-  q = side==="farmer" ? q.is("farmer_doc_id",null) : q.is("client_doc_id",null).gt("client_rate",0);
+  q = side==="farmer" ? q.is("farmer_doc_id",null).eq("farmer_billed_override",false)
+                      : q.is("client_doc_id",null).eq("client_billed_override",false).gt("client_rate",0);
   const { data, error }=await q.range(0,9999);
   if(error){ host.innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
   rows=(data||[]).filter(r=>num(side==="farmer"?r.farmer_rate:r.client_rate)>0);

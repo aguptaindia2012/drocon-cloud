@@ -346,7 +346,8 @@ function renderHome(){
     if(!tools.length) return;
     const badge = (s.key==="reviews" && window.OPS.reviewCount) ? `<span class="navcard-badge">🔔 ${window.OPS.reviewCount}</span>` : "";
     cards+=`<div class="card navcard">
-      <div class="navcard-h"><span class="eyebrow">${esc(s.label)}</span>${badge}</div>
+      <button class="navcard-h" data-sec="${s.key}" style="width:100%;background:none;border:none;padding:0;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">
+        <span class="eyebrow">${esc(s.label)} ›</span>${badge}</button>
       <div class="navlist">
         ${tools.map(t=>`<button class="navrow" data-go="${t.key}"><span>${esc(t.label)}</span><span class="navrow-arrow">›</span></button>`).join("")}
       </div></div>`;
@@ -361,6 +362,7 @@ function renderHome(){
     <div class="card" style="background:var(--soft-green);border:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b>Getting started:</b> ${helpBtns}</div>
     <div class="homegrid">${cards}</div>`;
   $("main").querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-go"))));
+  $("main").querySelectorAll(".navcard-h[data-sec]").forEach(b=>b.addEventListener("click",()=>openSection(b.getAttribute("data-sec"))));
   renderNav();
 }
 function goHome(){ renderHome(); }

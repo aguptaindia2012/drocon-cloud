@@ -169,7 +169,21 @@ async function loadUnbilled(){
       <td class="num" style="color:#9a5b00;font-weight:700">${money(r.farmer_value)}</td>
       <td>${num(r.client_rows)>0?(r.client_client_name?esc(r.client_client_name):'<span class="chip rejected">not set</span>'):'<span class="muted">—</span>'}</td>
       <td class="num">${num(r.client_rows)>0?money(r.client_value):'<span class="muted">—</span>'}</td></tr>`).join("")}</tbody>
-    <tfoot><tr><td colspan="3" class="num"><b>Total unbilled</b></td><td class="num"><b>${money(fVal)}</b></td><td></td><td class="num"><b>${money(cVal)}</b></td></tr></tfoot></table></div></div>`;
+    <tfoot><tr><td colspan="3" class="num"><b>Total unbilled</b></td><td class="num"><b>${money(fVal)}</b></td><td></td><td class="num"><b>${money(cVal)}</b></td></tr></tfoot></table></div>
+    ${window.OPS.isApprover&&window.OPS.isApprover()?`<div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px dashed var(--line,#ddd);padding-top:10px">
+      <span class="muted" style="font-size:12px">Billed these outside the app? Mark old work as already billed to clear the backlog (reversible; no invoice is created):</span>
+      <label style="margin:0">up to</label><input id="acOvrDate" type="date" value="${todayISO()}" style="width:auto">
+      <button class="btn sm" id="acOvr">✓ Mark as already billed</button>
+    </div>`:''}</div>`;
+  const ob=$("acOvr");
+  if(ob) ob.addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const cutoff=$("acOvrDate").value; if(!cutoff){ alert("Pick a cut-off date."); return; }
+    if(!confirm("Mark ALL unbilled acre work up to "+fmtDate(cutoff)+" as already billed?\n\nThis clears them from the unbilled list and the Acre Invoicing picker. No invoice is created. It is reversible by an approver.")) return;
+    const { data, error }=await sb().rpc("override_acre_billed",{ p_side:"both", p_cutoff:cutoff, p_location_ids:null, p_note:"Bulk override — pre-app billing" });
+    if(error){ alert("Failed: "+error.message); return; }
+    window.OPS.audit&&window.OPS.audit("override","acre_billing",cutoff,(data||0)+" rows");
+    window.OPS.flashTop((data||0)+" acre row(s) marked as billed ✓"); loadUnbilled();
+  }));
 }
 
 /* ---------- CSV import (Date,Location,Pilot,Acres,Rate[,State,District,Crop]) ---------- */
