@@ -75,7 +75,7 @@ async function apRates(){
     const pid=$("arPartner").value;
     // billing model + params
     const bown=await loadBillingOwn(pid||null);
-    if($("arModel")) $("arModel").value = bown?bown.model:"commission";
+    if($("arModel")) $("arModel").value = bown?bown.model:"full_client_rate";
     if($("arThr"))   $("arThr").value   = bown?bown.threshold_acres:7;
     if($("arAbove")) $("arAbove").value = bown?bown.contribution_above:1;
     if($("arUpto"))  $("arUpto").value  = bown?bown.contribution_upto:0.5;
@@ -136,7 +136,9 @@ function resolveCommission(rate, slabs){
 }
 // Billing model + acreage-contribution parameters for a partner (own row, else
 // Standard/null row, else the negotiated defaults).
-const BILLING_DEFAULT={ model:"commission", threshold_acres:7, contribution_above:1.0, contribution_upto:0.5 };
+// Default when a partner (and the Standard card) have no billing config set up:
+// the Full Client Rate + Acreage Contribution model (1.0 / 0.5 acre, threshold 7).
+const BILLING_DEFAULT={ model:"full_client_rate", threshold_acres:7, contribution_above:1.0, contribution_upto:0.5 };
 async function loadBilling(partnerId){
   const pick=async(pid)=>{ let q=sb().from("partner_billing").select("*"); q=pid?q.eq("partner_id",pid):q.is("partner_id",null); const {data}=await q.limit(1); return (data&&data[0])||null; };
   let b = partnerId ? await pick(partnerId) : null;

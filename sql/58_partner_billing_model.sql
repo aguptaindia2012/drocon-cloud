@@ -16,7 +16,7 @@
 create table if not exists public.partner_billing (
   id                 uuid primary key default gen_random_uuid(),
   partner_id         uuid references public.authorized_partners(id) on delete cascade,  -- null = Standard/default
-  model              text not null default 'commission' check (model in ('commission','full_client_rate')),
+  model              text not null default 'full_client_rate' check (model in ('commission','full_client_rate')),
   threshold_acres    numeric not null default 7,
   contribution_above numeric not null default 1.0,
   contribution_upto  numeric not null default 0.5,
@@ -28,7 +28,10 @@ create unique index if not exists partner_billing_partner_uk on public.partner_b
 create unique index if not exists partner_billing_standard_uk on public.partner_billing((1)) where partner_id is null;
 
 -- record which model an invoice was filed under (its lines are shaped accordingly)
-alter table public.partner_invoices add column if not exists billing_model text not null default 'commission';
+alter table public.partner_invoices add column if not exists billing_model text not null default 'full_client_rate';
+alter table public.partner_invoices alter column billing_model set default 'full_client_rate';
+-- if the table pre-existed with the old default, realign it
+alter table public.partner_billing alter column model set default 'full_client_rate';
 
 alter table public.partner_billing enable row level security;
 drop policy if exists partner_billing_read  on public.partner_billing;
