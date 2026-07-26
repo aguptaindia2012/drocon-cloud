@@ -32,6 +32,7 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
   { key:"reviews",    label:"Review / Approvals" },   // sits right after Home
+  { key:"self",       label:"My Space" },             // employee self-service (attendance & expenses)
   { key:"trackers",   label:"Daily Spray Entry" },
   { key:"order",      label:"Business Development" },
   { key:"agreement",  label:"Agreement" },
@@ -50,6 +51,8 @@ const TOOLS = [
   // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
+  // My Space — every internal employee can file their own attendance & expenses
+  { key:"my_expenses", section:"self", label:"My Attendance & Expenses", gate:"all" },
   // Daily Spray Entry — the trackers lead, then entry and reporting
   { key:"acre",            section:"trackers", label:"Acre Tracking",     gate:"perm" },
   { key:"farmer",          section:"trackers", label:"Farmer Tracking",   gate:"perm" },
@@ -75,12 +78,13 @@ const TOOLS = [
   { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
   { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
   { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
+  { key:"expense_mgmt",  section:"finance", label:"Expense Management", gate:"perm" },
+  { key:"expense_review",section:"finance", label:"Expense Claims",     gate:"approver" },
   // Accounting — dashboards first (daily cash-flow review), then the ledgers
   { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
   { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
   { key:"day_book",      section:"accounting", label:"Day Book",              gate:"perm" },
   { key:"payment_status",section:"accounting", label:"Payment Collection",    gate:"perm" },
-  { key:"expense_mgmt",  section:"accounting", label:"Expense Management",     gate:"perm" },
   { key:"advances",      section:"accounting", label:"Advances",              gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
