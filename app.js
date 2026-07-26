@@ -114,6 +114,7 @@ const TOOLS = [
   { key:"team",       section:"team",  label:"Team & Access", gate:"admin" },
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
   { key:"access_log", section:"audit", label:"Access Log",    gate:"admin" },
+  { key:"selftest",   section:"audit", label:"System Health", gate:"admin" },
   // Partner Portal — visible ONLY to external (invite-only) partner logins
   { key:"portal_submit", section:"portal", label:"Submit Invoice", gate:"external" },
   { key:"portal_mine",   section:"portal", label:"My Invoices",    gate:"external" },

@@ -36,6 +36,7 @@ async function apRates(){
     </div>
     <div id="arSlabNote" class="muted" style="font-size:12px;margin-bottom:4px"></div>
     <div id="arBody" class="muted">Loading…</div>
+    <div id="arPilots" style="margin-top:14px"></div>
     ${admin?'<div class="row" style="margin-top:10px"><button class="btn green" id="arSave">Save rate card</button><div class="spacer"></div><div class="err" id="arErr"></div></div>':'<div class="muted">Read-only — only an admin can edit rate cards.</div>'}`;
   // partner picker
   const { data:partners }=await sb().from("authorized_partners").select("id,name,company").order("name");
@@ -87,8 +88,23 @@ async function apRates(){
     if(!slabs.length && pid){ $("arBody").innerHTML=''; draw(); $("arBody").insertAdjacentHTML("afterbegin",'<div class="muted" style="margin-bottom:6px">No custom card yet — this partner currently uses the Standard card. Add slabs (or “Copy standard slabs”) to give them their own.</div>'); return; }
     draw();
   }
-  $("arPartner").addEventListener("change",loadCard);
+  async function loadPilotMap(){
+    const host=$("arPilots"); if(!host) return; const pid=$("arPartner").value;
+    if(!pid){ host.innerHTML='<div class="muted" style="font-size:12px">Select a specific partner to map the pilot names whose recorded acres they may pull into their invoices.</div>'; return; }
+    const { data }=await sb().from("partner_pilots").select("*").eq("partner_id",pid).order("pilot_name");
+    const rs=data||[];
+    host.innerHTML=`<div class="card" style="padding:12px"><b>Recorded-acre pilots</b>
+      <p class="muted" style="font-size:12px;margin:4px 0">Pilot names (as they appear in acre entries) whose sprays this partner may load into invoices via “Load my recorded acres”.</p>
+      ${admin?`<div class="row" style="gap:8px"><input id="apPN" placeholder="Pilot name" style="min-width:200px"><button class="btn sm" id="apAdd">+ Add</button></div>`:''}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${rs.length?rs.map(r=>`<span class="chip" style="background:#eef;border:1px solid #ccd;padding:3px 8px;border-radius:12px;font-size:12px">${esc(r.pilot_name)}${admin?` <a href="#" data-delp="${r.id}" style="color:#a11;text-decoration:none;font-weight:700">×</a>`:''}</span>`).join(""):'<span class="muted">None mapped yet.</span>'}</div></div>`;
+    if($("apAdd")) $("apAdd").addEventListener("click",async()=>{ const nm=$("apPN").value.trim(); if(!nm) return;
+      const { error }=await sb().from("partner_pilots").insert({partner_id:pid, pilot_name:nm, created_by:window.OPS.me.id});
+      if(error){ alert(error.code==="23505"?"That pilot name is already mapped.":error.message); return; } loadPilotMap(); });
+    host.querySelectorAll("[data-delp]").forEach(a=>a.addEventListener("click",async ev=>{ ev.preventDefault(); await sb().from("partner_pilots").delete().eq("id",a.getAttribute("data-delp")); loadPilotMap(); }));
+  }
+  $("arPartner").addEventListener("change",()=>{ loadCard(); loadPilotMap(); });
   if($("arModel")) $("arModel").addEventListener("change",syncModel);
+  loadPilotMap();
   if($("arSeed")) $("arSeed").addEventListener("click",()=>{ slabs=STD.map(s=>Object.assign({},s)); draw(); });
   if($("arSave")) $("arSave").addEventListener("click",async()=>{
     const pid=$("arPartner").value||null;
@@ -231,7 +247,7 @@ function lineEditor(host, kind, rows, ctx, onChange){
     $("peAdd").addEventListener("click",()=>{ rows.push(blankRow(kind, billing.model)); draw(); });
   }
   draw();
-  return { rows, totals:()=>rowsToTotals(kind,rows) };
+  return { rows, totals:()=>rowsToTotals(kind,rows), setRows:(nr)=>{ rows.length=0; (nr||[]).forEach(r=>rows.push(r)); draw(); } };
 }
 
 /* ---------------------------------------------------------------------------
@@ -252,6 +268,13 @@ async function portalSubmit(){
       </div>
       <h3 style="margin:14px 0 4px">${kind==="consultant"?"Timesheet lines":"Daily lines"}</h3>
       ${kind==="authorized_partner"?'<div class="muted" id="piNote2" style="margin-bottom:6px"></div>':''}
+      ${kind==="authorized_partner"?`<div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;background:var(--soft-green);border-radius:8px;padding:8px">
+        <b style="font-size:13px">Auto-fill from DroCon records</b>
+        <div class="field" style="margin:0;max-width:150px"><label>From</label><input id="piFrom" type="date"></div>
+        <div class="field" style="margin:0;max-width:150px"><label>To</label><input id="piTo" type="date"></div>
+        <button class="btn sm" id="piLoad" type="button">⬇ Load my recorded acres</button>
+        <span class="muted" style="font-size:12px">— pulls your day-wise acres &amp; client rate; edit before submitting.</span>
+      </div>`:''}
       <div id="piRows"></div>
       <div class="row" style="margin-top:12px;gap:24px;flex-wrap:wrap">
         <div><div class="eyebrow">Gross</div><b id="piGross">₹0</b></div>
@@ -278,6 +301,16 @@ async function portalSubmit(){
     if($("piComm")) $("piComm").textContent=money(t.commission_total);
     $("piNet").textContent=money(t.net_payable);
   });
+  if($("piLoad")) $("piLoad").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const from=$("piFrom").value, to=$("piTo").value;
+    if(!from||!to){ $("piErr").textContent="Pick a From and To date to load."; return; }
+    const { data, error }=await sb().rpc("partner_recorded_acres",{ p_from:from, p_to:to });
+    if(error){ $("piErr").textContent=error.message; return; }
+    if(!data||!data.length){ $("piErr").textContent="No recorded acres found for you in that range (ask the office to map your pilot names)."; return; }
+    const nr = data.map(d=> isFCR ? {date:d.work_date, acres:num(d.acres), rate:num(d.rate)} : {date:d.work_date, acre:num(d.acres), rate:num(d.rate)});
+    ed.setRows(nr); $("piErr").textContent="";
+    window.OPS.flashTop("Loaded "+nr.length+" day(s) from DroCon records ✓");
+  }));
   $("piSend").addEventListener("click",async()=>{
     const clean = rows.filter(r=> kind==="consultant" ? (r.description||num(r.hours)||num(r.rate)) : isFCR ? (num(r.acres)||num(r.rate)) : (r.farmer||num(r.acre)||num(r.rate)));
     if(!clean.length){ $("piErr").textContent="Add at least one line."; return; }
