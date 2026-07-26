@@ -92,7 +92,9 @@ async function myExpenses(){
   const { data:claims }=await sb().from("expense_claims").select("*").eq("employee_id",emp.id).order("created_at",{ascending:false});
   const rows=claims||[];
   $("meBody").innerHTML=`
-    <div class="callout">Welcome, <b>${esc(emp.name)}</b>. File an expense claim below and attach your receipts. HR will review and process payment.</div>
+    <div class="callout">Welcome, <b>${esc(emp.name)}</b>. Mark your attendance and file expense claims below; HR reviews and processes them.</div>
+    <div id="myAtt"></div>
+    <h3 style="margin-top:14px">File an expense claim</h3>
     <div class="row" style="flex-wrap:wrap;gap:6px;margin:8px 0">
       ${Object.keys(TYPES).map(k=>`<button class="btn sm" data-new="${k}">+ ${esc(TYPES[k].label)}</button>`).join("")}
     </div>
@@ -108,6 +110,61 @@ async function myExpenses(){
     if(!confirm("Delete this claim?")) return;
     await sb().from("expense_claims").delete().eq("id",b.getAttribute("data-del")); myExpenses();
   }));
+  attendanceCard(emp);
+}
+
+/* ---------- My attendance (single-employee self-service grid) ---------- */
+const DOWL=["Su","Mo","Tu","We","Th","Fr","Sa"];
+const ACELL={present:{t:"P",bg:"",fg:"var(--muted,#999)"},off:{t:"·",bg:"var(--paper2,#f2f2f2)",fg:"var(--muted,#888)"},absent:{t:"A",bg:"#fde2e1",fg:"#a11"},worked_off:{t:"W",bg:"#e2f6e6",fg:"#137a2e"}};
+function monthDaysOf(ym){ const [y,mm]=ym.split("-").map(Number); return new Date(Date.UTC(y,mm,0)).getUTCDate(); }
+let att={ym:null,emp:null,orig:{},work:{},hol:{},locked:false};
+async function attendanceCard(emp){
+  const host=$("myAtt"); if(!host) return;
+  const ym=(window.OPS._myAttMonth)||todayISO().slice(0,7);
+  att.ym=ym; att.emp=emp;
+  host.innerHTML=`<div class="card"><div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
+      <b>My attendance</b><input id="maMonth" type="month" value="${ym}" style="width:auto"><span id="maLock"></span>
+      <span class="spacer"></span><button class="btn green sm" id="maSave">Save attendance</button></div>
+    <div class="muted" style="font-size:12px;margin:4px 0">Mark <b>A</b> for a day off you took, <b>W</b> if you worked a Sunday/holiday (earns a comp-off). Present is the default — click a day to cycle.</div>
+    <div id="maGrid" class="muted">Loading…</div></div>`;
+  $("maMonth").addEventListener("change",()=>{ window.OPS._myAttMonth=$("maMonth").value; attendanceCard(emp); });
+  $("maSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,saveMyAtt));
+  const first=ym+"-01", last=ym+"-"+String(monthDaysOf(ym)).padStart(2,"0");
+  const [{data:rows},{data:hol}]=await Promise.all([
+    sb().from("hr_attendance").select("work_date,status").eq("employee_id",emp.id).gte("work_date",first).lte("work_date",last),
+    sb().from("hr_holidays").select("holiday_date,name").gte("holiday_date",first).lte("holiday_date",last),
+  ]);
+  att.orig={}; att.work={}; (rows||[]).forEach(r=>{ att.orig[r.work_date]=r.status; att.work[r.work_date]=r.status; });
+  att.hol={}; (hol||[]).forEach(h=>att.hol[h.holiday_date]=h.name);
+  const lock = window.OPS.hrMonthLock ? await window.OPS.hrMonthLock(ym) : null;
+  att.locked=!!lock;
+  if($("maLock")) $("maLock").innerHTML = lock ? '<span class="chip" style="background:#fde2e1;color:#a11;border:1px solid #e6a0a0;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🔒 Locked</span>' : '';
+  if(lock){ const b=$("maSave"); if(b){ b.disabled=true; b.textContent="Locked 🔒"; } }
+  drawMyGrid();
+}
+function maState(date){ const st=att.work[date]; if(st==="absent"||st==="worked_off") return st; const d=new Date(date+"T00:00:00Z").getUTCDay(); return (d===0||att.hol[date])?"off":"present"; }
+function drawMyGrid(){
+  const nd=monthDaysOf(att.ym), cells=[];
+  for(let dd=1;dd<=nd;dd++){ const date=att.ym+"-"+String(dd).padStart(2,"0"); const w=new Date(date+"T00:00:00Z").getUTCDay(); const off=w===0||att.hol[date]; const c=ACELL[maState(date)];
+    cells.push(`<div data-d="${date}" title="${DOWL[w]}${off?' · day off':''}" style="min-width:36px;text-align:center;border:1px solid var(--line,#ddd);border-radius:6px;padding:3px 2px;cursor:${att.locked?'default':'pointer'};background:${c.bg};color:${c.fg}"><div style="font-size:10px" class="muted">${dd} ${DOWL[w]}</div><b>${c.t}</b></div>`);
+  }
+  $("maGrid").innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:4px">${cells.join("")}</div>`;
+  if(att.locked) return;
+  $("maGrid").querySelectorAll("[data-d]").forEach(el=>el.addEventListener("click",()=>{
+    const date=el.getAttribute("data-d"), w=new Date(date+"T00:00:00Z").getUTCDay(), off=w===0||att.hol[date], cur=att.work[date]||"";
+    const nx = off ? (cur==="worked_off"?"":"worked_off") : (cur==="absent"?"":"absent");
+    if(nx) att.work[date]=nx; else delete att.work[date];
+    drawMyGrid();
+  }));
+}
+async function saveMyAtt(){
+  const ups=[], dels=[], keys=new Set([...Object.keys(att.orig),...Object.keys(att.work)]);
+  keys.forEach(d=>{ const nw=att.work[d]||"", ol=att.orig[d]||""; if(nw===ol) return;
+    if(nw) ups.push({employee_id:att.emp.id, work_date:d, status:nw, created_by:window.OPS.me.id}); else dels.push(d); });
+  if(!ups.length&&!dels.length){ window.OPS.flashTop("Nothing changed."); return; }
+  if(ups.length){ const {error}=await sb().from("hr_attendance").upsert(ups,{onConflict:"employee_id,work_date"}); if(error){ alert("Save failed: "+error.message); return; } }
+  for(const d of dels){ await sb().from("hr_attendance").delete().eq("employee_id",att.emp.id).eq("work_date",d); }
+  window.OPS.flashTop("Attendance saved ✓"); attendanceCard(att.emp);
 }
 
 function claimForm(emp, typeKey){
