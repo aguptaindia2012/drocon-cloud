@@ -11,12 +11,24 @@ const { $, esc, num, money, todayISO, fmt, fmtDate } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 
 let drows=[], clients=[], editingId=null;
-let locs=[], locPilots=[], curLoc=null;
-function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", chemical:"", acres:"", crate:"", frate:"", gps:false }; }
+let locs=[], locPilots=[], curLoc=null, cropsList=[], curRates=[];
+function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", crop_id:"", chemical:"", acres:"", crate:"", frate:"", gps:false }; }
+// resolve the rate in force for a crop on the entry date (crop-specific > all-crops
+// default > the location's base rate; latest effective_from on/before the date).
+function resolveRate(cropId, date){
+  const d = date || ($("dDate")&&$("dDate").value) || todayISO();
+  const cand = curRates.filter(r=> r.effective_from<=d && (String(r.crop_id||"")===String(cropId||"") || r.crop_id==null));
+  cand.sort((a,b)=>{ const am=(cropId&&String(a.crop_id||"")===String(cropId))?0:1, bm=(cropId&&String(b.crop_id||"")===String(cropId))?0:1;
+    if(am!==bm) return am-bm; return a.effective_from<b.effective_from?1:-1; });
+  const cropPick = cand.find(r=> cropId && String(r.crop_id||"")===String(cropId));
+  const defPick  = cand.find(r=> r.crop_id==null);
+  const fr = (cropPick&&cropPick.farmer_rate!=null)?cropPick.farmer_rate : (defPick&&defPick.farmer_rate!=null)?defPick.farmer_rate : (curLoc&&curLoc.farmer_rate!=null?curLoc.farmer_rate:"");
+  const cr = (cropPick&&cropPick.client_rate!=null)?cropPick.client_rate : (defPick&&defPick.client_rate!=null)?defPick.client_rate : (curLoc?num(curLoc.client_rate):"");
+  return { frate:fr, crate:cr };
+}
 // one row per pilot currently assigned to the location, rates pre-filled from it
 function rowsForLocation(loc, pilots){
-  const fr = loc && loc.farmer_rate!=null ? loc.farmer_rate : "";
-  const cr = loc && loc.client_rate!=null ? loc.client_rate : "";
+  const rt=resolveRate("", ($("dDate")&&$("dDate").value)); const cr=rt.crate, fr=rt.frate;
   if(!pilots.length) return [Object.assign(blank(),{ crate:cr, frate:fr })];
   return pilots.map(p=>Object.assign(blank(),{ pilot:p.name, pilot_id:p.id, crate:cr, frate:fr }));
 }
@@ -59,6 +71,10 @@ async function view(editSub){
   if($("dNewLoc")) $("dNewLoc").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("locations"); });
   window.OPS.geoUI.wire("dState","dDistrict");
   renderRows();
+  // crops register drives the per-row crop dropdown
+  sb().from("crops").select("id,name").order("name").then(({data})=>{ cropsList=data||[]; renderRows(); });
+  // changing the date re-resolves each row's rate (rates are effective-dated)
+  $("dDate").addEventListener("change",()=>{ drows.forEach(r=>{ const rt=resolveRate(r.crop_id, $("dDate").value); r.crate=rt.crate; r.frate=rt.frate; }); renderRows(); });
   // reviewer dropdown (any internal user except yourself; admins can also approve from the queue)
   window.OPS.listProfiles().then(ps=>{
     const opts=(ps||[]).filter(p=>!p.is_external && p.id!==window.OPS.me.id);
@@ -81,7 +97,8 @@ async function view(editSub){
 async function pickLocation(locId, keepRows){
   curLoc = locs.find(l=>String(l.id)===String(locId)) || null;
   const note=$("dRateNote");
-  if(!curLoc){ locPilots=[]; if(note) note.textContent=""; return; }
+  if(!curLoc){ locPilots=[]; curRates=[]; if(note) note.textContent=""; return; }
+  { const { data }=await sb().from("location_crop_rates").select("*").eq("location_id",curLoc.id); curRates=data||[]; }
   if($("dClientName")) $("dClientName").value = (curLoc.client && (curLoc.client.firm_name||curLoc.client.name)) || "";
   if(curLoc.state && $("dState")){
     $("dState").value=curLoc.state;
@@ -104,7 +121,9 @@ function renderRows(){
     <td><input data-i="${i}" data-k="farmer" value="${esc(r.farmer)}"></td>
     <td><input data-i="${i}" data-k="phone" value="${esc(r.phone)}" style="width:100px"></td>
     <td><input data-i="${i}" data-k="village" value="${esc(r.village)}"></td>
-    <td><input data-i="${i}" data-k="crop" value="${esc(r.crop)}" style="width:85px"></td>
+    <td>${cropsList.length
+      ? `<select data-i="${i}" data-k="crop_id" style="width:110px"><option value="">— crop —</option>${cropsList.map(c=>`<option value="${c.id}" ${String(r.crop_id||"")===String(c.id)?'selected':''}>${esc(c.name)}</option>`).join("")}</select>`
+      : `<input data-i="${i}" data-k="crop" value="${esc(r.crop)}" style="width:85px">`}</td>
     <td><input data-i="${i}" data-k="chemical" value="${esc(r.chemical)}" style="width:100px"></td>
     <td><input data-i="${i}" data-k="acres" type="number" step="any" value="${esc(r.acres)}" style="width:64px;text-align:right"></td>
     <td><input data-i="${i}" data-k="crate" type="number" step="any" value="${esc(r.crate)}" style="width:64px;text-align:right"></td>
@@ -116,6 +135,13 @@ function renderRows(){
     const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
     drows[i][k]= k==="gps"?inp.checked:inp.value;
     if(["acres","crate","frate"].includes(k)){ const tr=inp.closest("tr"); tr.children[9].textContent=money(num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate))); sumRow(); }
+  }));
+  // crop picker: set the crop, then resolve the effective rate for that crop/date
+  tb.querySelectorAll("select[data-k='crop_id']").forEach(sel=>sel.addEventListener("change",()=>{
+    const i=+sel.getAttribute("data-i"); drows[i].crop_id=sel.value;
+    const c=cropsList.find(x=>String(x.id)===String(sel.value)); drows[i].crop = c?c.name:"";
+    const rt=resolveRate(sel.value, $("dDate").value); drows[i].crate=rt.crate; drows[i].frate=rt.frate;
+    renderRows();
   }));
   // pilot picker: keep the id AND the readable name in step
   tb.querySelectorAll("select[data-k='pilot_id']").forEach(sel=>sel.addEventListener("change",()=>{

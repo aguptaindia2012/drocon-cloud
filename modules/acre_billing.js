@@ -277,16 +277,20 @@ function linesFor(chosen){
   // one line per day + rate (a rate change mid-period splits the line)
   const byKey={};
   mine.forEach(r=>{ const k=r.entry_date+"|"+rateOf(r);
-    byKey[k]=byKey[k]||{ date:r.entry_date, rate:rateOf(r), acres:0, ids:[], srcs:[] };
+    byKey[k]=byKey[k]||{ date:r.entry_date, rate:rateOf(r), acres:0, ids:[], srcs:[], crops:{} };
     const g=byKey[k]; g.acres+=num(r.acres); g.ids.push(r.id); if(r._src) g.srcs.push(r._src);
+    const cn=String(r.crop||"").trim(); if(cn) g.crops[cn]=(g.crops[cn]||0)+num(r.acres);
   });
   return Object.values(byKey).sort((a,b)=>a.date<b.date?-1:1).map(g=>{
-    let sub="";
+    // sub-line: the crops sprayed under this day-line, with their acres
+    const cropSub = Object.entries(g.crops).map(([c,a])=>esc(c)+" ("+(Math.round(a*10)/10)+" ac)").join(", ");
+    let sub=cropSub;
     if(side==="farmer"){
       const fs=[]; g.srcs.forEach(s=>(farmerBySource[s]||[]).forEach(f=>fs.push(f)));
       const names=fs.filter(f=>f.farmer_name).map(f=>esc(f.farmer_name)+"("+num(f.acre)+")");
       const phone=(fs.find(f=>f.contact_no)||{}).contact_no||"";
-      sub = names.length ? names.join(", ")+(phone?(" - "+phone):"") : "";
+      const farmerSub = names.length ? names.join(", ")+(phone?(" - "+phone):"") : "";
+      sub = [cropSub, farmerSub].filter(Boolean).join(" — ");
     }
     return { date:g.date, rate:g.rate, acres:g.acres, ids:g.ids, sub,
              amount: Math.round(g.acres*g.rate*100)/100 };
