@@ -86,6 +86,7 @@ const TOOLS = [
   { key:"day_book",      section:"accounting", label:"Day Book",              gate:"perm" },
   { key:"payment_status",section:"accounting", label:"Payment Collection",    gate:"perm" },
   { key:"advances",      section:"accounting", label:"Advances",              gate:"perm" },
+  { key:"tax_reports",   section:"accounting", label:"GST & TDS Reports",     gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },

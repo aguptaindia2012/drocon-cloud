@@ -67,54 +67,49 @@ function render(){
   const unbilled=rows.filter(r=>!r.farmer_billed).length;
 
   $("vrBody").innerHTML=`
+    <div class="callout" style="margin-bottom:10px">This statement shows <b>acres only</b> — for the vendor/partner to verify the acreage they flew. Billing rates are intentionally omitted.</div>
     <div class="statrow">
       <div class="stat"><div class="n">${totA.toFixed(1)}</div><div class="l">Total acres</div></div>
-      <div class="stat"><div class="n">${money(totF)}</div><div class="l">Farmer-rate value</div></div>
-      <div class="stat"><div class="n">${money(totC)}</div><div class="l">Client-rate value</div></div>
       <div class="stat"><div class="n">${Object.keys(byP).length}</div><div class="l">Pilots</div></div>
+      <div class="stat"><div class="n">${Object.keys(byL).length}</div><div class="l">Locations</div></div>
     </div>
     <div class="row wrap" style="margin-bottom:10px">
       ${window.OPS.canExport()?'<button class="btn green sm" id="vrXls">⬇ Download Excel (share with vendor)</button>':'<span class="muted">🔒 export restricted</span>'}
       <div id="vrWord"></div>
-      <div class="spacer"></div><span class="muted">${rows.length} row(s)${unbilled?(" · "+unbilled+" not yet invoiced to the client"):""}</span>
+      <div class="spacer"></div><span class="muted">${rows.length} row(s)</span>
     </div>
     <div class="card"><h3>Summary by pilot</h3>
-      <table><thead><tr><th>Pilot</th><th class="num">Days</th><th class="num">Acres</th><th class="num">Value</th></tr></thead>
+      <table><thead><tr><th>Pilot</th><th class="num">Days</th><th class="num">Acres</th></tr></thead>
       <tbody>${Object.entries(byP).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>
-        `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days.size}</td><td class="num">${v.acres.toFixed(1)}</td><td class="num">${money(v.amt)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td colspan="2" class="num"><b>Total</b></td><td class="num"><b>${totA.toFixed(1)}</b></td><td class="num"><b>${money(totF+totC)}</b></td></tr></tfoot></table></div>
+        `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days.size}</td><td class="num">${v.acres.toFixed(1)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="2" class="num"><b>Total</b></td><td class="num"><b>${totA.toFixed(1)}</b></td></tr></tfoot></table></div>
     <div class="card"><h3>Summary by location</h3>
-      <table><thead><tr><th>Location</th><th class="num">Acres</th><th class="num">Value</th></tr></thead>
+      <table><thead><tr><th>Location</th><th class="num">Acres</th></tr></thead>
       <tbody>${Object.entries(byL).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>
-        `<tr><td><b>${esc(k)}</b></td><td class="num">${v.acres.toFixed(1)}</td><td class="num">${money(v.amt)}</td></tr>`).join("")}</tbody></table></div>
+        `<tr><td><b>${esc(k)}</b></td><td class="num">${v.acres.toFixed(1)}</td></tr>`).join("")}</tbody></table></div>
     <div class="card"><h3>Detail</h3>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Location</th><th>Client</th><th class="num">Acres</th><th class="num">Farmer ₹</th><th class="num">Client ₹</th><th class="num">Value</th><th>Invoiced</th></tr></thead>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Location</th><th>Client</th><th class="num">Acres</th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.pilot_name||'')}</td>
         <td>${esc(r.location_name||'')}</td><td>${esc(r.client_name||'')}</td>
-        <td class="num">${num(r.acres)}</td><td class="num">${money(r.farmer_rate)}</td><td class="num">${money(r.client_rate)}</td>
-        <td class="num">${money(r.total_amount)}</td>
-        <td>${r.farmer_billed?'<span class="chip approved">Yes</span>':'<span class="chip draft">Not yet</span>'}</td></tr>`).join("")}</tbody></table></div></div>`;
+        <td class="num">${num(r.acres)}</td></tr>`).join("")}</tbody></table></div></div>`;
 
   if($("vrXls")) $("vrXls").addEventListener("click",exportExcel);
-  const period=(F.from||"start")+" to "+(F.to||todayISO());
   window.OPS.report.wordButton("vrWord","Vendor Acreage Statement — "+((cur&&(cur.firm_name||cur.name))||""), ()=>([
-    {heading:"Period", table:{headers:["From","To","Acres","Farmer value","Client value"],
-      rows:[[F.from||"—",F.to||todayISO(),totA.toFixed(1),money(totF),money(totC)]]}},
-    {heading:"By pilot", table:{headers:["Pilot","Days","Acres","Value"],
-      rows:Object.entries(byP).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>[k,v.days.size,v.acres.toFixed(1),money(v.amt)])}},
-    {heading:"By location", table:{headers:["Location","Acres","Value"],
-      rows:Object.entries(byL).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>[k,v.acres.toFixed(1),money(v.amt)])}},
-    {heading:"Detail", table:{headers:["Date","Pilot","Location","Acres","Farmer ₹","Client ₹","Value"],
-      rows:rows.map(r=>[fmtDate(r.entry_date),r.pilot_name||"",r.location_name||"",num(r.acres),money(r.farmer_rate),money(r.client_rate),money(r.total_amount)])}},
+    {heading:"Period", table:{headers:["From","To","Total acres","Pilots","Locations"],
+      rows:[[F.from||"—",F.to||todayISO(),totA.toFixed(1),Object.keys(byP).length,Object.keys(byL).length]]}},
+    {heading:"By pilot", table:{headers:["Pilot","Days","Acres"],
+      rows:Object.entries(byP).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>[k,v.days.size,v.acres.toFixed(1)])}},
+    {heading:"By location", table:{headers:["Location","Acres"],
+      rows:Object.entries(byL).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>[k,v.acres.toFixed(1)])}},
+    {heading:"Detail", table:{headers:["Date","Pilot","Location","Acres"],
+      rows:rows.map(r=>[fmtDate(r.entry_date),r.pilot_name||"",r.location_name||"",num(r.acres)])}},
   ]));
 }
 
 function exportExcel(){
   if(!window.OPS.canExport()){ alert("You don't have permission to export."); return; }
-  const headers=["Date","Pilot","Location","Client","Acres","Farmer rate","Client rate","Farmer amount","Client amount","Total","Invoiced to client"];
-  const data=rows.map(r=>[fmtDate(r.entry_date), r.pilot_name||"", r.location_name||"", r.client_name||"",
-    num(r.acres), num(r.farmer_rate), num(r.client_rate), num(r.farmer_amount), num(r.client_amount), num(r.total_amount),
-    r.farmer_billed?"Yes":"Not yet"]);
+  const headers=["Date","Pilot","Location","Client","Acres"];
+  const data=rows.map(r=>[fmtDate(r.entry_date), r.pilot_name||"", r.location_name||"", r.client_name||"", num(r.acres)]);
   const name=((cur&&(cur.firm_name||cur.name))||"Vendor").replace(/[^\w\- ]+/g,"").replace(/\s+/g,"_");
   const base="Vendor_Acreage_"+name+"_"+(F.from||"start")+"_to_"+(F.to||todayISO());
   window.OPS.xlsx.download(base+".xlsx","Vendor acreage",headers,data);
