@@ -263,12 +263,12 @@ const payStatusChip = st => st==='paid'?'<span class="chip paid">Paid</span>'
 async function loadPayables(){
   const [{data:pys,error},{data:txns},{data:creds}]=await Promise.all([
     sb().from("payables").select("*, vendor:vendor_id(firm_name,name)").order("invoice_date",{ascending:false}).limit(500),
-    sb().from("cash_txns").select("ref_id,amount").eq("ref_type","payable"),
+    sb().from("cash_txns").select("ref_id,amount,tds_amount").eq("ref_type","payable"),
     sb().from("payable_credits").select("payable_id,amount")
   ]);
   if(error) return { rows:[], error };
   const paidBy={}, credBy={};
-  (txns||[]).forEach(t=>{ paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount); });
+  (txns||[]).forEach(t=>{ paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount)+num(t.tds_amount); });
   (creds||[]).forEach(c=>{ credBy[c.payable_id]=(credBy[c.payable_id]||0)+num(c.amount); });
   const rows=(pys||[]).map(p=>{ const paid=paidBy[p.id]||0, credit=credBy[p.id]||0;
     const bal=Math.round((num(p.total)-paid-credit)*100)/100;
@@ -312,10 +312,10 @@ async function listPayables(){
 
 async function recomputePayable(id, total){
   const [{data:tx},{data:cr}]=await Promise.all([
-    sb().from("cash_txns").select("amount").eq("ref_type","payable").eq("ref_id",String(id)),
+    sb().from("cash_txns").select("amount,tds_amount").eq("ref_type","payable").eq("ref_id",String(id)),
     sb().from("payable_credits").select("amount").eq("payable_id",id)
   ]);
-  const paid=(tx||[]).reduce((s,t)=>s+num(t.amount),0);
+  const paid=(tx||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0);
   const credit=(cr||[]).reduce((s,c)=>s+num(c.amount),0);
   const settled=paid+credit;   // a credit note settles the balance just like a payment
   const status = settled>=num(total)-0.005 ? "paid" : (settled>0 ? "part_paid" : "unpaid");
@@ -330,8 +330,13 @@ function payVendor(x, back){
     <p class="muted">${esc(x.vendor_name)} · Invoice <b>${esc(x.p.vendor_invoice_no||'(no no.)')}</b> · Balance <b>${money(x.balance)}</b></p>
     <div class="callout warn">Enter the date the money <b>actually left the account</b> — not the date a cheque was handed over.</div>
     <div class="fgrid">
-      <div class="field"><label>Amount *</label><input type="number" step="0.01" id="vp_amt" value="${x.balance>0?x.balance:''}"></div>
+      <div class="field"><label>Amount settled *</label><input type="number" step="0.01" id="vp_amt" value="${x.balance>0?x.balance:''}">
+        <div class="small-note">Bill value being cleared (cash + any TDS we withhold).</div></div>
       <div class="field"><label>Paid from *</label><select id="vp_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("")}</select></div>
+      <div class="field full"><label style="display:inline"><input type="checkbox" id="vp_tds" style="width:auto"> We deducted TDS</label></div>
+      <div class="field"><label>TDS %</label><input id="vp_tdspct" type="number" step="any" placeholder="e.g. 2" disabled></div>
+      <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="vp_tdsamt" type="number" step="any" value="0" disabled></div>
+      <div class="field full"><div class="callout" id="vp_split" style="margin:0"></div></div>
       <div class="field"><label>Date paid *</label><input type="date" id="vp_date" value="${todayISO()}"></div>
       <div class="field"><label>Mode</label><select id="vp_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
       <div class="field full"><label>Note</label><input id="vp_note"></div>
@@ -339,15 +344,25 @@ function payVendor(x, back){
     <div class="row"><button class="btn green" id="vpGo">Record payment</button><button class="btn" id="vpCancel">Cancel</button></div>
     <div class="err" id="vpErr"></div></div>`;
   $("vpBack").addEventListener("click",back); $("vpCancel").addEventListener("click",back);
+  const vpSync=()=>{ const on=$("vp_tds").checked; $("vp_tdspct").disabled=!on; $("vp_tdsamt").disabled=!on;
+    const settled=num($("vp_amt").value), tds=on?num($("vp_tdsamt").value):0, cash=Math.round((settled-tds)*100)/100;
+    $("vp_split").innerHTML = on ? `Settling <b>${money(settled)}</b> = cash out <b>${money(cash)}</b> + TDS <b>${money(tds)}</b> (booked to TDS Payable).` : `Cash out of account: <b>${money(settled)}</b>`; };
+  $("vp_tds").addEventListener("change",vpSync);
+  $("vp_amt").addEventListener("input",()=>{ if($("vp_tds").checked && num($("vp_tdspct").value)) $("vp_tdsamt").value=Math.round(num($("vp_amt").value)*num($("vp_tdspct").value))/100; vpSync(); });
+  $("vp_tdspct").addEventListener("input",()=>{ $("vp_tdsamt").value=Math.round(num($("vp_amt").value)*num($("vp_tdspct").value))/100; vpSync(); });
+  $("vp_tdsamt").addEventListener("input",vpSync); vpSync();
   $("vpGo").addEventListener("click",()=>window.OPS.once($("vpGo"),async()=>{
-    const amt=num($("vp_amt").value); if(!(amt>0)){ $("vpErr").textContent="Enter an amount."; return; }
+    const settled=num($("vp_amt").value); if(!(settled>0)){ $("vpErr").textContent="Enter an amount."; return; }
+    const on=$("vp_tds").checked, tds=on?num($("vp_tdsamt").value):0;
+    if(tds<0||tds>settled){ $("vpErr").textContent="TDS must be between 0 and the amount settled."; return; }
+    const cash=Math.round((settled-tds)*100)/100;
     const { error }=await sb().from("cash_txns").insert({ account_id:$("vp_acct").value, direction:"out",
-      txn_date:$("vp_date").value||todayISO(), amount:amt, mode:$("vp_mode").value,
+      txn_date:$("vp_date").value||todayISO(), amount:cash, tds_pct:on?(num($("vp_tdspct").value)||null):null, tds_amount:tds, mode:$("vp_mode").value,
       ref_type:"payable", ref_id:String(x.p.id), note:$("vp_note").value||("Payment — "+(x.p.vendor_invoice_no||"")),
       created_by:window.OPS.me.id });
     if(error){ $("vpErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
     await recomputePayable(x.p.id, x.p.total);
-    window.OPS.audit("paid","payables",x.p.id,money(amt)); window.OPS.flashTop("Payment recorded ✓"); back();
+    window.OPS.audit("paid","payables",x.p.id,money(cash)+(tds>0?(" + TDS "+money(tds)):"")); window.OPS.flashTop("Payment recorded ✓"); back();
   }));
 }
 

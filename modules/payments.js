@@ -19,7 +19,8 @@ async function fetchRows(entity){
     sb().from("documents").select("id,related_doc_id,totals").eq("doc_type","credit_note"),
     sb().from("payments").select("*") ]);
   const paidByDoc={}, creditByInv={};
-  (pays||[]).forEach(p=>{ paidByDoc[p.document_id]=(paidByDoc[p.document_id]||0)+num(p.amount); });
+  // settled against the invoice = cash + any TDS the client withheld
+  (pays||[]).forEach(p=>{ paidByDoc[p.document_id]=(paidByDoc[p.document_id]||0)+num(p.amount)+num(p.tds_amount); });
   (cns||[]).forEach(c=>{ if(c.related_doc_id) creditByInv[c.related_doc_id]=(creditByInv[c.related_doc_id]||0)+num((c.totals||{}).total); });
   return (invs||[]).map(r=>{
     const gross=num((r.totals||{}).total); const credit=creditByInv[r.id]||0; const paid=paidByDoc[r.id]||0;
@@ -31,8 +32,8 @@ async function fetchRows(entity){
 }
 
 async function recomputeStatus(x){
-  const { data:ps }=await sb().from("payments").select("amount").eq("document_id",x.r.id);
-  const paid=(ps||[]).reduce((s,p)=>s+num(p.amount),0);
+  const { data:ps }=await sb().from("payments").select("amount,tds_amount").eq("document_id",x.r.id);
+  const paid=(ps||[]).reduce((s,p)=>s+num(p.amount)+num(p.tds_amount),0);
   const bal=x.gross-x.credit-paid;
   await sb().from("documents").update({ status: bal<=0.01?"paid":(paid>0||x.credit>0?"partial":"issued") }).eq("id",x.r.id);
 }
@@ -85,30 +86,48 @@ function recordPayment(x, back){
       <h1>Record payment</h1>
       <p class="muted">Invoice <b>${esc(x.r.number)}</b> · ${esc(x.party)} · Balance <b>${money(x.balance)}</b></p>
       <div class="fgrid">
-        <div class="field"><label>Amount *</label><input id="pAmt" type="number" step="any" value="${x.balance>0?x.balance:''}"></div>
+        <div class="field"><label>Amount settled *</label><input id="pAmt" type="number" step="any" value="${x.balance>0?x.balance:''}">
+          <div class="small-note">Invoice value being cleared (cash + any TDS).</div></div>
         <div class="field"><label>Received into *</label><select id="pAcct"><option value="">— loading —</option></select>
           <div class="small-note">Which account the money landed in — this is what puts it on the Day Book.</div></div>
+        <div class="field full"><label style="display:inline"><input type="checkbox" id="pTds" style="width:auto"> Client deducted TDS</label></div>
+        <div class="field"><label>TDS %</label><input id="pTdsPct" type="number" step="any" placeholder="e.g. 2" disabled></div>
+        <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="pTdsAmt" type="number" step="any" value="0" disabled></div>
+        <div class="field full"><div class="callout" id="pSplit" style="margin:0"></div></div>
         <div class="field"><label>Date <span class="muted">(the day it actually reached the account)</span></label><input id="pDate" type="date" value="${todayISO()}"></div>
         <div class="field"><label>Mode</label><select id="pMode"><option>UPI</option><option>NEFT/RTGS</option><option>Cash</option><option>Cheque</option><option>Other</option></select></div>
-        <div class="field"><label>Note</label><input id="pNote"></div>
+        <div class="field full"><label>Note</label><input id="pNote"></div>
       </div>
       <div class="row"><button class="btn green" id="pSave">Save payment</button><button class="btn" id="pCancel">Cancel</button></div>
       <div class="err" id="pErr"></div>
     </div>`;
   $("pBack").addEventListener("click",back); $("pCancel").addEventListener("click",back);
+  const syncTds=()=>{ const on=$("pTds").checked; $("pTdsPct").disabled=!on; $("pTdsAmt").disabled=!on;
+    const settled=num($("pAmt").value); const tds=on?num($("pTdsAmt").value):0; const cash=Math.round((settled-tds)*100)/100;
+    $("pSplit").innerHTML = on ? `Settling <b>${money(settled)}</b> = cash into account <b>${money(cash)}</b> + TDS <b>${money(tds)}</b> (booked to TDS Receivable).` : `Cash into account: <b>${money(settled)}</b>`;
+  };
+  $("pTds").addEventListener("change",()=>{ if($("pTds").checked && !num($("pTdsPct").value)) {} syncTds(); });
+  $("pAmt").addEventListener("input",()=>{ if($("pTds").checked && num($("pTdsPct").value)) $("pTdsAmt").value=Math.round(num($("pAmt").value)*num($("pTdsPct").value))/100; syncTds(); });
+  $("pTdsPct").addEventListener("input",()=>{ $("pTdsAmt").value=Math.round(num($("pAmt").value)*num($("pTdsPct").value))/100; syncTds(); });
+  $("pTdsAmt").addEventListener("input",syncTds);
+  syncTds();
   // which account the receipt landed in — without this it never reaches the Day Book
   sb().from("cash_accounts").select("id,name,kind").eq("is_active",true).order("kind").then(({data,error})=>{
     if(error || !data || !data.length){ $("pAcct").innerHTML='<option value="">— no accounts set up —</option>'; return; }
     $("pAcct").innerHTML=data.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("");
   });
   $("pSave").addEventListener("click",()=>window.OPS.once($("pSave"),async()=>{
-    const amt=num($("pAmt").value); if(amt<=0){ $("pErr").textContent="Enter a positive amount."; return; }
+    const settled=num($("pAmt").value); if(settled<=0){ $("pErr").textContent="Enter a positive amount."; return; }
+    const on=$("pTds").checked; const tds=on?num($("pTdsAmt").value):0;
+    if(tds<0 || tds>settled){ $("pErr").textContent="TDS must be between 0 and the amount settled."; return; }
+    const cash=Math.round((settled-tds)*100)/100;
     const acct=$("pAcct")?$("pAcct").value:null;
-    const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:amt, paid_on:$("pDate").value||todayISO(),
-      account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
+    const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:cash,
+      tds_pct:on?(num($("pTdsPct").value)||null):null, tds_amount:tds,
+      paid_on:$("pDate").value||todayISO(), account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
     if(error){ $("pErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact receipt was just recorded — check the list before re-entering.":error.message; return; }
-    x.paid+=amt; await recomputeStatus(x);
-    window.OPS.audit("payment","document",x.r.id,money(amt)+" via "+$("pMode").value);
+    x.paid+=settled; await recomputeStatus(x);
+    window.OPS.audit("payment","document",x.r.id,money(cash)+(tds>0?(" + TDS "+money(tds)):"")+" via "+$("pMode").value);
     window.OPS.flashTop("Payment recorded ✓"); back();
   }));
 }
