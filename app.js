@@ -107,6 +107,7 @@ const TOOLS = [
   { key:"vendors",       section:"resources", label:"Vendors",      gate:"perm" },
   { key:"pilots_master", section:"resources", label:"Pilots",       gate:"perm" },
   { key:"locations",     section:"resources", label:"Locations",    gate:"perm" },
+  { key:"crops_master",  section:"resources", label:"Crops",        gate:"perm" },
   { key:"consultants",   section:"resources", label:"Consultants",  gate:"perm" },
   { key:"resources",     section:"resources", label:"Policies",     gate:"all" },
   { key:"manual",        section:"resources", label:"User Manual",  gate:"all" },

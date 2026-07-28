@@ -5,7 +5,7 @@
    the Acre Tracker (which is now a summary dashboard only).
    ============================================================================ */
 (function(){
-const { $, esc, num, money, fmtDate } = window.OPS.helpers;
+const { $, esc, num, money, fmtDate, todayISO } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 let locations=[], clients=[];
 const cName = c => (c && (c.firm_name || c.name)) || "";
@@ -87,6 +87,7 @@ function locForm(rec){
       ${rec&&isApprover()?`<button class="btn sm" id="lLock">${locked?'🔓 Unlock location':'🔒 Lock location'}</button>`:''}
       ${rec&&window.OPS.canDelete()&&!locked?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
     <div class="err" id="lErr"></div></div>
+    ${rec?'<div class="card" id="lCropRates"><h3>Crop-specific rates</h3><div class="muted">Loading…</div></div>':''}
     ${rec?'<div class="card" id="lPilots"><h3>Pilots at this location</h3><div class="muted">Loading…</div></div>':''}`;
   $("lBack").addEventListener("click",view); $("lCancel").addEventListener("click",view);
   if($("lNewClient")) $("lNewClient").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("clients"); });
@@ -98,7 +99,7 @@ function locForm(rec){
     if(error){ alert(error.message); return; }
     window.OPS.flashTop(locked?"Location unlocked ✓":"Location locked ✓"); view();
   });
-  if(rec) loadLocPilots(rec);
+  if(rec){ loadLocPilots(rec); loadCropRates(rec); }
   $("lSave").addEventListener("click",async()=>{
     const name=$("lName").value.trim(); if(!name){ $("lErr").textContent="Name required."; return; }
     const client_id=$("lClient").value; if(!client_id){ $("lErr").textContent="Select the client this location belongs to."; return; }
@@ -115,6 +116,44 @@ function locForm(rec){
     window.OPS.flashTop("Saved ✓"); view();
   });
   if($("lDel")) $("lDel").addEventListener("click",async()=>{ if(!confirm("Delete location? (existing entries remain)"))return; await sb().from("spray_locations").delete().eq("id",rec.id); window.OPS.audit("deleted","spray_locations",rec.id,""); view(); });
+}
+
+/* crop-wise, effective-dated rates for this location */
+async function loadCropRates(rec){
+  const host=$("lCropRates"); if(!host) return;
+  const [{data:crops},{data:rates}]=await Promise.all([
+    sb().from("crops").select("id,name").order("name"),
+    sb().from("location_crop_rates").select("*, crop:crop_id(name)").eq("location_id",rec.id).order("effective_from",{ascending:false}),
+  ]);
+  const rs=rates||[];
+  host.innerHTML=`<h3>Crop-specific rates</h3>
+    <p class="muted" style="margin-top:-4px">Set farmer &amp; client rates per crop, <b>effective from a date</b>. Changing a rate = add a <b>new row with a later date</b>: entries on/after that date use the new rate, earlier entries keep the old one — no need to clone the location. Use <b>Crop = All</b> for a location-wide default; when nothing matches, the base rates above apply.</p>
+    <div class="row wrap" style="gap:8px;align-items:flex-end;margin:6px 0">
+      <div class="field" style="margin:0;max-width:210px"><label>Crop</label><select id="crCrop"><option value="">All crops (default)</option>${(crops||[]).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
+      <div class="field" style="margin:0;max-width:130px"><label>Farmer ₹/acre</label><input id="crF" type="number" step="any"></div>
+      <div class="field" style="margin:0;max-width:130px"><label>Client ₹/acre</label><input id="crC" type="number" step="any"></div>
+      <div class="field" style="margin:0;max-width:160px"><label>Effective from *</label><input id="crFrom" type="date" value="${todayISO()}"></div>
+      <button class="btn sm green" id="crAdd">+ Add rate</button>
+    </div>
+    ${(crops||[]).length?"":'<div class="muted" style="font-size:12px;margin-bottom:6px">No crops in the register yet — add them under <b>Registers → Crops</b> to set crop-specific rates.</div>'}
+    ${rs.length?`<div style="overflow:auto"><table><thead><tr><th>Effective from</th><th>Crop</th><th class="num">Farmer ₹</th><th class="num">Client ₹</th><th></th></tr></thead>
+      <tbody>${rs.map(r=>`<tr><td>${fmtDate(r.effective_from)}</td><td>${r.crop?esc(r.crop.name):'<span class="muted">All crops</span>'}</td>
+        <td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td>
+        <td><button class="btn sm ghost" data-delcr="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted">No crop-specific rates yet — the base rates above apply to every crop.</div>'}`;
+  $("crAdd").addEventListener("click",async()=>{
+    const f=$("crF").value, c=$("crC").value;
+    if(f===""&&c===""){ alert("Enter at least one rate."); return; }
+    if(!$("crFrom").value){ alert("Pick the effective-from date."); return; }
+    const { error }=await sb().from("location_crop_rates").insert({ location_id:rec.id, crop_id:$("crCrop").value||null,
+      farmer_rate:f===""?null:num(f), client_rate:c===""?null:num(c), effective_from:$("crFrom").value, created_by:window.OPS.me.id });
+    if(error){ alert(error.message); return; }
+    window.OPS.flashTop("Rate added ✓"); loadCropRates(rec);
+  });
+  host.querySelectorAll("[data-delcr]").forEach(b=>b.addEventListener("click",async()=>{
+    if(!confirm("Delete this rate row?")) return;
+    await sb().from("location_crop_rates").delete().eq("id",b.getAttribute("data-delcr")); loadCropRates(rec);
+  }));
 }
 
 /* every pilot who has ever worked this location, active and past */
