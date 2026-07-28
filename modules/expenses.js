@@ -248,14 +248,15 @@ async function expenseReview(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Finance</div><h1>Expense Claims</h1>
     <div class="row" style="margin:10px 0"><label style="margin:0">Show</label>
-      <select id="erStatus" style="width:auto"><option value="submitted">Pending review</option><option value="approved">Approved (to pay)</option><option value="paid">Paid</option><option value="rejected">Rejected</option><option value="">All</option></select>
-      <label style="margin:0 0 0 10px">Pay via</label><select id="erMode" style="width:auto"><option>Bank</option><option>UPI</option><option>Cash</option></select></div>
+      <select id="erStatus" style="width:auto"><option value="submitted">Pending review</option><option value="approved">Approved (to pay)</option><option value="part_paid">Part-paid</option><option value="paid">Paid</option><option value="rejected">Rejected</option><option value="">All</option></select></div>
     <div id="erBody" class="muted">Loading…</div>`;
   const load=async()=>{
     const st=$("erStatus").value;
     let q=sb().from("expense_claims").select("*").order("created_at",{ascending:false});
     if(st) q=q.eq("status",st);
-    const { data }=await q; const rows=data||[];
+    const [{ data },{ data:tx }]=await Promise.all([ q, sb().from("cash_txns").select("ref_id,amount,tds_amount").eq("ref_type","expense_claim") ]);
+    const paidBy={}; (tx||[]).forEach(t=>paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount)+num(t.tds_amount));
+    const rows=(data||[]).map(r=>{ r._paid=paidBy[r.id]||0; r._bal=Math.round((num(r.total)-r._paid)*100)/100; return r; });
     $("erBody").innerHTML = rows.length ? rows.map(cardHTML).join("") : '<div class="card muted">Nothing here.</div>';
     rows.forEach(wire);
   };
@@ -291,10 +292,11 @@ function cardHTML(r){
     ${r.purpose?`<div class="muted" style="margin-top:6px"><b>Purpose:</b> ${esc(r.purpose)}</div>`:""}
     <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">${receipts.length?receipts.map((x,i)=>`<button class="btn sm ghost" data-rc="${r.id}|${i}">📎 ${esc(x.name||("receipt "+(i+1)))}</button>`).join(""):'<span class="muted" style="font-size:12px">No receipts attached.</span>'}</div>
     <div class="field full" style="margin-top:8px"><label>Note to employee</label><input id="en_${r.id}" value="${esc(r.note||"")}"></div>
-    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center">
       ${r.status==="submitted"?`<button class="btn green sm" data-act="approve" data-id="${r.id}">Approve</button>
         <button class="btn sm" data-act="reject" data-id="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button>`:''}
-      ${r.status==="approved"?`<button class="btn green sm" data-act="paid" data-id="${r.id}">Mark paid</button>`:''}
+      ${(r.status==="approved"||r.status==="part_paid")?`<button class="btn green sm" data-act="pay" data-id="${r.id}">Record payment…</button>
+        <span class="muted" style="font-size:12px">Paid ${money(r._paid||0)} · Balance <b>${money(r._bal!=null?r._bal:r.total)}</b></span>`:''}
     </div></div>`;
 }
 function wire(r){
@@ -303,31 +305,77 @@ function wire(r){
     const [id,i]=b.getAttribute("data-rc").split("|"); const rc=(r.receipts||[])[+i]; if(!rc) return;
     const url=await receiptLink(rc.path); if(url) window.open(url,"_blank"); else alert("Could not open the receipt.");
   }));
-  root.querySelectorAll("[data-act]").forEach(b=>b.addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
-    const act=b.getAttribute("data-act"); const note=($("en_"+r.id).value.trim()||null); const now=new Date().toISOString();
-    if(act==="approve"){
-      const patch={ status:"approved", approver:window.OPS.me.id, approved_at:now, note };
-      // an approved advance request becomes a real advance to the employee
-      if(r.claim_type==="advance"){
-        const { data:adv }=await sb().from("advances").insert({ party_kind:"employee", employee_id:r.employee_id, payee_text:r.employee_name,
-          amount:num(r.total), purpose:("Advance request "+(r.period||"")), note, created_by:window.OPS.me.id }).select("id").single();
-        if(adv) patch.advance_id=adv.id;
+  root.querySelectorAll("[data-act]").forEach(b=>b.addEventListener("click",e=>{
+    const act=b.getAttribute("data-act");
+    if(act==="pay"){ payExpenseClaim(r); return; }
+    window.OPS.once(e.currentTarget,async()=>{
+      const note=($("en_"+r.id).value.trim()||null); const now=new Date().toISOString();
+      if(act==="approve"){
+        const patch={ status:"approved", approver:window.OPS.me.id, approved_at:now, note };
+        // an approved advance request becomes a real advance to the employee
+        if(r.claim_type==="advance"){
+          const { data:adv }=await sb().from("advances").insert({ party_kind:"employee", employee_id:r.employee_id, payee_text:r.employee_name,
+            amount:num(r.total), purpose:("Advance request "+(r.period||"")), note, created_by:window.OPS.me.id }).select("id").single();
+          if(adv) patch.advance_id=adv.id;
+        }
+        await sb().from("expense_claims").update(patch).eq("id",r.id);
+      } else if(act==="reject"){
+        await sb().from("expense_claims").update({ status:"rejected", approver:window.OPS.me.id, approved_at:now, note }).eq("id",r.id);
       }
-      await sb().from("expense_claims").update(patch).eq("id",r.id);
-    } else if(act==="reject"){
-      await sb().from("expense_claims").update({ status:"rejected", approver:window.OPS.me.id, approved_at:now, note }).eq("id",r.id);
-    } else if(act==="paid"){
-      const mode=$("erMode")?$("erMode").value:"Bank"; const today=todayISO();
-      await sb().from("accounting_entries").insert([
-        { voucher_date:today, narration:typeLabel(r.claim_type)+" — "+(r.employee_name||""), account:"Employee Expenses", debit:num(r.total), credit:0, ref_type:"expense_claim", ref_id:r.id, created_by:window.OPS.me.id },
-        { voucher_date:today, narration:"Expense reimbursed via "+mode, account:mode, debit:0, credit:num(r.total), ref_type:"expense_claim", ref_id:r.id, created_by:window.OPS.me.id },
-      ]);
-      await sb().from("expense_claims").update({ status:"paid", paid_at:now, mode, note }).eq("id",r.id);
-    }
-    window.OPS.audit&&window.OPS.audit("expense_"+act,"expense_claims",r.id,r.employee_name||"");
-    window.OPS.flashTop("Claim "+(act==="paid"?"paid":act+"d")+" ✓");
-    if(window.OPS._expReviewLoad) window.OPS._expReviewLoad();
-  })));
+      window.OPS.audit&&window.OPS.audit("expense_"+act,"expense_claims",r.id,r.employee_name||"");
+      window.OPS.flashTop("Claim "+act+"d ✓");
+      if(window.OPS._expReviewLoad) window.OPS._expReviewLoad();
+    });
+  }));
+}
+
+/* Pay an approved claim — partial allowed, TDS optional; posts via cash_txns
+   (Dr Employee Expenses / Cr Bank / Cr TDS Payable). */
+function payExpenseClaim(r){
+  const m=$("main"); const bal=(r._bal!=null?r._bal:num(r.total));
+  m.innerHTML=`<button class="btn sm" id="epBack">← Back to Expense Claims</button>
+    <div class="card" style="margin-top:12px;max-width:520px"><h1>Pay expense claim</h1>
+      <p class="muted">${esc(typeLabel(r.claim_type))} · ${esc(r.employee_name||"")} · Balance <b>${money(bal)}</b></p>
+      <div class="fgrid">
+        <div class="field"><label>Amount settled *</label><input id="ep_amt" type="number" step="any" value="${bal}"></div>
+        <div class="field"><label>Paid from *</label><select id="ep_acct"><option value="">— loading —</option></select></div>
+        <div class="field"><label>Date</label><input id="ep_date" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Mode</label><select id="ep_mode"><option>Bank</option><option>UPI</option><option>Cash</option></select></div>
+        <div class="field full"><label style="display:inline"><input type="checkbox" id="ep_tds" style="width:auto"> Deduct TDS</label></div>
+        <div class="field"><label>TDS %</label><input id="ep_tdspct" type="number" step="any" disabled></div>
+        <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="ep_tdsamt" type="number" step="any" value="0" disabled></div>
+        <div class="field full"><div class="callout" id="ep_split" style="margin:0"></div></div>
+      </div>
+      <div class="row"><button class="btn green" id="ep_go">Record payment</button><button class="btn" id="ep_cancel">Cancel</button></div>
+      <div class="err" id="ep_err"></div></div>`;
+  $("epBack").addEventListener("click",expenseReview); $("ep_cancel").addEventListener("click",expenseReview);
+  sb().from("cash_accounts").select("id,name,kind").eq("is_active",true).order("kind").then(({data})=>{
+    $("ep_acct").innerHTML=(data||[]).map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("")||'<option value="">— no accounts —</option>'; });
+  const sync=()=>{ const on=$("ep_tds").checked; $("ep_tdspct").disabled=!on; $("ep_tdsamt").disabled=!on;
+    const s=num($("ep_amt").value), t=on?num($("ep_tdsamt").value):0, c=Math.round((s-t)*100)/100;
+    $("ep_split").innerHTML = on?`Settling <b>${money(s)}</b> = paid <b>${money(c)}</b> + TDS <b>${money(t)}</b> (TDS Payable).`:`Paid: <b>${money(s)}</b>`; };
+  $("ep_tds").addEventListener("change",sync);
+  $("ep_amt").addEventListener("input",()=>{ if($("ep_tds").checked&&num($("ep_tdspct").value)) $("ep_tdsamt").value=Math.round(num($("ep_amt").value)*num($("ep_tdspct").value))/100; sync(); });
+  $("ep_tdspct").addEventListener("input",()=>{ $("ep_tdsamt").value=Math.round(num($("ep_amt").value)*num($("ep_tdspct").value))/100; sync(); });
+  $("ep_tdsamt").addEventListener("input",sync); sync();
+  $("ep_go").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const settled=num($("ep_amt").value); if(settled<=0){ $("ep_err").textContent="Enter an amount."; return; }
+    if(!$("ep_acct").value){ $("ep_err").textContent="Pick the account the money left."; return; }
+    const on=$("ep_tds").checked, tds=on?num($("ep_tdsamt").value):0;
+    if(tds<0||tds>settled){ $("ep_err").textContent="TDS must be between 0 and the amount."; return; }
+    const cash=Math.round((settled-tds)*100)/100;
+    const { error }=await sb().from("cash_txns").insert({ account_id:$("ep_acct").value, direction:"out",
+      txn_date:$("ep_date").value||todayISO(), amount:cash, tds_pct:on?(num($("ep_tdspct").value)||null):null, tds_amount:tds, mode:$("ep_mode").value,
+      ref_type:"expense_claim", ref_id:String(r.id), note:typeLabel(r.claim_type)+" — "+(r.employee_name||""), created_by:window.OPS.me.id });
+    if(error){ $("ep_err").textContent=/duplicate|just recorded/i.test(error.message)?"That exact payment was just recorded.":error.message; return; }
+    const { data:all }=await sb().from("cash_txns").select("amount,tds_amount").eq("ref_type","expense_claim").eq("ref_id",String(r.id));
+    const paid=(all||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0);
+    const status = paid>=num(r.total)-0.005 ? "paid" : "part_paid";
+    const patch={ status }; if(status==="paid") patch.paid_at=new Date().toISOString();
+    await sb().from("expense_claims").update(patch).eq("id",r.id);
+    window.OPS.audit&&window.OPS.audit("expense_paid","expense_claims",r.id,money(cash)+(tds>0?(" + TDS "+money(tds)):""));
+    window.OPS.flashTop("Payment recorded ✓"); expenseReview();
+  }));
 }
 
 window.OPS.routes.my_expenses    = myExpenses;

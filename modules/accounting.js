@@ -501,24 +501,40 @@ function settle(kind, id, suggested, back){
     <div class="fgrid">
       <div class="field"><label>Account *</label><select id="st_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select></div>
       <div class="field"><label>Date paid *</label><input type="date" id="st_date" value="${todayISO()}"></div>
-      <div class="field"><label>Amount *</label><input type="number" step="0.01" id="st_amt" value="${suggested||''}"></div>
+      <div class="field"><label>Amount settled *</label><input type="number" step="0.01" id="st_amt" value="${suggested||''}"></div>
       <div class="field"><label>Mode</label><select id="st_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
+      <div class="field full"><label style="display:inline"><input type="checkbox" id="st_tds" style="width:auto"> We deducted TDS</label></div>
+      <div class="field"><label>TDS %</label><input id="st_tdspct" type="number" step="any" placeholder="e.g. 2" disabled></div>
+      <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="st_tdsamt" type="number" step="any" value="0" disabled></div>
+      <div class="field full"><div class="callout" id="st_split" style="margin:0"></div></div>
       <div class="field full"><label>Note</label><input id="st_note"></div>
     </div>
     <div class="row"><button class="btn green" id="stGo">Record payment</button></div>
     <div class="err" id="stErr"></div></div>`;
   $("stBack").addEventListener("click",back);
+  const stSync=()=>{ const on=$("st_tds").checked; $("st_tdspct").disabled=!on; $("st_tdsamt").disabled=!on;
+    const settled=num($("st_amt").value), tds=on?num($("st_tdsamt").value):0, cash=Math.round((settled-tds)*100)/100;
+    $("st_split").innerHTML = on ? `Settling <b>${money(settled)}</b> = cash out <b>${money(cash)}</b> + TDS <b>${money(tds)}</b> (TDS Payable).` : `Cash out: <b>${money(settled)}</b>`; };
+  $("st_tds").addEventListener("change",stSync);
+  $("st_amt").addEventListener("input",()=>{ if($("st_tds").checked && num($("st_tdspct").value)) $("st_tdsamt").value=Math.round(num($("st_amt").value)*num($("st_tdspct").value))/100; stSync(); });
+  $("st_tdspct").addEventListener("input",()=>{ $("st_tdsamt").value=Math.round(num($("st_amt").value)*num($("st_tdspct").value))/100; stSync(); });
+  $("st_tdsamt").addEventListener("input",stSync); stSync();
   $("stGo").addEventListener("click",()=>window.OPS.once($("stGo"),async()=>{
-    const amt=num($("st_amt").value); if(!(amt>0)){ $("stErr").textContent="Enter an amount."; return; }
+    const settled=num($("st_amt").value); if(!(settled>0)){ $("stErr").textContent="Enter an amount."; return; }
+    const on=$("st_tds").checked, tds=on?num($("st_tdsamt").value):0;
+    if(tds<0||tds>settled){ $("stErr").textContent="TDS must be between 0 and the amount settled."; return; }
+    const cash=Math.round((settled-tds)*100)/100;
     const { error }=await sb().from("cash_txns").insert({ account_id:$("st_acct").value, direction:"out",
-      txn_date:$("st_date").value||todayISO(), amount:amt, mode:$("st_mode").value,
+      txn_date:$("st_date").value||todayISO(), amount:cash, tds_pct:on?(num($("st_tdspct").value)||null):null, tds_amount:tds, mode:$("st_mode").value,
       ref_type:kind, ref_id:String(id), note:$("st_note").value||null, created_by:window.OPS.me.id });
     if(error){ $("stErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
-    // update the source record's status
+    // recompute status from cumulative settled (cash + TDS) across all payments
+    const { data:all }=await sb().from("cash_txns").select("amount,tds_amount").eq("ref_type",kind).eq("ref_id",String(id));
+    const paidTot=(all||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0);
+    const status = paidTot>=num(suggested)-0.005 ? "paid" : (paidTot>0 ? "part_paid" : "unpaid");
     const tbl = kind==="payable" ? "payables" : "expenses";
-    const newStatus = kind==="payable" ? (amt>=suggested-0.005 ? "paid" : "part_paid") : "paid";
-    await sb().from(tbl).update({ status:newStatus }).eq("id",id);
-    window.OPS.audit("paid",tbl,id,money(amt));
+    await sb().from(tbl).update({ status }).eq("id",id);
+    window.OPS.audit("paid",tbl,id,money(cash)+(tds>0?(" + TDS "+money(tds)):""));
     window.OPS.flashTop("Payment recorded ✓"); back();
   }));
 }

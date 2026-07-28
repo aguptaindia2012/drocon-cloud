@@ -281,8 +281,8 @@ async function records(){
   }
   const ids=(runs||[]).map(r=>r.id);
   let payBy={};
-  if(ids.length){ const { data:pays }=await sb().from("salary_payments").select("salary_run_id,amount").in("salary_run_id",ids);
-    (pays||[]).forEach(p=>payBy[p.salary_run_id]=(payBy[p.salary_run_id]||0)+num(p.amount)); }
+  if(ids.length){ const { data:pays }=await sb().from("salary_payments").select("salary_run_id,amount,tds_amount").in("salary_run_id",ids);
+    (pays||[]).forEach(p=>payBy[p.salary_run_id]=(payBy[p.salary_run_id]||0)+num(p.amount)+num(p.tds_amount)); }
   const rows=(runs||[]).map(r=>{ const paid=payBy[r.id]||0; return {r, paid, bal:num(r.net_payable)-paid}; });
   const totNet=rows.reduce((s,x)=>s+num(x.r.net_payable),0), totPaid=rows.reduce((s,x)=>s+x.paid,0);
   $("rBody").innerHTML=`
@@ -385,22 +385,38 @@ function payRun(x){
   m.innerHTML=`<button class="btn sm" id="pBack">← Back</button>
     <div class="card" style="margin-top:12px;max-width:460px"><h1>Pay salary</h1>
       <p class="muted"><b>${esc(run.emp&&run.emp.name||'')}</b> · ${run.period_month} · Balance <b>${money(x.bal)}</b></p>
-      <div class="fgrid"><div class="field"><label>Amount *</label><input id="pAmt" type="number" step="any" value="${x.bal}"></div>
+      <div class="fgrid"><div class="field"><label>Amount settled *</label><input id="pAmt" type="number" step="any" value="${x.bal}"></div>
         <div class="field"><label>Date</label><input id="pDate" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Mode</label><select id="pMode"><option>Bank</option><option>UPI</option><option>Cash</option></select></div></div>
+        <div class="field"><label>Mode</label><select id="pMode"><option>Bank</option><option>UPI</option><option>Cash</option></select></div>
+        <div class="field full"><label style="display:inline"><input type="checkbox" id="pTds" style="width:auto"> Deduct TDS</label></div>
+        <div class="field"><label>TDS %</label><input id="pTdsPct" type="number" step="any" disabled></div>
+        <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="pTdsAmt" type="number" step="any" value="0" disabled></div>
+        <div class="field full"><div class="callout" id="pSplit" style="margin:0"></div></div></div>
       <div class="row"><button class="btn green" id="pSave">Record payment</button><button class="btn" id="pCancel">Cancel</button></div>
       <div class="err" id="pErr"></div></div>`;
   $("pBack").addEventListener("click",records); $("pCancel").addEventListener("click",records);
-  $("pSave").addEventListener("click",async()=>{
-    const amt=num($("pAmt").value); if(amt<=0){ $("pErr").textContent="Enter an amount."; return; }
-    await sb().from("salary_payments").insert({ salary_run_id:run.id, amount:amt, paid_on:$("pDate").value||todayISO(), mode:$("pMode").value, created_by:window.OPS.me.id });
-    await sb().from("accounting_entries").insert([
-      { voucher_date:$("pDate").value||todayISO(), narration:"Salary paid — "+(run.emp&&run.emp.name||""), account:"Salaries Payable", debit:amt, credit:0, ref_type:"salary_payment", ref_id:run.id, created_by:window.OPS.me.id },
-      { voucher_date:$("pDate").value||todayISO(), narration:"Salary paid via "+$("pMode").value, account:$("pMode").value, debit:0, credit:amt, ref_type:"salary_payment", ref_id:run.id, created_by:window.OPS.me.id },
-    ]);
-    if(amt>=x.bal-0.01) await sb().from("salary_runs").update({status:"paid"}).eq("id",run.id);
+  const sync=()=>{ const on=$("pTds").checked; $("pTdsPct").disabled=!on; $("pTdsAmt").disabled=!on;
+    const settled=num($("pAmt").value), tds=on?num($("pTdsAmt").value):0, cash=Math.round((settled-tds)*100)/100;
+    $("pSplit").innerHTML = on?`Settling <b>${money(settled)}</b> = paid <b>${money(cash)}</b> + TDS <b>${money(tds)}</b> (TDS Payable).`:`Paid: <b>${money(settled)}</b>`; };
+  $("pTds").addEventListener("change",sync);
+  $("pAmt").addEventListener("input",()=>{ if($("pTds").checked&&num($("pTdsPct").value)) $("pTdsAmt").value=Math.round(num($("pAmt").value)*num($("pTdsPct").value))/100; sync(); });
+  $("pTdsPct").addEventListener("input",()=>{ $("pTdsAmt").value=Math.round(num($("pAmt").value)*num($("pTdsPct").value))/100; sync(); });
+  $("pTdsAmt").addEventListener("input",sync); sync();
+  $("pSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
+    const settled=num($("pAmt").value); if(settled<=0){ $("pErr").textContent="Enter an amount."; return; }
+    const on=$("pTds").checked, tds=on?num($("pTdsAmt").value):0;
+    if(tds<0||tds>settled){ $("pErr").textContent="TDS must be between 0 and the amount."; return; }
+    const cash=Math.round((settled-tds)*100)/100, date=$("pDate").value||todayISO(), mode=$("pMode").value;
+    await sb().from("salary_payments").insert({ salary_run_id:run.id, amount:cash, tds_pct:on?(num($("pTdsPct").value)||null):null, tds_amount:tds, paid_on:date, mode, created_by:window.OPS.me.id });
+    const entries=[
+      { voucher_date:date, narration:"Salary paid — "+(run.emp&&run.emp.name||""), account:"Salaries Payable", debit:settled, credit:0, ref_type:"salary_payment", ref_id:run.id, created_by:window.OPS.me.id },
+      { voucher_date:date, narration:"Salary paid via "+mode, account:mode, debit:0, credit:cash, ref_type:"salary_payment", ref_id:run.id, created_by:window.OPS.me.id },
+    ];
+    if(tds>0) entries.push({ voucher_date:date, narration:"TDS on salary", account:"TDS Payable", debit:0, credit:tds, ref_type:"salary_payment", ref_id:run.id, created_by:window.OPS.me.id });
+    await sb().from("accounting_entries").insert(entries);
+    if(settled>=x.bal-0.01) await sb().from("salary_runs").update({status:"paid"}).eq("id",run.id);
     window.OPS.flashTop("Payment recorded ✓"); records();
-  });
+  }));
 }
 async function ledger(){
   const m=$("main");
