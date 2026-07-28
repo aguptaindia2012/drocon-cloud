@@ -143,9 +143,12 @@ async function makeCredit(doc){
     const gstTotal = isFarmer ? 0 : Math.round(sub*CLIENT_GST)/100;
     const fy=fyOf(todayISO());
     let seq=1; try{ const { data }=await sb().rpc("next_doc_seq",{p_doc_type:"credit_note",p_fy:fy}); if(data) seq=data; }catch(e){}
-    const number="DCB/CN/"+fy+"/"+String(seq).padStart(4,"0");
+    const mkNum=s=>"DCB/CN/"+fy+"/"+String(s).padStart(4,"0");
+    const taken=new Set();
+    try{ const { data:ex }=await sb().from("documents").select("number").ilike("number","DCB/CN/"+fy+"/%"); (ex||[]).forEach(d=>d.number&&taken.add(d.number)); }catch(e){}
+    while(taken.has(mkNum(seq))) seq++;
 
-    const rec={ doc_type:"credit_note", number, fiscal_year:fy, seq, doc_date:todayISO(),
+    const rec={ doc_type:"credit_note", fiscal_year:fy, doc_date:todayISO(),
       party_kind:"client", party_id:doc.party_id, party_snapshot:doc.party_snapshot,
       related_doc_id:doc.id, line_items:items,
       totals:{ sub, gstTotal, total: sub+gstTotal },
@@ -154,8 +157,16 @@ async function makeCredit(doc){
       data:{ source:"acre_billing", side:doc.data.side, creditOf:doc.number,
              title: isFarmer ? "Credit Note (Bill of Supply)" : null },
       created_by:window.OPS.me.id };
-    const { data:ins, error }=await sb().from("documents").insert(rec).select().single();
+    let ins, error;
+    for(let attempt=0; attempt<12; attempt++){
+      rec.number=mkNum(seq); rec.seq=seq;
+      ({ data:ins, error }=await sb().from("documents").insert(rec).select().single());
+      if(!error) break;
+      if(/entity_number_uniq|duplicate key/i.test(error.message||"")){ taken.add(rec.number); seq++; while(taken.has(mkNum(seq))) seq++; continue; }
+      throw error;
+    }
     if(error) throw error;
+    const number=rec.number;
 
     // release the acre rows that sat behind the credited lines so they can be re-billed
     const dates=items.map(it=>String(it.desc||"").match(/\(([^)]+)\)/)).filter(Boolean).map(m=>m[1]);
@@ -318,14 +329,18 @@ async function generate(chosen){
                                   : ((party&&party.client_rate_label)||"Marketing Expense");
     const fy=fyOf(todayISO());
     let seq=1; try{ const { data }=await sb().rpc("next_doc_seq",{p_doc_type:"invoice",p_fy:fy}); if(data) seq=data; }catch(e){}
-    const number="DCB/"+fy+"/"+String(seq).padStart(4,"0");
+    const mkNum=s=>"DCB/"+fy+"/"+String(s).padStart(4,"0");
+    // some invoices (e.g. imported) exist without a matching seq — skip any number already taken
+    const taken=new Set();
+    try{ const { data:ex }=await sb().from("documents").select("number").ilike("number","DCB/"+fy+"/%"); (ex||[]).forEach(d=>d.number&&taken.add(d.number)); }catch(e){}
+    while(taken.has(mkNum(seq))) seq++;
 
     const items=L.map(x=>({ desc: label+" ("+fmtDate(x.date)+")"+(x.sub?("\n"+x.sub):""),
       hsn:HSN, gst: side==="client"?CLIENT_GST:0, qty:x.acres, rate:x.rate, per:"Acre", disc:0 }));
     const sub=L.reduce((s,x)=>s+x.amount,0);
     const gstTotal = side==="client" ? Math.round(sub*CLIENT_GST)/100 : 0;
 
-    const rec={ doc_type:"invoice", number, fiscal_year:fy, seq, doc_date:todayISO(),
+    const rec={ doc_type:"invoice", fiscal_year:fy, doc_date:todayISO(),
       party_kind:"client", party_id:partyId,
       party_snapshot:{ firmName:partyName(party), gstin:party&&party.gstin, state:party&&party.state,
                        address:party&&party.address, mobile:party&&party.mobile },
@@ -337,8 +352,18 @@ async function generate(chosen){
              locations: chosen.map(c=>({id:c.id,name:c.name})) },
       created_by:window.OPS.me.id };
 
-    const { data:ins, error }=await sb().from("documents").insert(rec).select().single();
+    // insert with retry — the (entity, number) unique guards against a race or a
+    // pre-existing number the seq counter didn't know about.
+    let ins, error;
+    for(let attempt=0; attempt<12; attempt++){
+      rec.number=mkNum(seq); rec.seq=seq;
+      ({ data:ins, error }=await sb().from("documents").insert(rec).select().single());
+      if(!error) break;
+      if(/entity_number_uniq|duplicate key/i.test(error.message||"")){ taken.add(rec.number); seq++; while(taken.has(mkNum(seq))) seq++; continue; }
+      throw error;
+    }
     if(error) throw error;
+    const number=rec.number;
 
     const ids=[].concat(...L.map(x=>x.ids));
     const { data:n, error:mErr }=await sb().rpc("mark_acre_billed",{ p_ids:ids, p_doc:ins.id, p_side:side });
