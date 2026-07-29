@@ -55,6 +55,27 @@ async function load(){
   rows.forEach(x=>{ if(x.balance>0) buckets[bucket(x.age)]+=x.balance; });
   const overdue=rows.filter(x=>x.balance>0 && x.age>30).length;
 
+  // Pending invoicing: approved acre work not yet turned into an invoice.
+  // farmer component = 0% GST (Bill of Supply); client component grossed up by
+  // 18% so it is comparable to the GST-inclusive invoice receivable above.
+  // Acre work is not entity-tagged, so this is shown only in the "All" view.
+  const CLIENT_GST = 18;
+  let pendFarmer=0, pendClientBase=0, pendRows=0, pendShown=false;
+  if(!entity){
+    pendShown=true;
+    const { data:ab } = await sb().from("v_acre_billing")
+      .select("farmer_amount,client_amount,farmer_doc_id,client_doc_id,farmer_billed_override,client_billed_override");
+    (ab||[]).forEach(r=>{
+      let hit=false;
+      if(r.farmer_doc_id==null && !r.farmer_billed_override && num(r.farmer_amount)>0){ pendFarmer+=num(r.farmer_amount); hit=true; }
+      if(r.client_doc_id==null && !r.client_billed_override && num(r.client_amount)>0){ pendClientBase+=num(r.client_amount); hit=true; }
+      if(hit) pendRows++;
+    });
+  }
+  const pendClient = Math.round(pendClientBase*(1+CLIENT_GST/100)*100)/100;   // + 18% GST
+  const pendInvoicing = Math.round((pendFarmer+pendClient)*100)/100;
+  const totToReceive = Math.round((totReceivable+pendInvoicing)*100)/100;
+
   // monthly series: credit raised (invoiced) and funds received (payments)
   const ym=d=>String(d||"").slice(0,7);
   const invByM={}, payByM={};
@@ -68,6 +89,8 @@ async function load(){
       <div class="stat"><div class="n">${money(totInvoiced)}</div><div class="l">Total invoiced</div></div>
       <div class="stat"><div class="n">${money(totReceived)}</div><div class="l">Total received</div></div>
       <div class="stat"><div class="n">${overdue}</div><div class="l">Overdue &gt;30d</div></div>
+      ${pendShown?`<div class="stat"><div class="n">${money(pendInvoicing)}</div><div class="l">Pending invoicing</div></div>
+      <div class="stat" style="background:#e7f0de;border-color:#c9dcb6"><div class="n" style="color:var(--green)">${money(totToReceive)}</div><div class="l">Total still to receive</div></div>`:''}
     </div>
     <div class="card"><h3>How the receivable is built up</h3>
       <table><tbody>
@@ -77,8 +100,12 @@ async function load(){
         <tr style="border-top:2px solid var(--line)"><td>= Net of all invoices</td><td class="num">${money(totInvoiced-totCredit-totReceived)}</td></tr>
         <tr><td>Add back: advances / over-collections${totAdvance>0?' <span class="chip rejected">check data</span>':''}</td><td class="num">+ ${money(totAdvance)}</td></tr>
         <tr style="border-top:2px solid var(--green)"><td><b>= Total receivable (still owed)</b></td><td class="num"><b>${money(totReceivable)}</b></td></tr>
+        ${pendShown?`<tr><td>Add: pending invoicing — farmer rate (Bill of Supply, 0% GST)</td><td class="num">+ ${money(pendFarmer)}</td></tr>
+        <tr><td>Add: pending invoicing — client rate incl. 18% GST</td><td class="num">+ ${money(pendClient)}</td></tr>
+        <tr style="border-top:2px solid var(--green)"><td><b>= Total still to receive (billed + un-invoiced)</b></td><td class="num"><b>${money(totToReceive)}</b></td></tr>`:''}
       </tbody></table>
       <p class="muted">Receivable counts only invoices with money <b>still owed</b>. It can exceed “invoiced − received” when some invoices are <b>over-collected</b> (received more than billed) — that surplus is added back above and almost always means a payment was logged against the wrong invoice or entered twice. Review those rows below and fix them in <b>Finance → Payment Status</b> or the Invoice.</p>
+      ${pendShown?`<p class="muted"><b>Pending invoicing</b> is approved acre work (${pendRows} row${pendRows===1?'':'s'}) not yet turned into an invoice — the value still to be billed and then collected. Client-rate work is shown <b>incl. 18% GST</b> to match invoice values; farmer-rate work is 0% GST. Raise these in <b>Finance → Acre Invoicing</b>. This figure covers all entities and is shown only in the “All” view.</p>`:''}
     </div>
     ${overpaid.length?`<div class="card"><h3>⚠ Over-collected invoices (received &gt; billed) — likely bad data</h3>
       <div style="overflow:auto"><table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Billed</th><th class="num">Credit</th><th class="num">Received</th><th class="num">Over by</th></tr></thead>
@@ -107,7 +134,7 @@ async function load(){
   window.OPS.report.bar("recAging", ["0–30","31–60","61–90",">90"], [buckets["0-30"],buckets["31-60"],buckets["61-90"],buckets[">90"]], "Receivable (₹)", "#F48A1C");
   const due=rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age);
   window.OPS.report.wordButton("recReport","Invoices & Receivables Report"+(entity?(" — "+entity):""), ()=>([
-    {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total receivable",money(totReceivable)],["Total invoiced",money(totInvoiced)],["Total received",money(totReceived)],["Overdue >30d",overdue]]}},
+    {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total receivable",money(totReceivable)],["Total invoiced",money(totInvoiced)],["Total received",money(totReceived)],["Overdue >30d",overdue]].concat(pendShown?[["Pending invoicing (all entities, client incl. GST)",money(pendInvoicing)],["Total still to receive",money(totToReceive)]]:[])}},
     {heading:"Monthly credit in market (invoiced)", image:window.OPS.report.img("recCredit"), table:{headers:["Month","Invoiced"], rows:months.map(k=>[k,money(invByM[k]||0)])}},
     {heading:"Funds received by month", image:window.OPS.report.img("recFunds"), table:{headers:["Month","Received"], rows:months.map(k=>[k,money(payByM[k]||0)])}},
     {heading:"Receivables aging", image:window.OPS.report.img("recAging"), table:{headers:["0–30","31–60","61–90",">90"], rows:[[money(buckets["0-30"]),money(buckets["31-60"]),money(buckets["61-90"]),money(buckets[">90"])]]}},
