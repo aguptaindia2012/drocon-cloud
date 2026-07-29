@@ -15,7 +15,8 @@ const DCB = {
   stateName:"Uttar Pradesh", stateCode:"09",
   mobile:"+91 73026 27122", altMobile:"+91 90843 81822",
   email:"info@droconbharat.com", web:"www.droconbharat.com",
-  director:"Abhishek Gupta", bank:{ name:"", account:"", ifsc:"", branch:"" }
+  director:"Abhishek Gupta",
+  bank:{ name:"ICICI Bank", account:"097505005032", ifsc:"ICIC0000975", branch:"Garh Road, Meerut" }
 };
 const DCB_LOGO = (window.DCB_LOGO_DATAURL) || ""; // set below
 
@@ -189,6 +190,15 @@ function generateWord(doc){
     run((doc.doc_type==="quotation"?"Amount Payable (in words): ":"Amount Chargeable (in words): "),{bold:true,size:17}),
     run(amountInWords(totals.total),{italics:true,size:17})
   ]}));
+
+  // ---- Bank details (payment to DroCon) — invoices & quotations only ----
+  if((doc.doc_type==="invoice" || doc.doc_type==="quotation") && DCB.bank && DCB.bank.account){
+    children.push(new D.Paragraph({spacing:{before:120,after:30},children:[run("Bank Details (for payment to DroCon Bharat)",{bold:true,size:18,color:BLUE})]}));
+    children.push(new D.Paragraph({spacing:{after:20},children:[run(
+      "Account Name: "+DCB.legalName+"    |    Bank: "+DCB.bank.name+"    |    A/C No.: "+DCB.bank.account+
+      "    |    IFSC: "+DCB.bank.ifsc+(DCB.bank.branch?("    |    Branch: "+DCB.bank.branch):""),
+      {size:16})]}));
+  }
 
   // ---- Terms ----
   const terms=doc.terms||{};
