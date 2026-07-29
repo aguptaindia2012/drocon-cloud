@@ -117,9 +117,13 @@ const TOOLS = [
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
   { key:"access_log", section:"audit", label:"Access Log",    gate:"admin" },
   { key:"selftest",   section:"audit", label:"System Health", gate:"admin" },
-  // Partner Portal — visible ONLY to external (invite-only) partner logins
-  { key:"portal_submit", section:"portal", label:"Submit Invoice", gate:"external" },
-  { key:"portal_mine",   section:"portal", label:"My Invoices",    gate:"external" },
+  // Pilot-login approvals (DroCon reviews vendor-requested pilot logins)
+  { key:"pilot_approvals", section:"reviews", label:"Pilot Logins", gate:"perm" },
+  // Partner Portal — visible ONLY to external (invite-only) partner logins.
+  // `party` scopes a tool to specific external party types.
+  { key:"portal_submit", section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
+  { key:"portal_mine",   section:"portal", label:"My Invoices",    gate:"external", party:["authorized_partner","consultant"] },
+  { key:"vendor_pilots", section:"portal", label:"My Pilots",      gate:"external", party:["vendor"] },
   { key:"portal_help",   section:"portal", label:"Help & FAQs",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
@@ -296,7 +300,7 @@ function toolByKey(k){ return TOOLS.find(t=>t.key===k); }
 function canSee(tool){
   if(!tool) return false;
   // External (invite-only) partner logins are sandboxed to the Partner Portal only.
-  if(isExternal()) return tool.gate==="external";
+  if(isExternal()) return tool.gate==="external" && (!tool.party || tool.party.indexOf(profile.party_type)>=0);
   if(tool.gate==="external") return false;
   if(tool.gate==="admin")    return isAdmin();
   if(tool.gate==="approver") return isApprover();

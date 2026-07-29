@@ -478,7 +478,8 @@ async function inviteManager(back){
         <div class="field"><label>Display name</label><input id="ivName" placeholder="Partner / firm name"></div>
         <div class="field"><label>Type *</label><select id="ivType">
           <option value="authorized_partner">Authorized Partner</option>
-          <option value="consultant">Consultant</option></select></div>
+          <option value="consultant">Consultant</option>
+          <option value="vendor">Vendor</option></select></div>
         <div class="field"><label>Link to record (optional)</label><select id="ivParty"><option value="">— none —</option></select></div>
       </div>
       <div class="row" style="margin-top:8px"><button class="btn green" id="ivSave">Create invite</button>
@@ -491,6 +492,8 @@ async function inviteManager(back){
     try{
       if(t==="consultant"){ const {data}=await sb().from("employees").select("id,name").eq("emp_type","consultant").order("name");
         (data||[]).forEach(x=>sel.innerHTML+=`<option value="${x.id}">${esc(x.name)}</option>`); }
+      else if(t==="vendor"){ const {data}=await sb().from("vendors").select("id,name,firm_name").order("name");
+        (data||[]).forEach(x=>sel.innerHTML+=`<option value="${x.id}">${esc(x.firm_name||x.name)}</option>`); }
       else { const {data}=await sb().from("authorized_partners").select("id,name").order("name");
         (data||[]).forEach(x=>sel.innerHTML+=`<option value="${x.id}">${esc(x.name)}</option>`); }
     }catch(e){}
