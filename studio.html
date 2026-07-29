@@ -1287,6 +1287,8 @@ function newDraft(key){
       cpPocName:"", cpPocDesig:"", cpPocMobile:"", cpPocEmail:"",
       // counterparty bank / payment details (for remittance)
       cpBankAcctName:"", cpBankName:"", cpBankAcctNo:"", cpBankIfsc:"", cpBankBranch:"",
+      // DroCon Bharat's own receiving account — toggle whether it prints in the agreement
+      dcbBankShow: t.cat==="client", dcbBankAcctName:DCB.legalName, dcbBankName:"", dcbBankAcctNo:"", dcbBankIfsc:"", dcbBankBranch:"",
       // second counterparty (tripartite — Execution Partner) details + banking
       cp2Name:"", cp2Type:"", cp2Address:"", cp2Gst:"", cp2Cin:"", cp2Pan:"",
       cp2PocName:"", cp2PocDesig:"", cp2PocMobile:"", cp2PocEmail:"",
@@ -1552,6 +1554,7 @@ function migrateDraft(d){
     droconNoticeName:DCB.director, droconNoticeDesig:"Director & Founder", droconNoticeMobile:DCB.mobile, droconNoticeEmail:DCB.email,
     cpNoticeName:"", cpNoticeDesig:"", cpNoticeMobile:"", cpNoticeEmail:"", droneCount:"",
     cpBankAcctName:"", cpBankName:"", cpBankAcctNo:"", cpBankIfsc:"", cpBankBranch:"", cpCin:"", cpPan:"",
+    dcbBankShow: d.cat==="client", dcbBankAcctName:DCB.legalName, dcbBankName:"", dcbBankAcctNo:"", dcbBankIfsc:"", dcbBankBranch:"",
     cp2Name:"", cp2Type:"", cp2Address:"", cp2Gst:"", cp2Cin:"", cp2Pan:"",
     cp2PocName:"", cp2PocDesig:"", cp2PocMobile:"", cp2PocEmail:"",
     cp2BankAcctName:"", cp2BankName:"", cp2BankAcctNo:"", cp2BankIfsc:"", cp2BankBranch:"",
@@ -1705,6 +1708,23 @@ function bankFieldset(pfx, legend){
       <div class="field full"><label>Branch</label><input type="text" data-f="${pfx}BankBranch" value="${g('BankBranch')}"></div>
     </div></fieldset>`;
 }
+/* DroCon Bharat's own receiving account, with a toggle for whether it prints in this agreement */
+function dcbBankFieldset(){
+  const on = !!draft.fields.dcbBankShow;
+  return `
+    <fieldset class="fieldset"><legend>DroCon Bharat — Receiving Account</legend>
+    <div class="fgrid">
+      <div class="field full"><label>Include DroCon's receiving account in this agreement?</label>
+        <select data-f="dcbBankShow"><option value="true" ${on?'selected':''}>Yes — print it</option><option value="false" ${!on?'selected':''}>No — omit it</option></select></div>
+    </div>
+    <div class="fgrid" ${on?'':'style="opacity:.5"'}>
+      <div class="field"><label>Account holder name</label><input type="text" data-f="dcbBankAcctName" value="${F('dcbBankAcctName')}" placeholder="${esc(DCB.legalName)}"></div>
+      <div class="field"><label>Bank name</label><input type="text" data-f="dcbBankName" value="${F('dcbBankName')}" placeholder="e.g. HDFC Bank Ltd."></div>
+      <div class="field"><label>Account number</label><input type="text" data-f="dcbBankAcctNo" value="${F('dcbBankAcctNo')}"></div>
+      <div class="field"><label>IFSC</label><input type="text" data-f="dcbBankIfsc" value="${F('dcbBankIfsc')}"></div>
+      <div class="field full"><label>Branch</label><input type="text" data-f="dcbBankBranch" value="${F('dcbBankBranch')}"></div>
+    </div></fieldset>`;
+}
 
 function panelParties(){
   const isVendor = draft.cat==="vendor";
@@ -1756,6 +1776,8 @@ function panelParties(){
         <div class="field"><label>Signatory name</label><input type="text" data-f="droconSignName" value="${F('droconSignName')}"></div>
         <div class="field"><label>Signatory title</label><input type="text" data-f="droconSignTitle" value="${F('droconSignTitle')}"></div>
       </div></fieldset>
+
+      ${dcbBankFieldset()}
     </div>`;
   }
   return `
@@ -1828,6 +1850,8 @@ function panelParties(){
       <div class="field"><label>Signatory name</label><input type="text" data-f="droconSignName" value="${F('droconSignName')}"></div>
       <div class="field"><label>Signatory title</label><input type="text" data-f="droconSignTitle" value="${F('droconSignTitle')}"></div>
     </div></fieldset>
+
+    ${dcbBankFieldset()}
 
     ${(draft.kind||"agreement")==="agreement" ? `
     <fieldset class="fieldset"><legend>Contacts for service of notices</legend>
@@ -2039,11 +2063,12 @@ function wirePanel(){
   document.querySelectorAll("[data-f]").forEach(el=>{
     el.addEventListener("input",()=>{
       const f=el.getAttribute("data-f"); let v=el.value;
-      if(f==="exclusivity") v=(v==="true");
+      if(f==="exclusivity"||f==="dcbBankShow") v=(v==="true");
       if(f==="title"){ draft.title=v; }
       else if(f==="subtitle"){ draft.subtitle=v; }
       else draft.fields[f]=v;
       saveLocal(true);
+      if(f==="dcbBankShow") renderPanel();   // re-render so the account fields dim/undim
     });
   });
   // rich text toolbar
@@ -2413,10 +2438,14 @@ function bankRowsHTML(pfx, label){
     <tr><td>Branch</td><td>${v(g('BankBranch'))}</td></tr>`;
 }
 function bankingHTML(){
-  const cpLabel = isTri() ? (draft.fields.cpName||"Project Management Partner") : (draft.fields.cpName||draft.fields.recipientName||draft.cpRole);
-  let rows = bankRowsHTML('cp', cpLabel);
-  if(isTri()) rows += bankRowsHTML('cp2', draft.fields.cp2Name||"Execution Partner");
-  return `<p>Remittances under this Agreement shall be made only to the account(s) below. Any change must be notified in writing on the party's letterhead, signed by an authorised signatory, and confirmed by DroCon Bharat before payment to the changed account.</p>
+  const f=draft.fields; let rows="";
+  if(wantsBanking()){
+    const cpLabel = isTri() ? (f.cpName||"Project Management Partner") : (f.cpName||f.recipientName||draft.cpRole);
+    rows += bankRowsHTML('cp', cpLabel);
+    if(isTri()) rows += bankRowsHTML('cp2', f.cp2Name||"Execution Partner");
+  }
+  if(f.dcbBankShow) rows += bankRowsHTML('dcb', "DroCon Bharat — Receiving Account");
+  return `<p>The bank / payment account details relevant to this Agreement are set out below. Any change to an account shall be notified in writing on the relevant party's letterhead, signed by an authorised signatory, and confirmed by the paying party before any payment is made to the changed account.</p>
   <table class="doc"><thead><tr><th>Party</th><th>Detail</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function hasBankData(pfx){ const f=draft.fields; return !!(f[pfx+'BankAcctName']||f[pfx+'BankName']||f[pfx+'BankAcctNo']||f[pfx+'BankIfsc']||f[pfx+'BankBranch']); }
@@ -2442,7 +2471,8 @@ function getSections(){
               + `<p class="ref">The full allocation of responsibilities and costs is set out in the Responsibilities Annexure.</p>` });
     }
   });
-  if(wantsBanking() && (isTri() || hasBankData('cp') || hasBankData('cp2'))){
+  const cpBank = wantsBanking() && (isTri() || hasBankData('cp') || hasBankData('cp2'));
+  if((cpBank || draft.fields.dcbBankShow) && kind!=="jd" && kind!=="deployment"){
     out.push({ title:"Bank & Payment Details", html: bankingHTML() });
   }
   return out;
