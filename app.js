@@ -76,6 +76,7 @@ const TOOLS = [
   // Finance — document generation
   { key:"invoice",       section:"finance", label:"Invoice",        gate:"perm" },
   { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
+  { key:"vendor_rates",  section:"finance", label:"Vendor Rates",   gate:"perm" },
   { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
   { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
   { key:"expense_mgmt",  section:"finance", label:"Expense Management", gate:"perm" },
@@ -121,6 +122,7 @@ const TOOLS = [
   { key:"pilot_approvals",      section:"reviews", label:"Pilot Logins", gate:"perm" },
   { key:"pilot_acre_approvals", section:"reviews", label:"Pilot Acres",  gate:"perm" },
   { key:"field_issues",         section:"reviews", label:"Field Issues", gate:"perm" },
+  { key:"vendor_invoice_approvals", section:"reviews", label:"Vendor Invoices", gate:"perm" },
   // Partner Portal — visible ONLY to external (invite-only) partner logins.
   // `party` scopes a tool to specific external party types.
   { key:"portal_submit",       section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
@@ -131,6 +133,9 @@ const TOOLS = [
   { key:"pilot_reports",       section:"portal", label:"My Reports",     gate:"external", party:["pilot"] },
   { key:"issue_report",        section:"portal", label:"Field Issues",   gate:"external", party:["pilot"] },
   { key:"vendor_issues",       section:"portal", label:"Field Issues",   gate:"external", party:["vendor"] },
+  { key:"vendor_invoice_new",  section:"portal", label:"Invoice DroCon", gate:"external", party:["vendor"] },
+  { key:"vendor_invoices_mine",section:"portal", label:"My DroCon Invoices", gate:"external", party:["vendor"] },
+  { key:"vendor_report",       section:"portal", label:"Vendor Report",  gate:"external", party:["vendor"] },
   { key:"portal_help",         section:"portal", label:"Help & FAQs",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
