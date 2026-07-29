@@ -120,6 +120,7 @@ const TOOLS = [
   // Vendor/Pilot portal approvals (DroCon side)
   { key:"pilot_approvals",      section:"reviews", label:"Pilot Logins", gate:"perm" },
   { key:"pilot_acre_approvals", section:"reviews", label:"Pilot Acres",  gate:"perm" },
+  { key:"field_issues",         section:"reviews", label:"Field Issues", gate:"perm" },
   // Partner Portal — visible ONLY to external (invite-only) partner logins.
   // `party` scopes a tool to specific external party types.
   { key:"portal_submit",       section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
@@ -128,6 +129,8 @@ const TOOLS = [
   { key:"vendor_acre_review",  section:"portal", label:"Acre Review",    gate:"external", party:["vendor"] },
   { key:"pilot_report",        section:"portal", label:"Report Acres",   gate:"external", party:["pilot"] },
   { key:"pilot_reports",       section:"portal", label:"My Reports",     gate:"external", party:["pilot"] },
+  { key:"issue_report",        section:"portal", label:"Field Issues",   gate:"external", party:["pilot"] },
+  { key:"vendor_issues",       section:"portal", label:"Field Issues",   gate:"external", party:["vendor"] },
   { key:"portal_help",         section:"portal", label:"Help & FAQs",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
