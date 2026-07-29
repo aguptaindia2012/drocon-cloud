@@ -56,14 +56,12 @@ async function load(){
 
 function render(){
   const totA=rows.reduce((s,r)=>s+num(r.acres),0);
-  const totF=rows.reduce((s,r)=>s+num(r.farmer_amount),0);
-  const totC=rows.reduce((s,r)=>s+num(r.client_amount),0);
   // per pilot
   const byP={}; rows.forEach(r=>{ const k=r.pilot_name||"(none)";
-    byP[k]=byP[k]||{acres:0,amt:0,days:new Set()}; byP[k].acres+=num(r.acres); byP[k].amt+=num(r.total_amount); byP[k].days.add(r.entry_date); });
+    byP[k]=byP[k]||{acres:0,days:new Set()}; byP[k].acres+=num(r.acres); byP[k].days.add(r.entry_date); });
   // per location
   const byL={}; rows.forEach(r=>{ const k=r.location_name||"(none)";
-    byL[k]=byL[k]||{acres:0,amt:0}; byL[k].acres+=num(r.acres); byL[k].amt+=num(r.total_amount); });
+    byL[k]=byL[k]||{acres:0}; byL[k].acres+=num(r.acres); });
   const unbilled=rows.filter(r=>!r.farmer_billed).length;
 
   $("vrBody").innerHTML=`
