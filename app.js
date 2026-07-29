@@ -117,14 +117,18 @@ const TOOLS = [
   { key:"audit",      section:"audit", label:"Audit log",     gate:"admin" },
   { key:"access_log", section:"audit", label:"Access Log",    gate:"admin" },
   { key:"selftest",   section:"audit", label:"System Health", gate:"admin" },
-  // Pilot-login approvals (DroCon reviews vendor-requested pilot logins)
-  { key:"pilot_approvals", section:"reviews", label:"Pilot Logins", gate:"perm" },
+  // Vendor/Pilot portal approvals (DroCon side)
+  { key:"pilot_approvals",      section:"reviews", label:"Pilot Logins", gate:"perm" },
+  { key:"pilot_acre_approvals", section:"reviews", label:"Pilot Acres",  gate:"perm" },
   // Partner Portal — visible ONLY to external (invite-only) partner logins.
   // `party` scopes a tool to specific external party types.
-  { key:"portal_submit", section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
-  { key:"portal_mine",   section:"portal", label:"My Invoices",    gate:"external", party:["authorized_partner","consultant"] },
-  { key:"vendor_pilots", section:"portal", label:"My Pilots",      gate:"external", party:["vendor"] },
-  { key:"portal_help",   section:"portal", label:"Help & FAQs",    gate:"external" },
+  { key:"portal_submit",       section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
+  { key:"portal_mine",         section:"portal", label:"My Invoices",    gate:"external", party:["authorized_partner","consultant"] },
+  { key:"vendor_pilots",       section:"portal", label:"My Pilots",      gate:"external", party:["vendor"] },
+  { key:"vendor_acre_review",  section:"portal", label:"Acre Review",    gate:"external", party:["vendor"] },
+  { key:"pilot_report",        section:"portal", label:"Report Acres",   gate:"external", party:["pilot"] },
+  { key:"pilot_reports",       section:"portal", label:"My Reports",     gate:"external", party:["pilot"] },
+  { key:"portal_help",         section:"portal", label:"Help & FAQs",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
 // Tools whose access an admin can grant (the per-tool permission set)

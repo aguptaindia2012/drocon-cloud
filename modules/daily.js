@@ -57,6 +57,7 @@ async function view(editSub){
       </tr></thead><tbody></tbody></table></div>
       <button class="btn sm" id="dAdd">+ Add spray</button>
       <div id="dSum" class="muted" style="margin-top:6px"></div>
+      <div id="dRecent" style="margin-top:10px"></div>
       <div class="fgrid" style="margin-top:14px">
         <div class="field"><label>Assign reviewer *</label><select id="dApprover"><option value="">— select reviewer —</option></select></div>
       </div>
@@ -110,6 +111,22 @@ async function pickLocation(locId, keepRows){
     (locPilots.length ? `<b>${locPilots.length}</b> pilot(s) assigned here.`
       : `<span style="color:#a3322a">No pilots assigned to this location — assign them under <b>Pilots</b>.</span>`);
   if(!keepRows){ drows = rowsForLocation(curLoc, locPilots); renderRows(); }
+  loadRecent(curLoc.id);
+}
+
+/* Recently reported acres at this location (last 3 days) — posted entries and
+   still-pending pilot reports — so the team never re-enters the same work. */
+async function loadRecent(locId){
+  const host=$("dRecent"); if(!host) return;
+  host.innerHTML='<div class="muted small-note">Loading recent reports…</div>';
+  const { data, error }=await sb().from("v_recent_pilot_acres").select("*").eq("location_id",locId).order("entry_date",{ascending:false});
+  if(error){ host.innerHTML=''; return; }
+  const rows=data||[];
+  if(!rows.length){ host.innerHTML='<div class="small-note muted">No acres reported at this location in the last 3 days.</div>'; return; }
+  const stChip=s=>s==="posted"?'<span class="chip ok">posted</span>':(s==="vendor_ok"?'<span class="chip issued">pilot→vendor ok</span>':'<span class="chip warn">pilot pending</span>');
+  host.innerHTML=`<details><summary style="cursor:pointer;font-weight:700;color:var(--blue)">⚠ Recently reported here (${rows.length}) — check before entering, to avoid duplicates</summary>
+    <div style="overflow:auto;margin-top:6px"><table class="tt-skip"><thead><tr><th>Date</th><th>Pilot</th><th>Crop</th><th class="num">Acres</th><th>Source</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.pilot_name||"")}</td><td>${esc(r.crop||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td><td>${stChip(r.state)}</td></tr>`).join("")}</tbody></table></div></details>`;
 }
 function renderRows(){
   const tb=$("dRows").querySelector("tbody");
