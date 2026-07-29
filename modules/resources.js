@@ -7,12 +7,43 @@
 const { $, esc, fmt } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 
+/* Guides bundled with the app itself (served from the repo /docs folder).
+   These are always available — no drive link needed — and are the living
+   how-to documents. Add new guides by dropping the file in /docs and
+   appending a row here. Paths are relative to the app so they work on any
+   domain / sub-path. */
+const BUILTIN_GUIDES = [
+  { title:"Locations & Daily Acre Entry — Workflow Guide",
+    category:"Guide · Living document",
+    desc:"How to set up a new project (Client, Vendor, Pilots, Crops, Location & rates) and record daily acre entries. Covers Farmer vs Client rate, crop-wise date-effective rates, approval and invoicing.",
+    file:"./docs/DroCon_Workflow_Guide.pptx" }
+];
+
+function builtinHTML(){
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="eyebrow">Guides &amp; training</div>
+    <table><thead><tr><th>Title</th><th>Category</th><th>Open</th></tr></thead>
+    <tbody>${BUILTIN_GUIDES.map((g,i)=>`<tr><td><b>${esc(g.title)}</b>${g.desc?`<br><span class="muted">${esc(g.desc)}</span>`:''}</td>
+      <td>${esc(g.category||'')}</td>
+      <td><a class="btn sm" href="${esc(g.file)}" target="_blank" rel="noopener">Open / Download</a>
+        <button class="btn sm" data-gwa="${i}">WhatsApp</button></td></tr>`).join("")}</tbody></table></div>`;
+}
+function wireBuiltin(){
+  const abs=(f)=>{ try{ return new URL(f, window.location.href).href; }catch(e){ return f; } };
+  document.querySelectorAll("[data-gwa]").forEach(b=>b.addEventListener("click",()=>{
+    const g=BUILTIN_GUIDES[+b.getAttribute("data-gwa")];
+    window.open("https://wa.me/?text="+encodeURIComponent(g.title+" — "+abs(g.file)),"_blank");
+  }));
+}
+
 async function view(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Resources</div><h1>Policies &amp; Documents</h1>
+    ${builtinHTML()}
     <div class="row wrap" style="margin:10px 0"><input id="rSearch" placeholder="Search title / category…" style="max-width:280px">
       <div class="spacer"></div><button class="btn green sm" id="rNew">+ Add document</button></div>
     <div id="rList" class="muted">Loading…</div>`;
+  wireBuiltin();
   $("rNew").addEventListener("click",()=>form(null));
   const { data }=await sb().from("resources").select("*, who:created_by(full_name,email)").order("category").order("title");
   const all=data||[];
