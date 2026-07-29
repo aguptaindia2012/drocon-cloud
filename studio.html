@@ -533,17 +533,17 @@ const VENDOR_CLAUSES = [
 <p><b>Full Client Rate to the {{CP}}.</b> For acres sprayed under an elected Work Order, DroCon Bharat shall pass through to the {{CP}} <b>one hundred percent (100%) of the per-acre rate actually billed to, and collected from, the end client</b> (the "Full Client Rate"), in place of the {{CP}} Billing Rate percentage. Payment of the Full Client Rate remains conditional upon DroCon Bharat's collection from the end client, per the Payment clause.</p>
 <p><b>Consideration — Daily Acreage Contribution (in kind).</b> In consideration of receiving the Full Client Rate, and in place of the DroCon Bharat Fee percentage, the {{CP}} shall contribute to DroCon Bharat, for each drone for each day on which it operates under an elected Work Order, a daily acreage (the "Acreage Contribution"), valued at the Full Client Rate for that day and retained by (or payable to) DroCon Bharat, as follows:</p>
 <ul>
-<li>where the day's confirmed order <b>exceeds 10 acres</b> — <b>1.0 acre per operating day</b>;</li>
-<li>where the day's confirmed order is <b>up to 10 acres</b> — <b>0.5 acre per operating day</b>.</li>
+<li>where the day's confirmed order <b>exceeds 7 acres</b> — <b>1.0 acre per operating day</b>;</li>
+<li>where the day's confirmed order is <b>up to 7 acres</b> — <b>0.5 acre per operating day</b>.</li>
 </ul>
 <p><b>Billing and Margin.</b> The {{CP}} is billed and paid the full client rate for every acre sprayed; DroCon Bharat's margin is realised in kind as the daily Acreage Contribution (the "acreage-equivalent margin"):</p>
 <table class="doc"><thead><tr><th>Daily order (per drone)</th><th>Rate offered to the {{CP}}</th><th>Gross revenue (per drone / day)</th><th>DroCon margin (acreage-equivalent)</th></tr></thead>
 <tbody>
-<tr><td>Above 10 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>1.0 acre × client rate</td></tr>
-<tr><td>Up to 10 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>0.5 acre × client rate</td></tr>
+<tr><td>Above 7 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>1.0 acre × client rate</td></tr>
+<tr><td>Up to 7 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>0.5 acre × client rate</td></tr>
 </tbody></table>
 <p>The {{CP}}'s net for the day equals the Gross revenue less DroCon Bharat's acreage-equivalent margin. <i>Illustration at a client rate of ₹400/acre: a 20-acre day = ₹8,000 gross, DroCon margin ₹400 (1.0 acre), the {{CP}} nets ₹7,600; a 6-acre day = ₹2,400 gross, DroCon margin ₹200 (0.5 acre), the {{CP}} nets ₹2,200.</i></p>
-<p>The thresholds, acreage figures and rate above are the negotiated defaults and may be varied for a specific {{CP}} by editing this clause or in the relevant Work Order.</p>
+<p>The thresholds, acreage figures and rate above are the negotiated defaults and may be varied for a specific {{CP}} by editing this clause or in the relevant Work Order. <b>Where two crops are sprayed on the same day at two rates, the higher rate shall prevail to calculate DroCon Bharat's daily fee.</b></p>
 <p><b>Waiver of the Acreage Contribution on downtime.</b></p>
 <ul>
 <li><b>No work available (DroCon / client fault).</b> Where no work is available on a day due to the fault of DroCon Bharat or its client (for example, no order allocated, client stoppage or access not provided), <b>no Acreage Contribution shall be charged</b> for that day.</li>
@@ -917,7 +917,7 @@ const WORKORDER_CLAUSES = [
 <p>The Parties <b>elect</b>, for this Work Order, the <b>Full Client Rate / Daily Acreage Contribution</b> model in place of the percentage split in the MSA Billing Rates Annexure. Accordingly:</p>
 <ul>
 <li>DroCon Bharat shall pass through to the {{CP}} <b>100% of the per-acre rate billed to and collected from the end client</b> for acres sprayed under this WO (payment remaining conditional on collection, per the MSA); and</li>
-<li>in consideration, the {{CP}} shall contribute to DroCon Bharat, per drone per operating day, an <b>Acreage Contribution</b> valued at the Full Client Rate: <b>1.0 acre/day</b> where the day's confirmed order exceeds 10 acres, and <b>0.5 acre/day</b> where it is up to 10 acres. DroCon Bharat may set off the Acreage Contribution against amounts payable to the {{CP}}.</li>
+<li>in consideration, the {{CP}} shall contribute to DroCon Bharat, per drone per operating day, an <b>Acreage Contribution</b> valued at the Full Client Rate: <b>1.0 acre/day</b> where the day's confirmed order exceeds 7 acres, and <b>0.5 acre/day</b> where it is up to 7 acres. Where two crops are sprayed on the same day at two rates, the higher rate shall prevail to calculate the daily fee. DroCon Bharat may set off the Acreage Contribution against amounts payable to the {{CP}}.</li>
 </ul>
 <p><b>Downtime waiver.</b> No Acreage Contribution is charged for a day on which no work is available due to the fault of DroCon Bharat or its client. On drone damage, the Acreage Contribution is waived for up to two (2) days from the damage and resumes from the third (3rd) day — unless return to service is delayed by DroCon Bharat's delay in supplying parts/engineering, in which case the waiver continues; provided the {{CP}} orders the required parts from DroCon Bharat within six (6) hours of the damage.</p>
 <p>The spares-and-maintenance priority and all operational covenants and assurances in the MSA apply to this WO. Thresholds and figures above may be varied by written agreement for this WO. Where this clause is not elected, the MSA commission-based Billing Rates apply.</p>` },
@@ -928,6 +928,99 @@ const WORKORDER_CLAUSES = [
   { id:"wo_acceptance", title:"Acceptance", on:true, body:`
 <p>By signing below, the {{CP}} accepts this WO and reaffirms that all Supplied Drones hold a valid UIN, each pilot holds a valid RPC, and the {{CP}} shall perform the Services in compliance with the MSA.</p>` }
 ];
+
+/* ---- Tripartite MSA (Principal Contractor + Project Management Partner + Execution Partner) ----
+   Operational clauses lifted from the executed Tripartite Master Service Agreement.
+   {{SP}} = "Service Partners"; {{PMP}}/{{EP}} flow in the two partners' names.
+   The legal & boilerplate tail is shared with the vendor MSA. */
+const TRIPARTITE_OPS = [
+  { id:"tri_structure", title:"Recitals and Structure of the Engagement", on:true, body:`
+<ul>
+<li>DroCon Bharat sources and contracts agricultural drone spraying work from end clients and, as <b>Principal Contractor</b>, awards Work Orders under this Agreement.</li>
+<li>DroCon Bharat appoints {{PMP}} as its <b>Project Management Partner</b> to manage execution of the awarded Work Orders. The Project Management Partner is authorised to deploy {{EP}} as the <b>Execution Partner</b> for field execution, while remaining fully responsible to DroCon Bharat for such execution.</li>
+<li><b>Joint and several liability.</b> Notwithstanding the sub-contracting arrangement between the Service Partners, the Service Partners are <b>jointly and severally liable</b> to DroCon Bharat for the performance of all obligations of the Service Partners under this Agreement and each Work Order. Any internal allocation of work, cost or revenue between the Service Partners does not affect, dilute or discharge their joint and several liability to DroCon Bharat.</li>
+<li>This Agreement establishes the general terms governing the relationship; each Work Order is subject to these terms. In case of conflict, a Work Order prevails only with respect to the specific Services covered by that Work Order.</li>
+</ul>` },
+  { id:"tri_sp_obligations", title:"General Obligations of the Service Partners (Joint and Several)", on:true, body:`
+<p>The following obligations are owed jointly and severally by the Service Partners to DroCon Bharat. Where an obligation is naturally performed by the field operator, the Execution Partner shall perform it and the Project Management Partner shall procure and stand responsible for such performance:</p>
+<ul>
+<li><b>Supply.</b> For each Work Order, provide the Supplied Drone(s) and necessary primary equipment (including the initial set of batteries and charging unit) in a fully operational, airworthy and DGCA-compliant condition, matching the drone details in the Drone Details Appendix.</li>
+<li><b>Initial costs.</b> Bear the initial acquisition cost of the drone and associated primary equipment.</li>
+<li><b>Scheduled maintenance.</b> Be responsible for all scheduled, non-operational maintenance, servicing and repair of the Supplied Drone to ensure continuous airworthiness.</li>
+<li><b>Repairs.</b> Be solely liable for any defect, failure, crash or wilful damage affecting operations, and remedy or replace the equipment at their own cost within forty-eight (48) hours.</li>
+<li><b>Deployment timeline.</b> Bear all deployment costs at the Work Order location and deploy within five (5) days of Work Order issuance. Failure may lead to automatic withdrawal of the Work Order, which DroCon Bharat may reissue to another partner at its sole discretion.</li>
+<li><b>DGCA &amp; regulatory compliance.</b> Ensure all Supplied Drones hold a valid UIN, that each pilot holds a valid RPC, and that all operations comply with DGCA rules, the Drone Rules 2021 and local authority requirements (airspace, altitude, safety).</li>
+<li><b>Order completion &amp; reporting.</b> On completion of each mission, share with DroCon Bharat: farmer's name; total acres sprayed; farmer's valid phone number; village name and location; zonal officer name (if any); and GPS-tagged photographs of the chemical used with the farmer at the site.</li>
+<li><b>Project management interface.</b> The Project Management Partner shall coordinate execution with the Execution Partner, verify daily work and quality, consolidate MIS/reporting and act as the Service Partners' single point of contact to DroCon Bharat — without relieving the Execution Partner of its execution obligations or the Service Partners of their joint and several liability.</li>
+</ul>` },
+  { id:"tri_dcb_obligations", title:"DroCon Bharat's General Obligations", on:true, body:`
+<ul>
+<li><b>Operational management.</b> DroCon Bharat shall be responsible for end-client invoicing and all communication with the end client relating to payments, orders and contracting.</li>
+<li><b>Personnel.</b> DroCon Bharat shall provide necessary support staff for operational management.</li>
+<li><b>Quality assurance.</b> DroCon Bharat may use the reported order details to conduct independent verification and feedback calls with farmers. Any discrepancy, misreporting or negative feedback may result in withholding of payment or termination of the specific Work Order.</li>
+</ul>` },
+  { id:"tri_payment", title:"Payment, Invoicing and Client Interaction (Back-to-Back)", on:true, body:`
+<p><b>Payment chain.</b> Payments flow on a back-to-back basis: DroCon Bharat pays the Project Management Partner, and the Project Management Partner pays the Execution Partner. DroCon Bharat's payment obligation runs only to the Project Management Partner.</p>
+<p><b>Invoicing to DroCon Bharat.</b> The Project Management Partner shall submit weekly, proper GST invoices detailing the Service Partners' accrued share of Gross Revenue for Services completed under the relevant Work Order, together with the work-completion report and supporting documents, no later than sixty (60) days after completion of work; DroCon Bharat may decline payment for invoices submitted beyond this period.</p>
+<p><b>Payment terms — collection-linked.</b> DroCon Bharat's obligation to pay is strictly conditional upon DroCon Bharat's successful collection of the corresponding Gross Collection from the end client. DroCon Bharat shall remit the undisputed amount to the Project Management Partner within five (5) days of receiving the relevant Gross Collection and a proper invoice. No interest, penalty or damages shall accrue against DroCon Bharat for any delay caused by non-receipt or delayed receipt of the corresponding payment from the end client. Specific payment timelines from the client shall be communicated through the respective Work Order.</p>
+<p><b>Downstream payment (Project Management Partner to Execution Partner).</b> The Project Management Partner shall pay the Execution Partner every Monday after receipt of the corresponding payment from DroCon Bharat and submission by the Execution Partner of its GST invoice, work-completion report and supporting documents. This downstream cycle is an obligation between the Service Partners and does not create any payment obligation of DroCon Bharat to the Execution Partner.</p>
+<p><b>Designated account — payment routing.</b> All payments from DroCon Bharat under this Agreement shall be processed only into the account set out in the <b>Bank &amp; Payment Details</b> below. Any change to those account details shall be effective only if notified by the Project Management Partner to DroCon Bharat in writing on its letterhead, signed by an authorised signatory, and confirmed by DroCon Bharat before any payment is made to the changed account.</p>
+<p><b>Client interaction.</b> The Service Partners may communicate with DroCon Bharat's client only for order management, mission planning and reporting delivered orders. Any other communication without prior approval shall be treated as bypassing DroCon Bharat to secure future orders, and DroCon Bharat may at its sole discretion terminate this Agreement immediately and block future orders for a period it determines.</p>` },
+  { id:"tri_covenants", title:"Operational Covenants and Assurances", on:true, body:`
+<p>The Parties give the following operational covenants, which apply to every Work Order under the standard commission-based model (and, where elected, in addition to the Full Client Rate model):</p>
+<p><b>The Service Partners (jointly and severally) covenant and assure that they shall:</b></p>
+<ul>
+<li><b>Report accurately.</b> Submit true and complete order reports for each mission (acres sprayed, farmer name and valid phone, village/location, and GPS-tagged photographs). Misreporting, inflation of acreage or duplicate reporting entitles DroCon Bharat to withhold, adjust or recover the affected amounts and, if repeated, to terminate.</li>
+<li><b>Bear their own costs.</b> Meet all of their own costs (drone, batteries, pilot, fuel, transport, maintenance and insurance) as set out in the Responsibilities Annexure; their share of Gross Revenue is not a guarantee of profit.</li>
+<li><b>Accept collection-linked payment and set-off.</b> Acknowledge that payment is conditional on DroCon Bharat's collection from the end client, and that DroCon Bharat may set off any advance, spares dues, penalty or amount owed by either Service Partner against sums otherwise payable.</li>
+<li><b>Maintain continuity and compliance.</b> Deploy within the agreed timeline, keep each drone airworthy and DGCA-compliant with valid UIN and RPC, and not abandon or under-serve active orders.</li>
+<li><b>Deal exclusively through DroCon Bharat.</b> Not bypass or circumvent DroCon Bharat with any introduced farmer, client or pilot, consistent with the Non-Circumvention clause.</li>
+</ul>
+<p><b>DroCon Bharat covenants and assures that it shall:</b></p>
+<ul>
+<li><b>Pay promptly on collection.</b> On receiving the corresponding Gross Collection from the end client and a proper invoice, remit the undisputed share within the period stated in the Payment clause.</li>
+<li><b>Reconcile transparently.</b> Base any deduction, withholding or set-off on shared, verifiable records, and provide a reasonable explanation on request.</li>
+<li><b>Manage the client relationship.</b> Handle client invoicing, contracting and collection, and use reasonable efforts to provide orders.</li>
+<li><b>Deal fairly with data.</b> Use the Service Partners' and farmers' data only for performing and documenting the Services, consistent with the Confidentiality and Data Security clause.</li>
+</ul>` },
+  { id:"tri_commercial_acreage", title:"Alternative Commercial Model — Full Client Rate for a Daily Acreage Contribution", on:false, body:`
+<p><b>Election.</b> This clause applies <b>only where the Parties expressly elect it in writing</b> (in this Agreement or the relevant Work Order). Where elected, it operates <b>in place of the percentage split in the Billing Rates Annexure</b> for the Work Orders to which it is applied; the commission-based model otherwise remains the default.</p>
+<p><b>Full Client Rate to the Service Partners.</b> For acres sprayed under an elected Work Order, DroCon Bharat shall pass through to the Service Partners <b>one hundred percent (100%) of the per-acre rate actually billed to, and collected from, the end client</b> (the "Full Client Rate"), in place of the Partner Billing Rate percentage. Payment remains conditional upon DroCon Bharat's collection from the end client. The internal division of this amount between the Service Partners is a matter between them and shall not affect DroCon Bharat's margin.</p>
+<p><b>Consideration — Daily Acreage Contribution (in kind).</b> In consideration of receiving the Full Client Rate, and in place of the DroCon Bharat Fee percentage, the Service Partners shall contribute to DroCon Bharat, for each drone for each day on which it operates under an elected Work Order, a daily acreage (the "Acreage Contribution"), valued at the Full Client Rate for that day, as follows:</p>
+<ul>
+<li>where the day's confirmed order <b>exceeds 7 acres</b> — <b>1.0 acre per operating day</b>;</li>
+<li>where the day's confirmed order is <b>up to 7 acres</b> — <b>0.5 acre per operating day</b>.</li>
+</ul>
+<table class="doc"><thead><tr><th>Daily order (per drone)</th><th>Rate offered to Service Partners</th><th>Gross revenue (per drone / day)</th><th>DroCon margin (acreage-equivalent)</th></tr></thead>
+<tbody>
+<tr><td>Above 7 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>1.0 acre × client rate</td></tr>
+<tr><td>Up to 7 acres / day</td><td>100% of the client rate</td><td>Client rate × acres sprayed</td><td>0.5 acre × client rate</td></tr>
+</tbody></table>
+<p><i>Illustration at a client rate of ₹400/acre: a 20-acre day = ₹8,000 gross, DroCon margin ₹400 (1.0 acre), Service Partners net ₹7,600; a 6-acre day = ₹2,400 gross, DroCon margin ₹200 (0.5 acre), Service Partners net ₹2,200.</i></p>
+<p>The thresholds, acreage figures and rate above are the negotiated defaults and may be varied for a specific Work Order by editing this clause or in the relevant Work Order. <b>Where two crops are sprayed on the same day at two rates, the higher rate shall prevail to calculate DroCon Bharat's daily fee.</b></p>
+<p><b>Waiver of the Acreage Contribution on downtime.</b></p>
+<ul>
+<li><b>No work available (DroCon / client fault).</b> Where no work is available on a day due to the fault of DroCon Bharat or its client, no Acreage Contribution shall be charged for that day.</li>
+<li><b>Drone damage.</b> Where the drone is out of service due to damage, crash or malfunction, DroCon Bharat shall waive the Acreage Contribution for up to two (2) days from the date of the damage, resuming from the third (3rd) day onwards — except where return to service is delayed because DroCon Bharat delayed the supply of the required parts or engineering, in which case the waiver continues for each further day of DroCon-caused delay.</li>
+<li><b>Condition for the damage waiver.</b> To qualify, the Service Partners must order the required parts from DroCon Bharat within six (6) hours of the damage (consistent with the Spares and Maintenance Priority clause). If they fail to order within this window, the Acreage Contribution continues to accrue notwithstanding the downtime.</li>
+</ul>
+<p><b>Set-off &amp; minimum utilisation.</b> The Acreage Contribution accrues per operating day, per drone, from verified order/reporting data, irrespective of the timing of client payment, and is DroCon Bharat's fee (not contingent on the Service Partners' profitability). DroCon Bharat may set it off against any amount otherwise payable. If the Service Partners decline, under-report or fail to operate on available order days to avoid the Acreage Contribution, DroCon Bharat may treat the contribution as accrued and/or revert to the commission model. All amounts are exclusive of GST; TDS applies as required by law.</p>` },
+  { id:"tri_spares_priority", title:"Spares and Maintenance Priority (DroCon First Right of Supply)", on:true, body:`
+<p><b>First right of supply.</b> In the event of any drone damage, crash, malfunction, wear or other need for spares, repair or engineering support, the Service Partners shall <b>first request and procure the required spares and maintenance / engineering services from DroCon Bharat</b>, at DroCon Bharat's prevailing rates, and shall give DroCon Bharat the first opportunity to supply before approaching any third party.</p>
+<p><b>Third-party fallback (only on unavailability).</b> Only where DroCon Bharat confirms in writing that the required spares and/or a qualified engineer are not available within a reasonable period (ordinarily forty-eight (48) to seventy-two (72) hours), or fails to respond within the response window, the Service Partners may source equivalent spares and services from a competent third party to minimise downtime.</p>
+<ul>
+<li>Any third-party spares must be genuine or OEM-equivalent and fitted by a competent engineer; the Service Partners remain solely responsible for the airworthiness, UIN validity and DGCA compliance of the drone after any repair.</li>
+<li>The Service Partners shall retain and, on request, share invoices and records for any third-party spares or services procured under this clause.</li>
+<li>This clause is a right of first supply only; it does not oblige DroCon Bharat to hold stock or guarantee availability, and DroCon Bharat shall not be liable for any downtime, delay or loss arising from unavailability of spares or engineers. Work Order timelines shall be reasonably adjusted for such downtime.</li>
+<li>Where the Alternative Commercial Model above is elected, continued procurement of spares and maintenance from DroCon Bharat (save on confirmed unavailability) is a condition of that model.</li>
+</ul>` }
+];
+/* shared legal + boilerplate tail, reused from the vendor MSA (uses {{CP}} = "Service Partners") */
+const TRI_TAIL_IDS = ["definitions","warranties","confidentiality","ip","noncompete","abac",
+  "insurance","indemnity","liability","forcemajeure","relationship","termination","governinglaw","notices","severability","general"];
+const TRIPARTITE_CLAUSES = TRIPARTITE_OPS.concat(
+  VENDOR_CLAUSES.filter(c=>TRI_TAIL_IDS.indexOf(c.id)>=0)
+);
 
 /* Deployment letter (sugar mill) — editable clauses. Section A (deployment
    details) and Section B (drone/pilot table) are rendered from the input
@@ -1033,6 +1126,14 @@ const TEMPLATES = [
     desc:"For partners who themselves engage entrepreneurs (a DroCon-style sub-network), with flow-down obligations.",
     clauseSet:"vendor_agg", ops:false },
 
+  { key:"tripartite", cat:"vendor", status:"ready",
+    label:"Tripartite MSA (Project Mgmt + Execution Partner)",
+    cpRole:"Service Partners",
+    title:"TRIPARTITE MASTER SERVICE AGREEMENT",
+    subtitle:"Drone Supply, Project Management and Operations — Principal Contractor · Project Management Partner · Execution Partner",
+    desc:"Three-party MSA: DroCon Bharat (Principal Contractor) engages a Project Management Partner who deploys an Execution Partner. Joint-and-several liability, back-to-back payments, Full Client Rate option and bank details for both partners.",
+    clauseSet:"tripartite", ops:false },
+
   { key:"work_order", cat:"vendor", status:"ready", kind:"workorder",
     label:"Work Order (under MSA)",
     cpRole:"Partner",
@@ -1122,6 +1223,7 @@ CLAUSE_SETS["offer"] = OFFER_CLAUSES;
 CLAUSE_SETS["internship"] = INTERNSHIP_CLAUSES;
 CLAUSE_SETS["jd"] = JD_CLAUSES;
 CLAUSE_SETS["workorder"] = WORKORDER_CLAUSES;
+CLAUSE_SETS["tripartite"] = TRIPARTITE_CLAUSES;
 CLAUSE_SETS["deployment_en"] = DEPLOY_CLAUSES_EN;
 CLAUSE_SETS["deployment_hi"] = DEPLOY_CLAUSES_HI;
 
@@ -1183,6 +1285,14 @@ function newDraft(key){
     fields:{
       effectiveDate:"", cpName:"", cpType:"", cpAddress:"", cpGst:"",
       cpPocName:"", cpPocDesig:"", cpPocMobile:"", cpPocEmail:"",
+      // counterparty bank / payment details (for remittance)
+      cpBankAcctName:"", cpBankName:"", cpBankAcctNo:"", cpBankIfsc:"", cpBankBranch:"",
+      // second counterparty (tripartite — Execution Partner) details + banking
+      cp2Name:"", cp2Type:"", cp2Address:"", cp2Gst:"", cp2Cin:"", cp2Pan:"",
+      cp2PocName:"", cp2PocDesig:"", cp2PocMobile:"", cp2PocEmail:"",
+      cp2BankAcctName:"", cp2BankName:"", cp2BankAcctNo:"", cp2BankIfsc:"", cp2BankBranch:"",
+      // first counterparty extra registration ids (tripartite recital)
+      cpCin:"", cpPan:"",
       droconSignName:DCB.director, droconSignTitle:t.signTitle||"Director",
       startDate:"", endDate:"", durationDays:"", city:DCB.city, confYears:"5",
       orderAcres:"20", serviceRate:"", contractValue:"", deposit:"10,000",
@@ -1402,6 +1512,9 @@ function subTokens(text){
     .replace(/\{\{PM_REGION\}\}/g, esc(f.pmRegion||"________________________"))
     .replace(/\{\{PM_ACRE_RATE\}\}/g, esc(f.pmAcreRate||"5"))
     .replace(/\{\{PM_SPARES_PCT\}\}/g, esc(f.pmSparesPct||"4"))
+    .replace(/\{\{SP\}\}/g, "Service Partners")
+    .replace(/\{\{PMP\}\}/g, esc(f.cpName||"the Project Management Partner"))
+    .replace(/\{\{EP\}\}/g, esc(f.cp2Name||"the Execution Partner"))
     .replace(/\{\{CP\}\}/g, esc(draft.cpRole));
 }
 function fmtDate(iso){
@@ -1438,6 +1551,10 @@ function migrateDraft(d){
   const fd = {
     droconNoticeName:DCB.director, droconNoticeDesig:"Director & Founder", droconNoticeMobile:DCB.mobile, droconNoticeEmail:DCB.email,
     cpNoticeName:"", cpNoticeDesig:"", cpNoticeMobile:"", cpNoticeEmail:"", droneCount:"",
+    cpBankAcctName:"", cpBankName:"", cpBankAcctNo:"", cpBankIfsc:"", cpBankBranch:"", cpCin:"", cpPan:"",
+    cp2Name:"", cp2Type:"", cp2Address:"", cp2Gst:"", cp2Cin:"", cp2Pan:"",
+    cp2PocName:"", cp2PocDesig:"", cp2PocMobile:"", cp2PocEmail:"",
+    cp2BankAcctName:"", cp2BankName:"", cp2BankAcctNo:"", cp2BankIfsc:"", cp2BankBranch:"",
     woNumber:"", woMsaDate:"", woArea:"", woScope:"", woGrossRate:"", woPartnerRate:"", woFee:"",
     consultRate:"", termText:"", engScope:"", pmRegion:"", pmAcreRate:"", pmSparesPct:"",
     depRef:"", depDate:"", depClientName:"", depClientPoc:"", depClientPocNo:"", depClientAddress:"",
@@ -1568,6 +1685,27 @@ function panelDeployment(){
   </div>`;
 }
 
+/* tripartite (3-party) drafts show a second counterparty + banking for both */
+function isTri(){ return draft.clauseSet==="tripartite" || draft.templateKey==="tripartite"; }
+/* which templates capture the counterparty's bank / payment details */
+function wantsBanking(){
+  return draft.cat==="vendor" || ["offer","internship","consultancy","pm"].indexOf(draft.clauseSet)>=0;
+}
+/* a reusable bank-details fieldset bound to fields with the given prefix (e.g. "cp", "cp2") */
+function bankFieldset(pfx, legend){
+  const g=(n)=>F(pfx+n);
+  return `
+    <fieldset class="fieldset"><legend>${esc(legend)}</legend>
+    <p class="small-note" style="margin:0 0 10px">Prints in the <b>Bank &amp; Payment Details</b> appendix and the Party Details. Leave blank to print fill-in lines.</p>
+    <div class="fgrid">
+      <div class="field"><label>Account holder name</label><input type="text" data-f="${pfx}BankAcctName" value="${g('BankAcctName')}" placeholder="as per bank records"></div>
+      <div class="field"><label>Bank name</label><input type="text" data-f="${pfx}BankName" value="${g('BankName')}" placeholder="e.g. HDFC Bank Ltd."></div>
+      <div class="field"><label>Account number</label><input type="text" data-f="${pfx}BankAcctNo" value="${g('BankAcctNo')}"></div>
+      <div class="field"><label>IFSC</label><input type="text" data-f="${pfx}BankIfsc" value="${g('BankIfsc')}"></div>
+      <div class="field full"><label>Branch</label><input type="text" data-f="${pfx}BankBranch" value="${g('BankBranch')}"></div>
+    </div></fieldset>`;
+}
+
 function panelParties(){
   const isVendor = draft.cat==="vendor";
   const cp = draft.cpRole;
@@ -1611,6 +1749,8 @@ function panelParties(){
         <div class="field full"><label>Address</label><textarea data-f="cpAddress">${F('cpAddress')}</textarea></div>
       </div></fieldset>
 
+      ${bankFieldset('cp', esc(cp)+" — Bank & Payment Details")}
+
       <fieldset class="fieldset"><legend>DroCon Bharat signatory</legend>
       <div class="fgrid">
         <div class="field"><label>Signatory name</label><input type="text" data-f="droconSignName" value="${F('droconSignName')}"></div>
@@ -1650,17 +1790,38 @@ function panelParties(){
     </div></fieldset>
     ` : ``}
 
-    <fieldset class="fieldset"><legend>${esc(cp)} details</legend>
+    <fieldset class="fieldset"><legend>${isTri()?"Second Party — Project Management Partner ("+esc(cp)+")":esc(cp)+" details"}</legend>
     <div class="fgrid">
       <div class="field"><label>${esc(cp)} legal name</label><input type="text" data-f="cpName" value="${F('cpName')}" placeholder="e.g. ABC Agri Services Pvt. Ltd."></div>
       <div class="field"><label>Entity type</label><input type="text" data-f="cpType" value="${F('cpType')}" placeholder="e.g. a Private Limited Company / proprietorship / individual"></div>
       <div class="field full"><label>Address</label><textarea data-f="cpAddress" placeholder="Principal place of business / registered office">${F('cpAddress')}</textarea></div>
+      ${isTri()?`<div class="field"><label>CIN</label><input type="text" data-f="cpCin" value="${F('cpCin')}"></div>
+      <div class="field"><label>PAN</label><input type="text" data-f="cpPan" value="${F('cpPan')}"></div>`:``}
       <div class="field"><label>GST number</label><input type="text" data-f="cpGst" value="${F('cpGst')}" placeholder="GST# / URP"></div>
       <div class="field"><label>Point of contact — name</label><input type="text" data-f="cpPocName" value="${F('cpPocName')}"></div>
       <div class="field"><label>POC designation</label><input type="text" data-f="cpPocDesig" value="${F('cpPocDesig')}"></div>
       <div class="field"><label>POC mobile / WhatsApp</label><input type="text" data-f="cpPocMobile" value="${F('cpPocMobile')}"></div>
       <div class="field"><label>POC email</label><input type="email" data-f="cpPocEmail" value="${F('cpPocEmail')}"></div>
     </div></fieldset>
+
+    ${wantsBanking()?bankFieldset('cp', (isTri()?"Project Management Partner":esc(cp))+" — Bank & Payment Details"):``}
+
+    ${isTri()?`
+    <fieldset class="fieldset"><legend>Third Party — Execution Partner</legend>
+    <div class="fgrid">
+      <div class="field"><label>Execution Partner legal name</label><input type="text" data-f="cp2Name" value="${F('cp2Name')}" placeholder="e.g. Berry Avionics (India) Pvt. Ltd."></div>
+      <div class="field"><label>Entity type</label><input type="text" data-f="cp2Type" value="${F('cp2Type')}" placeholder="e.g. a Private Limited Company"></div>
+      <div class="field full"><label>Address</label><textarea data-f="cp2Address" placeholder="Registered office">${F('cp2Address')}</textarea></div>
+      <div class="field"><label>CIN</label><input type="text" data-f="cp2Cin" value="${F('cp2Cin')}"></div>
+      <div class="field"><label>PAN</label><input type="text" data-f="cp2Pan" value="${F('cp2Pan')}"></div>
+      <div class="field"><label>GST number</label><input type="text" data-f="cp2Gst" value="${F('cp2Gst')}"></div>
+      <div class="field"><label>Point of contact — name</label><input type="text" data-f="cp2PocName" value="${F('cp2PocName')}"></div>
+      <div class="field"><label>POC designation</label><input type="text" data-f="cp2PocDesig" value="${F('cp2PocDesig')}"></div>
+      <div class="field"><label>POC mobile / WhatsApp</label><input type="text" data-f="cp2PocMobile" value="${F('cp2PocMobile')}"></div>
+      <div class="field"><label>POC email</label><input type="email" data-f="cp2PocEmail" value="${F('cp2PocEmail')}"></div>
+    </div></fieldset>
+    ${bankFieldset('cp2', "Execution Partner — Bank & Payment Details")}
+    `:``}
 
     <fieldset class="fieldset"><legend>DroCon Bharat signatory</legend>
     <div class="fgrid">
@@ -2175,6 +2336,24 @@ function partiesHTML(){
     <p style="margin:8px 0"><b>Subject: ${esc(draft.title)} — ${esc(f.roleTitle||"")}</b></p>
     <p>Dear ${rName},</p>`;
   }
+  // tripartite (three-party) recital
+  if(isTri()){
+    const line=(nm,ty,ad,cin,pan,gst,poc,tag)=>{
+      const N=nm?`<b>${esc(nm)}</b>`:"<b>____________________________________</b>";
+      const T=ty?esc(ty):"a company incorporated under the Companies Act 2013";
+      const A=ad?esc(ad):"____________________________________________";
+      const ids=[cin?("CIN: "+esc(cin)):"",pan?("PAN: "+esc(pan)):"",gst?("GSTIN: "+esc(gst)):""].filter(Boolean).join(", ");
+      const P=poc?`, represented by its Authorised Signatory ${esc(poc)}`:"";
+      return `<p>${N}, ${T}, having its registered office at ${A}${ids?(", "+ids):""}${P} (hereinafter the "<b>${esc(tag)}</b>");</p>`;
+    };
+    return `<p>This Agreement is made and entered into on ${f.effectiveDate?("this <b>"+fmtDate(f.effectiveDate)+"</b>"):("this _____ day of ____________, ______")} (the "Effective Date") by and between:</p>
+    <p><b>${esc(DCB.legalName)}</b>, a company incorporated under the Companies Act 2013, having its principal place of business at ${esc(DCB.address)}, CIN: ${esc(DCB.cin)}, PAN: AALCD9671N, GSTIN: ${esc(DCB.gstin)}, represented by its Authorised Signatory ${esc(f.droconSignName||DCB.director)}, ${esc(f.droconSignTitle||"Director & Founder")} (hereinafter "<b>DroCon Bharat</b>", the "<b>Company</b>" or the "<b>Principal Contractor</b>"); <b>FIRST PARTY</b>;</p>
+    <p style="text-align:center"><b>AND</b></p>
+    ${line(f.cpName,f.cpType,f.cpAddress,f.cpCin,f.cpPan,f.cpGst,f.cpPocName,"Project Management Partner")}<p style="margin:-6px 0 8px"><b>SECOND PARTY</b>;</p>
+    <p style="text-align:center"><b>AND</b></p>
+    ${line(f.cp2Name,f.cp2Type,f.cp2Address,f.cp2Cin,f.cp2Pan,f.cp2Gst,f.cp2PocName,"Execution Partner")}<p style="margin:-6px 0 8px"><b>THIRD PARTY</b>.</p>
+    <p>(DroCon Bharat, the Project Management Partner and the Execution Partner are collectively the "<b>Parties</b>" and individually a "<b>Party</b>". The Project Management Partner and the Execution Partner are together the "<b>Service Partners</b>" and each a "<b>Service Partner</b>".)</p>`;
+  }
   // agreement (incl. NDA, consultancy)
   const cpName = f.cpName ? `<b>${esc(f.cpName)}</b>` : "<b>________________________________________</b>";
   const cpType = f.cpType ? esc(f.cpType) : "________________________________________";
@@ -2205,11 +2384,42 @@ function noticesContactsHTML(){
   const cEmail = f.cpNoticeEmail||f.cpPocEmail||"____________________";
   const cAddr = f.cpAddress||"____________________";
   const cRow = `${esc(f.cpName||cp)} — Attn: ${esc(cName)}${cDesig?(", "+esc(cDesig)):""}; ${esc(cAddr)}; Mobile/WhatsApp: ${esc(cMob)}; Email: ${esc(cEmail)}`;
+  let extra="";
+  if(isTri()){
+    const c2Name=f.cp2PocName||"____________________";
+    const c2Desig=f.cp2PocDesig?(", "+esc(f.cp2PocDesig)):"";
+    const c2Mob=f.cp2PocMobile||"____________________";
+    const c2Email=f.cp2PocEmail||"____________________";
+    const c2Addr=f.cp2Address||"____________________";
+    const c2Row=`${esc(f.cp2Name||"Execution Partner")} — Attn: ${esc(c2Name)}${c2Desig}; ${esc(c2Addr)}; Mobile/WhatsApp: ${esc(c2Mob)}; Email: ${esc(c2Email)}`;
+    extra=`<tr><td><b>${esc(f.cp2Name||"Execution Partner")}</b></td><td>${c2Row}</td></tr>`;
+  }
+  const cpLabel = isTri() ? (esc(f.cpName||"")+" (Project Management Partner)") : esc(f.cpName||cp);
   return `<p>For the purpose of this clause, the contact details of the Parties for service of notices are:</p>
   <table class="doc"><thead><tr><th>Party</th><th>Contact for Notices</th></tr></thead>
   <tbody><tr><td><b>DroCon Bharat</b></td><td>${dRow}</td></tr>
-  <tr><td><b>${esc(f.cpName||cp)}</b></td><td>${cRow}</td></tr></tbody></table>`;
+  <tr><td><b>${cpLabel}</b></td><td>${cRow}</td></tr>${extra}</tbody></table>`;
 }
+
+/* Bank & payment details appendix (counterparty remittance accounts) */
+function bankRowsHTML(pfx, label){
+  const f=draft.fields; const g=(n)=>f[pfx+n];
+  const v=(x)=> x?esc(x):"____________________";
+  return `<tr><td rowspan="5" style="width:34%;vertical-align:top"><b>${esc(label)}</b></td>
+      <td style="width:28%">Account holder</td><td>${v(g('BankAcctName'))}</td></tr>
+    <tr><td>Bank</td><td>${v(g('BankName'))}</td></tr>
+    <tr><td>Account No.</td><td>${v(g('BankAcctNo'))}</td></tr>
+    <tr><td>IFSC</td><td>${v(g('BankIfsc'))}</td></tr>
+    <tr><td>Branch</td><td>${v(g('BankBranch'))}</td></tr>`;
+}
+function bankingHTML(){
+  const cpLabel = isTri() ? (draft.fields.cpName||"Project Management Partner") : (draft.fields.cpName||draft.fields.recipientName||draft.cpRole);
+  let rows = bankRowsHTML('cp', cpLabel);
+  if(isTri()) rows += bankRowsHTML('cp2', draft.fields.cp2Name||"Execution Partner");
+  return `<p>Remittances under this Agreement shall be made only to the account(s) below. Any change must be notified in writing on the party's letterhead, signed by an authorised signatory, and confirmed by DroCon Bharat before payment to the changed account.</p>
+  <table class="doc"><thead><tr><th>Party</th><th>Detail</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function hasBankData(pfx){ const f=draft.fields; return !!(f[pfx+'BankAcctName']||f[pfx+'BankName']||f[pfx+'BankAcctNo']||f[pfx+'BankIfsc']||f[pfx+'BankBranch']); }
 
 /* Operating (main-body) sections: every enabled non-legal clause, plus responsibilities. */
 function getSections(){
@@ -2232,6 +2442,9 @@ function getSections(){
               + `<p class="ref">The full allocation of responsibilities and costs is set out in the Responsibilities Annexure.</p>` });
     }
   });
+  if(wantsBanking() && (isTri() || hasBankData('cp') || hasBankData('cp2'))){
+    out.push({ title:"Bank & Payment Details", html: bankingHTML() });
+  }
   return out;
 }
 
@@ -2482,10 +2695,14 @@ function buildPageHTML(){
 
   let closing="";
   if(kind==="agreement"){
+    const triBox = isTri() ? `
+    <div class="sign-box"><b>For ${esc(f.cp2Name||"Execution Partner")}</b><div class="sline"></div>Name: ${esc(f.cp2PocName||"____________________")}<br>Title: ____________________<br>Date: ____________</div>` : "";
+    const cpBoxLabel = isTri() ? (esc(f.cpName||"Project Management Partner")) : esc(f.cpName||cp);
     closing = `<p style="margin-top:18px"><b>IN WITNESS WHEREOF</b>, the Parties have executed this Agreement as of the Effective Date.</p>
     <div class="sign-grid">
     <div class="sign-box"><b>For DroCon Bharat Private Limited</b><div class="sline"></div>Name: ${esc(f.droconSignName||DCB.director)}<br>Title: ${esc(f.droconSignTitle||"Director")}<br>Date: ____________</div>
-    <div class="sign-box"><b>For ${esc(f.cpName||cp)}</b><div class="sline"></div>Name: ____________________<br>Title: ____________________<br>Date: ____________</div>
+    <div class="sign-box"><b>For ${cpBoxLabel}</b><div class="sline"></div>Name: ${isTri()?esc(f.cpPocName||"____________________"):"____________________"}<br>Title: ____________________<br>Date: ____________</div>
+    ${triBox}
     </div>`;
   } else if(kind==="letter"){
     closing = `<p style="margin-top:16px">Should you have any questions, please contact ${esc(DCB.director)} at ${esc(DCB.email)} or ${esc(DCB.mobile)}.</p>
