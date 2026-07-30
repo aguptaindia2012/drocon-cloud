@@ -14,9 +14,13 @@ const sb = ()=>window.OPS.sb;
    domain / sub-path. */
 const BUILTIN_GUIDES = [
   { title:"Locations & Daily Acre Entry — Workflow Guide",
-    category:"Guide · Living document",
+    category:"Guide · Internal team",
     desc:"How to set up a new project (Client, Vendor, Pilots, Crops, Location & rates) and record daily acre entries. Covers Farmer vs Client rate, crop-wise date-effective rates, approval and invoicing.",
-    file:"./docs/DroCon_Workflow_Guide.pptx" }
+    file:"./docs/DroCon_Workflow_Guide.pptx" },
+  { title:"Vendor & Pilot Portal — Training Guide",
+    category:"Guide · Share with vendors",
+    desc:"Step-by-step for vendors and their pilots: getting logins, reporting acres, review & approval, field issues, and vendor invoicing — plus where the DroCon team steps in. Share this with your vendors.",
+    file:"./docs/DroCon_Vendor_Pilot_Portal_Training.pptx" }
 ];
 
 function builtinHTML(){

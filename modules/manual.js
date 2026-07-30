@@ -104,6 +104,13 @@ const FAQ_INTERNAL = [
   {q:"Who can see salaries / phone numbers?", a:"Salaries, bank details and farmer phone numbers are restricted to admins or staff granted access. Phones are masked unless you hold the View contacts capability.", kw:"salary phone bank sensitive mask view contacts privacy"},
   {q:"How do I get access to a tab I can't see?", a:"Ask an admin to grant it in Team & Access. Access is per-tab.", kw:"access permission tab cannot see grant team"},
   {q:"Where is the login URL?", a:"At the top of the User Manual, and it's the address you're on now — bookmark it or install the app from your browser menu.", kw:"url link login install pwa bookmark"},
+  {q:"How do I set up a new project / location?", a:"In Registers, add the Client → Vendor → Pilots → Crops, then create the Location (Registers → Locations) with its Farmer rate + bill-to and Client rate + bill-to. See Resources → Guides & training for the step-by-step deck.", kw:"new project location setup client vendor pilot crop register order"},
+  {q:"Farmer rate vs Client rate — when to use which?", a:"Farmer rate = what the farmer pays → 0% GST Bill of Supply. Client rate = a client/sponsor subsidy → 18% GST Tax Invoice. Set the Client rate to 0 when there is no client-side component.", kw:"farmer client rate gst bill of supply tax invoice subsidy 0"},
+  {q:"A rate changed mid-season — how do I update it?", a:"On the Location → Crop-specific rates, add a NEW row with a later Effective-from date. Older entries keep the old rate; don't edit old rows or clone the location.", kw:"rate change effective date crop specific new row history"},
+  {q:"How do vendors and pilots report their own acres?", a:"Vendors add pilots and request logins (approve them under Review / Approvals → Pilot Logins). Pilots report acres; the vendor reviews; you approve under Review / Approvals → Pilot Acres, which posts them to the tracker at the DroCon rate.", kw:"vendor pilot portal report acres approve pilot logins acres self service"},
+  {q:"Where do I set what we pay a vendor?", a:"Finance → Vendor Rates, per Vendor + Location + Crop, effective-dated. Vendors invoice their approved acres at these rates; approve under Review / Approvals → Vendor Invoices, which creates a Payable (pay via Accounting → Payables).", kw:"vendor rate payout finance vendor invoice payable approve"},
+  {q:"How do pilots get the locations they can report on?", a:"A pilot can only report for locations they're assigned to (pilot ↔ location assignment). Assign them so their location appears in Report Acres.", kw:"pilot assign location report cannot see assignment"},
+  {q:"Where are the step-by-step guides?", a:"Registers → Resources → Guides & training holds the internal Workflow Guide and the Vendor & Pilot Portal training deck to share with vendors.", kw:"guide training resources workflow deck ppt document"},
 ];
 const FAQ_PARTNER = [
   {q:"How do I submit an invoice?", a:"Partner Portal → Submit Invoice. Add a line per acre sprayed (date, farmer, mobile, the rate you received, acres). The amount and commission fill in automatically. Click Submit invoice.", kw:"submit invoice file new acres sprayed"},
@@ -112,6 +119,21 @@ const FAQ_PARTNER = [
   {q:"Can I edit an invoice after submitting?", a:"Yes, while it is still 'submitted'. Once approved it is locked; contact the DroCon team for changes.", kw:"edit change invoice after submit locked"},
   {q:"Is my data safe?", a:"Yes — your login sees only your own invoices and rate card, never DroCon's internal data or other partners'. See Data & Privacy (🛡 in the header).", kw:"data privacy safe security farmer phone"},
   {q:"Who do I contact for help?", a:"Email info@droconbharat.com or enquiries@droconbharat.com, or call the numbers in the footer.", kw:"help contact email phone support"},
+];
+
+/* Vendor & Pilot portal FAQs (acre reporting + invoicing) */
+const FAQ_VENDORPILOT = [
+  {q:"(Vendor) How do I add a pilot and give them a login?", a:"My Pilots → add the pilot (name, mobile, RPC, UIN) → click Request login and enter the pilot's email. DroCon approves it, then the pilot opens the app, chooses Create account and signs up with that exact email.", kw:"vendor add pilot login request approve invite create account"},
+  {q:"(Pilot) How do I report the acres I sprayed?", a:"Report Acres → pick the date and your location (only locations DroCon assigned to you appear) → add a row per farmer (name, contact, village, crop, medicine, acres, GPS) → Submit. It goes to your vendor for review.", kw:"pilot report acres daily submit farmer village crop"},
+  {q:"(Pilot) A location is not in my list — why?", a:"You can only report for locations DroCon has assigned to you. Ask the DroCon team to assign you to that location.", kw:"location missing assigned cannot see report"},
+  {q:"(Vendor) How do I review my pilots' acres?", a:"Acre Review shows every report your pilots submit. Correct the acres if needed, then Pass to DroCon — or Send back to the pilot with a reason.", kw:"vendor acre review correct pass send back approve"},
+  {q:"Who sets the rates?", a:"DroCon does. Rates are applied automatically when a report is approved and when you invoice — pilots and vendors never enter rates.", kw:"rate rates who sets automatic drocon"},
+  {q:"(Vendor) How do I invoice DroCon?", a:"Invoice DroCon → pick a period → your approved, not-yet-invoiced acres appear at the DroCon rate → tick the rows → Generate. Then Print (plain, un-branded — paste on your letterhead) or export to Excel.", kw:"vendor invoice generate print excel unbranded letterhead"},
+  {q:"(Vendor) When do I get paid?", a:"Once DroCon approves your invoice it becomes a payable and is paid per your terms. Track it in My DroCon Invoices and the Vendor Report.", kw:"payment paid vendor invoice payable status track"},
+  {q:"Why isn't my acre invoiceable yet?", a:"An acre becomes invoiceable only after DroCon approves the report (following your review). Check the status under My Reports / Acre Review.", kw:"acre not invoiceable pending approve status"},
+  {q:"How do I report a field problem?", a:"Field Issues → Raise an issue (category, severity, details). You, your vendor and DroCon can discuss it on the thread until it's resolved.", kw:"field issue problem raise drone chemical access thread resolve"},
+  {q:"Is my data safe?", a:"Yes — your login sees only your own pilots, acres and invoices, never DroCon's internal data or other vendors'. See Data & Privacy (🛡 in the header).", kw:"data privacy safe security own only"},
+  {q:"Who do I contact for help?", a:"Your DroCon coordinator, or email info@droconbharat.com / call the numbers in the footer.", kw:"help contact email phone support"},
 ];
 
 function renderFAQ(host, list, title){
@@ -133,12 +155,27 @@ function internalFAQs(){
 }
 window.OPS.routes.faqs = internalFAQs;
 
-/* ---- Partner portal: combined SOP + FAQs ---- */
+/* ---- Partner portal: combined SOP + FAQs (party-aware) ---- */
 function partnerHelp(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Partner Portal</div><h1>Help &amp; FAQs</h1>
-    <div class="callout"><b>Portal URL:</b> <a href="${esc(appURL())}" target="_blank" rel="noopener">${esc(appURL())}</a> — bookmark it or install the app from your browser menu.</div>
-    <div class="card">
+  const party=(window.OPS.profile&&window.OPS.profile.party_type)||"";
+  const isVP = party==="vendor" || party==="pilot";
+  const guide = isVP ? `<div class="card"><div class="eyebrow">Guides &amp; training</div>
+      <table><thead><tr><th>Title</th><th>Open</th></tr></thead><tbody>
+        <tr><td><b>Vendor &amp; Pilot Portal — Training Guide</b><br><span class="muted">Step-by-step: logins, reporting acres, review, field issues and invoicing.</span></td>
+          <td><a class="btn sm" href="./docs/DroCon_Vendor_Pilot_Portal_Training.pptx" target="_blank" rel="noopener">Open / Download</a></td></tr>
+      </tbody></table></div>` : "";
+  const how = isVP ? `<div class="card"><h3>How the portal works</h3>
+      <ul style="font-size:13px;line-height:1.7">
+        <li><b>Vendors — My Pilots</b>: add pilots and request their logins (DroCon approves).</li>
+        <li><b>Pilots — Report Acres</b>: log each day's acres for your assigned location; your vendor reviews and DroCon approves.</li>
+        <li><b>Vendors — Acre Review</b>: check/correct your pilots' acres and pass them to DroCon.</li>
+        <li><b>Vendors — Invoice DroCon &amp; My DroCon Invoices</b>: invoice approved acres at the DroCon rate; a plain invoice you can print or export.</li>
+        <li><b>Field Issues</b>: raise and track field problems with DroCon.</li>
+        <li><b>Data &amp; Privacy</b> (🛡 top-right) — how your data is protected.</li>
+      </ul>
+      <p class="muted">Rates are set by DroCon; approvals and payment come from the DroCon team.</p>
+    </div>` : `<div class="card">
       <h3>How the portal works</h3>
       <ul style="font-size:13px;line-height:1.7">
         <li><b>Submit Invoice</b> — file your acres-sprayed (or consultancy) invoice. Enter the actual per-acre rate you received from the farmer; the amount and commission fill in automatically.</li>
@@ -146,9 +183,12 @@ function partnerHelp(){
         <li><b>Data &amp; Privacy</b> (🛡 top-right) — how your data and the farmer data you enter are protected.</li>
       </ul>
       <p class="muted">Questions? Email <a href="mailto:info@droconbharat.com">info@droconbharat.com</a> or call the numbers in the footer.</p>
-    </div>
+    </div>`;
+  m.innerHTML=`<div class="eyebrow">Partner Portal</div><h1>Help &amp; FAQs</h1>
+    <div class="callout"><b>Portal URL:</b> <a href="${esc(appURL())}" target="_blank" rel="noopener">${esc(appURL())}</a> — bookmark it or install the app from your browser menu.</div>
+    ${guide}${how}
     <h3 style="margin-top:16px">FAQs</h3><div id="faqHost"></div>`;
-  renderFAQ($("faqHost"), FAQ_PARTNER, "partner FAQs");
+  renderFAQ($("faqHost"), isVP?FAQ_VENDORPILOT:FAQ_PARTNER, isVP?"vendor & pilot FAQs":"partner FAQs");
 }
 window.OPS.routes.portal_help = partnerHelp;
 })();
