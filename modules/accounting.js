@@ -299,7 +299,7 @@ async function listPayables(){
         <td class="num">${x.credit>0.005?money(x.credit):'—'}</td>
         <td class="num" style="${x.balance>0.005?'font-weight:700':''}">${money(x.balance)}</td>
         <td>${payStatusChip(x.p.status)}</td>
-        <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button></td></tr>`).join("")}</tbody></table></div>`
+        <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button>${(window.OPS.canDelete()&&x.paid<=0.005&&x.credit<=0.005)?` <button class="btn sm" data-delp="${x.p.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No supplier invoices'+(_payOnlyDue?' with a balance':'')+'.</div>'}</div>`;
   $("pyOnlyDue").addEventListener("change",()=>{ _payOnlyDue=$("pyOnlyDue").checked; listPayables(); });
   const find=id=>rows.find(x=>String(x.p.id)===id);
@@ -308,6 +308,14 @@ async function listPayables(){
   $("emBody").querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>payForm(find(el.getAttribute("data-edit")).p)));
   $("emBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payVendor(find(b.getAttribute("data-pay")), expenseMgmt)));
   $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), expenseMgmt)));
+  $("emBody").querySelectorAll("[data-delp]").forEach(b=>b.addEventListener("click",async()=>{
+    const x=find(b.getAttribute("data-delp")); if(!x) return;
+    if(!confirm("Delete supplier invoice “"+(x.p.vendor_invoice_no||'(no no.)')+"” for "+x.vendor_name+" ("+money(x.p.total)+")?\n\nThis also reverses its ledger entry. Only invoices with no payments/credits can be deleted.")) return;
+    const { error }=await sb().rpc("delete_payable",{ p_id:x.p.id });
+    if(error){ alert(error.message); return; }
+    window.OPS.audit("deleted","payables",x.p.id,(x.p.vendor_invoice_no||'')+" "+money(x.p.total));
+    window.OPS.flashTop("Supplier invoice deleted ✓"); listPayables();
+  }));
 }
 
 async function recomputePayable(id, total){
