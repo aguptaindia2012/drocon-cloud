@@ -875,6 +875,37 @@ const INTERNSHIP_CLAUSES = [
 <p>To accept this internship, please sign and return a copy of this letter.</p>` }
 ];
 
+/* ---- Increment / Title-revision letter ----
+   Tokens: {{RECIPIENT}} name, {{ROLE}} new designation, {{PREV_ROLE}} old,
+   {{COMP}} revised compensation, {{PREV_COMP}} previous, {{STARTTEXT}}
+   effective-from, {{REPORTSTO}}, {{WORKLOC}}. */
+const INCREMENT_CLAUSES = [
+  { id:"inc_intro", title:"Revision of Terms", on:true, body:`
+<p>We are pleased to inform you that, in recognition of your performance, commitment and contribution to DroCon Bharat Private Limited, the Company has revised your engagement with effect from <b>{{STARTTEXT}}</b> as set out below.</p>` },
+  { id:"inc_title", title:"Revised Designation", on:true, body:`
+<p>Your designation stands revised from <b>{{PREV_ROLE}}</b> to <b>{{ROLE}}</b>, effective {{STARTTEXT}}. You will report to {{REPORTSTO}} and continue to be based at {{WORKLOC}}, or as otherwise directed by the Company.</p>
+<p>Where this letter conveys only a compensation revision, your existing designation continues unchanged.</p>` },
+  { id:"inc_comp", title:"Revised Compensation", on:true, body:`
+<p>Your compensation is revised from <b>{{PREV_COMP}}</b> to <b>{{COMP}}</b>, effective {{STARTTEXT}}. All statutory deductions (TDS, and any other applicable dues) will apply as per law, and payment is subject to the Company's standard payroll cycle and policies.</p>` },
+  { id:"inc_continue", title:"Continuation of Employment", on:true, body:`
+<p>All other terms and conditions of your employment, including confidentiality, notice period and code of conduct, remain unchanged and in full force. This revision does not constitute a new contract of employment.</p>
+<p>We thank you for your efforts and look forward to your continued contribution to the growth of DroCon Bharat.</p>` },
+  { id:"inc_accept", title:"Acknowledgement", on:true, body:`
+<p>Kindly sign and return a copy of this letter as acknowledgement of the revised terms.</p>` }
+];
+
+/* ---- Bonus / Incentive letter ----
+   Tokens: {{RECIPIENT}} name, {{ROLE}} designation, {{COMP}} bonus amount,
+   {{REASON}} reason for the award, {{STARTTEXT}} date / occasion / payroll. */
+const BONUS_CLAUSES = [
+  { id:"bonus_award", title:"Bonus / Incentive Award", on:true, body:`
+<p>In recognition of {{REASON}}, DroCon Bharat Private Limited is pleased to award you a one-time bonus / incentive of <b>{{COMP}}</b>, to be paid with the <b>{{STARTTEXT}}</b> payroll.</p>` },
+  { id:"bonus_terms", title:"Terms", on:true, body:`
+<p>This bonus is a <b>discretionary, one-time</b> payment. It does not form part of your fixed compensation and creates no entitlement to any future bonus or incentive. It is subject to applicable statutory deductions (including TDS) and is paid through the Company's standard payroll, subject to your continued employment on the date of payment.</p>` },
+  { id:"bonus_close", title:"Appreciation", on:true, body:`
+<p>We thank you for your dedication and valuable contribution, and look forward to your continued success with DroCon Bharat.</p>` }
+];
+
 /* ---- Job Description (JD sections) ---- */
 const JD_CLAUSES = [
   { id:"overview", title:"Role Overview", on:true, body:`
@@ -1160,6 +1191,20 @@ const TEMPLATES = [
     desc:"Fixed-duration internship offer with scope, stipend, confidentiality and conversion-to-full-time consideration.",
     clauseSet:"internship", ops:false },
 
+  { key:"increment_letter", cat:"module", status:"ready", kind:"letter",
+    cpRole:"Employee", signTitle:"Director & Founder", roleTitle:"",
+    title:"LETTER OF INCREMENT & TITLE REVISION",
+    subtitle:"Revision of Compensation and/or Designation",
+    desc:"Salary-increment and/or promotion letter — revised designation and compensation with an effective date; discretionary sections you can toggle off if only one applies.",
+    clauseSet:"increment", ops:false },
+
+  { key:"bonus_letter", cat:"module", status:"ready", kind:"letter",
+    cpRole:"Employee", signTitle:"Director & Founder", roleTitle:"",
+    title:"BONUS / INCENTIVE LETTER",
+    subtitle:"Discretionary One-Time Award",
+    desc:"One-time bonus / incentive letter with a free-text reason for the award, the amount and the payroll it is paid with. Discretionary, non-recurring terms.",
+    clauseSet:"bonus", ops:false },
+
   { key:"consultancy", cat:"module", status:"ready", kind:"agreement",
     label:"Consultancy Agreement",
     cpRole:"Consultant",
@@ -1222,6 +1267,8 @@ CLAUSE_SETS["pm"] = PM_CLAUSES;
 CLAUSE_SETS["nda"] = NDA_CLAUSES;
 CLAUSE_SETS["offer"] = OFFER_CLAUSES;
 CLAUSE_SETS["internship"] = INTERNSHIP_CLAUSES;
+CLAUSE_SETS["increment"] = INCREMENT_CLAUSES;
+CLAUSE_SETS["bonus"] = BONUS_CLAUSES;
 CLAUSE_SETS["jd"] = JD_CLAUSES;
 CLAUSE_SETS["workorder"] = WORKORDER_CLAUSES;
 CLAUSE_SETS["tripartite"] = TRIPARTITE_CLAUSES;
@@ -1312,6 +1359,7 @@ function newDraft(key){
       pmAcreRate: t.clauseSet==="pm" ? "5" : "", pmSparesPct: t.clauseSet==="pm" ? "4" : "",
       // letter / JD specific
       recipientName:"", recipientAddress:"", roleTitle:t.roleTitle||"", reportsTo:"Abhishek Gupta, Director & Founder",
+      prevRole:"", prevCompensation:"", bonusReason:"",
       compensation:"", startDateText:"", duration:"", workLocation:"Headquarters, Meerut, Uttar Pradesh",
       // deployment letter (sugar mill)
       depRef:"", depDate:"", depClientName:"", depClientPoc:"", depClientPocNo:"", depClientAddress:"",
@@ -1507,6 +1555,9 @@ function subTokens(text){
     .replace(/\{\{STARTTEXT\}\}/g, esc(f.startDateText|| (f.startDate?fmtDate(f.startDate):"________________") ))
     .replace(/\{\{DURATION\}\}/g, esc(f.duration||"________________"))
     .replace(/\{\{REPORTSTO\}\}/g, esc(f.reportsTo||"________________"))
+    .replace(/\{\{PREV_ROLE\}\}/g, esc(f.prevRole||"your current designation"))
+    .replace(/\{\{PREV_COMP\}\}/g, esc(f.prevCompensation||"your current compensation"))
+    .replace(/\{\{REASON\}\}/g, esc(f.bonusReason||"your performance and contribution"))
     .replace(/\{\{WORKLOC\}\}/g, esc(f.workLocation||"________________"))
     .replace(/\{\{RECIPIENT\}\}/g, esc(f.recipientName||"________________"))
     .replace(/\{\{CONSULT_RATE\}\}/g, esc(f.consultRate||"________"))
@@ -1732,11 +1783,16 @@ function dcbBankFieldset(){
    {{DURATION}}, {{WORKLOC}}, {{REPORTSTO}}). Without this the letter printed
    these as blanks. */
 function panelLetter(){
-  const isIntern = draft.clauseSet==="internship";
-  const compLabel = isIntern ? "Stipend (₹)" : "Compensation";
+  const cs = draft.clauseSet;
+  const isIntern = cs==="internship", isInc = cs==="increment", isBonus = cs==="bonus";
+  const heading = isInc?"Increment & Title Revision":(isBonus?"Bonus / Incentive":(isIntern?"Internship":"Offer"));
+  const compLabel = isBonus?"Bonus amount (₹)":(isInc?"Revised compensation":(isIntern?"Stipend (₹)":"Compensation"));
+  const roleLabel = isInc?"New designation":"Role / designation";
+  const dateLabel = isInc?"Effective from":(isBonus?"Paid with payroll (month)":"Start date");
+  const engLegend = isInc?"Revision":(isBonus?"Award":"Engagement");
   return `
   <div class="panel">
-    <h2>${isIntern?"Internship":"Offer"} details</h2>
+    <h2>${heading} details</h2>
     <p class="sub">Fill the details for this letter. Anything left blank prints as a fill-in line.</p>
     <fieldset class="fieldset"><legend>Letter</legend>
     <div class="fgrid">
@@ -1746,17 +1802,20 @@ function panelLetter(){
     </div></fieldset>
     <fieldset class="fieldset"><legend>Recipient</legend>
     <div class="fgrid">
-      <div class="field"><label>Name *</label><input type="text" data-f="recipientName" value="${F('recipientName')}" placeholder="Candidate / intern name"></div>
-      <div class="field"><label>Role / designation</label><input type="text" data-f="roleTitle" value="${F('roleTitle')}" placeholder="e.g. Operations Intern"></div>
+      <div class="field"><label>Name *</label><input type="text" data-f="recipientName" value="${F('recipientName')}" placeholder="Employee name"></div>
+      <div class="field"><label>${roleLabel}</label><input type="text" data-f="roleTitle" value="${F('roleTitle')}" placeholder="e.g. Operations Manager"></div>
       <div class="field full"><label>Address</label><textarea data-f="recipientAddress" placeholder="Recipient's address">${F('recipientAddress')}</textarea></div>
     </div></fieldset>
-    <fieldset class="fieldset"><legend>Engagement</legend>
+    <fieldset class="fieldset"><legend>${engLegend}</legend>
     <div class="fgrid">
-      <div class="field"><label>${compLabel}</label><input type="text" data-f="compensation" value="${F('compensation')}" placeholder="${isIntern?'e.g. ₹15,000 / month':'e.g. ₹4,50,000 p.a.'}"></div>
-      <div class="field"><label>Start date <span class="hint">(as it should read)</span></label><input type="text" data-f="startDateText" value="${F('startDateText')}" placeholder="e.g. 1 September 2026"></div>
+      ${isInc?`<div class="field"><label>Previous designation</label><input type="text" data-f="prevRole" value="${F('prevRole')}" placeholder="current title"></div>`:''}
+      <div class="field"><label>${compLabel}</label><input type="text" data-f="compensation" value="${F('compensation')}" placeholder="${isBonus?'e.g. ₹25,000':(isIntern?'e.g. ₹15,000 / month':'e.g. ₹4,50,000 p.a.')}"></div>
+      ${isInc?`<div class="field"><label>Previous compensation</label><input type="text" data-f="prevCompensation" value="${F('prevCompensation')}" placeholder="current pay"></div>`:''}
+      ${isBonus?`<div class="field full"><label>Reason for the bonus *</label><textarea data-f="bonusReason" placeholder="e.g. exceptional performance during the 2026 spraying season">${F('bonusReason')}</textarea></div>`:''}
+      <div class="field"><label>${dateLabel} <span class="hint">(as it should read)</span></label><input type="text" data-f="startDateText" value="${F('startDateText')}" placeholder="${isBonus?'e.g. September 2026':'e.g. 1 September 2026'}"></div>
       ${isIntern?`<div class="field"><label>Duration</label><input type="text" data-f="duration" value="${F('duration')}" placeholder="e.g. 3 months"></div>`:''}
-      <div class="field"><label>Work location</label><input type="text" data-f="workLocation" value="${F('workLocation')}"></div>
-      <div class="field full"><label>Reports to</label><input type="text" data-f="reportsTo" value="${F('reportsTo')}"></div>
+      ${(!isBonus)?`<div class="field"><label>Work location</label><input type="text" data-f="workLocation" value="${F('workLocation')}"></div>
+      <div class="field full"><label>Reports to</label><input type="text" data-f="reportsTo" value="${F('reportsTo')}"></div>`:''}
     </div></fieldset>
     <fieldset class="fieldset"><legend>DroCon Bharat signatory</legend>
     <div class="fgrid">
