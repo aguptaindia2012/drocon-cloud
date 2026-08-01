@@ -43,7 +43,7 @@ function block(hostId, aItem){
       <input id="${hostId}_amt" type="number" step="any" placeholder="₹" style="max-width:110px">
       <button class="btn sm" id="${hostId}_add" type="button">+ Add</button></div>`;
   // only types whose module pages already reflect settlements in their balances
-  const REFLECTED={ client_invoice:1, vendor_payable:1 };
+  const REFLECTED={ client_invoice:1, vendor_payable:1, advance:1 };
   openItems(oppSide).then(d=>{
     items=d.filter(i=>REFLECTED[i.type] && !(String(i.item_id)===String(aItem.id) && i.type===aItem.type));
     $(hostId+"_sel").innerHTML='<option value="">— select item to settle against —</option>'+
