@@ -92,3 +92,12 @@ begin
   insert into public.audit_log(actor,action,entity,entity_id,note) values (auth.uid(),'settlement_deleted','settlements',p_id::text,null);
 end $$;
 grant execute on function public.delete_settlement(uuid) to authenticated;
+
+-- Backfill: correct the status of every item touched by an EXISTING settlement.
+do $$ declare r record;
+begin
+  for r in (select a_type as t, a_id as i from public.settlements
+            union select b_type, b_id from public.settlements) loop
+    perform public.sync_settlement_item(r.t, r.i);
+  end loop;
+end $$;
