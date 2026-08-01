@@ -14,28 +14,34 @@ function daysBetween(d){ if(!d) return 0; return Math.max(0, Math.floor((Date.no
 async function fetchRows(entity){
   let invQ=sb().from("documents").select("*").eq("doc_type","invoice").order("doc_date",{ascending:false});
   if(entity) invQ=invQ.eq("entity",entity);
-  const [{data:invs},{data:cns},{data:pays}]=await Promise.all([
+  const [{data:invs},{data:cns},{data:pays},settledMap]=await Promise.all([
     invQ,
     sb().from("documents").select("id,related_doc_id,totals").eq("doc_type","credit_note"),
-    sb().from("payments").select("*") ]);
+    sb().from("payments").select("*"),
+    window.OPS.settle.settledBy("client_invoice") ]);
   const paidByDoc={}, creditByInv={};
   // settled against the invoice = cash + any TDS the client withheld
   (pays||[]).forEach(p=>{ paidByDoc[p.document_id]=(paidByDoc[p.document_id]||0)+num(p.amount)+num(p.tds_amount); });
   (cns||[]).forEach(c=>{ if(c.related_doc_id) creditByInv[c.related_doc_id]=(creditByInv[c.related_doc_id]||0)+num((c.totals||{}).total); });
   return (invs||[]).map(r=>{
     const gross=num((r.totals||{}).total); const credit=creditByInv[r.id]||0; const paid=paidByDoc[r.id]||0;
-    const balance=Math.round((gross-credit-paid)*100)/100;
+    const settled=num(settledMap[r.id]||0);
+    const balance=Math.round((gross-credit-paid-settled)*100)/100;
     const age = balance>0 ? daysBetween(r.doc_date) : 0;
-    const status = balance<=0.01 ? "paid" : (paid>0||credit>0 ? "partial" : "issued");
-    return { r, gross, credit, paid, balance, age, status, party:((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"" };
+    const status = balance<=0.01 ? "paid" : ((paid>0||credit>0||settled>0) ? "partial" : "issued");
+    return { r, gross, credit, paid, settled, balance, age, status, party:((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"" };
   });
 }
 
 async function recomputeStatus(x){
-  const { data:ps }=await sb().from("payments").select("amount,tds_amount").eq("document_id",x.r.id);
+  const [{ data:ps },{ data:st }]=await Promise.all([
+    sb().from("payments").select("amount,tds_amount").eq("document_id",x.r.id),
+    sb().from("settlements").select("amount").or(`and(a_type.eq.client_invoice,a_id.eq.${x.r.id}),and(b_type.eq.client_invoice,b_id.eq.${x.r.id})`)
+  ]);
   const paid=(ps||[]).reduce((s,p)=>s+num(p.amount)+num(p.tds_amount),0);
-  const bal=x.gross-x.credit-paid;
-  await sb().from("documents").update({ status: bal<=0.01?"paid":(paid>0||x.credit>0?"partial":"issued") }).eq("id",x.r.id);
+  const settled=(st||[]).reduce((s,p)=>s+num(p.amount),0);
+  const bal=x.gross-x.credit-paid-settled;
+  await sb().from("documents").update({ status: bal<=0.01?"paid":((paid>0||x.credit>0||settled>0)?"partial":"issued") }).eq("id",x.r.id);
 }
 // corrections by a non-admin send the invoice back for re-approval (#13 pattern)
 async function gateCorrection(x, action){
@@ -47,8 +53,8 @@ async function gateCorrection(x, action){
 
 async function view(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Finance</div><h1>Payment Status</h1>
-    <div class="callout">Record receipts and update payment status here. Editing or deleting an existing payment is a correction — for non-admins it is applied and the invoice is sent for <b>re-approval</b>. The read-only summary &amp; charts live in <b>Dashboards → Invoices &amp; Receivables</b>.</div>
+  m.innerHTML=`<div class="eyebrow">Accounting</div><h1>Transaction Recording</h1>
+    <div class="callout">Record client receipts here. Each payment can carry <b>TDS</b> (taken first, on the full value) and can <b>settle against</b> an open item owed the other way (a vendor bill, advance, etc.) before any cash. Editing/deleting a payment is a correction — for non-admins it sends the invoice for <b>re-approval</b>. Vendor/expense/advance/salary payments are recorded from their own pages; all of them can settle across modules too.</div>
     <div class="row wrap" style="margin:6px 0">
       <label style="margin:0">Entity</label>
       <select id="pEntity" style="width:auto"><option value="">All</option><option>DCB</option><option>IBS</option></select>
@@ -93,6 +99,7 @@ function recordPayment(x, back){
         <div class="field full"><label style="display:inline"><input type="checkbox" id="pTds" style="width:auto"> Client deducted TDS</label></div>
         <div class="field"><label>TDS %</label><input id="pTdsPct" type="number" step="any" placeholder="e.g. 2" disabled></div>
         <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="pTdsAmt" type="number" step="any" value="0" disabled></div>
+        <div class="field full" id="pSettle"></div>
         <div class="field full"><div class="callout" id="pSplit" style="margin:0"></div></div>
         <div class="field"><label>Date <span class="muted">(the day it actually reached the account)</span></label><input id="pDate" type="date" value="${todayISO()}"></div>
         <div class="field"><label>Mode</label><select id="pMode"><option>UPI</option><option>NEFT/RTGS</option><option>Cash</option><option>Cheque</option><option>Other</option></select></div>
@@ -102,10 +109,14 @@ function recordPayment(x, back){
       <div class="err" id="pErr"></div>
     </div>`;
   $("pBack").addEventListener("click",back); $("pCancel").addEventListener("click",back);
+  const aItem={ type:"client_invoice", id:x.r.id, label:x.r.number, side:"receivable" };
+  let settleB=null;
   const syncTds=()=>{ const on=$("pTds").checked; $("pTdsPct").disabled=!on; $("pTdsAmt").disabled=!on;
-    const settled=num($("pAmt").value); const tds=on?num($("pTdsAmt").value):0; const cash=Math.round((settled-tds)*100)/100;
-    $("pSplit").innerHTML = on ? `Settling <b>${money(settled)}</b> = cash into account <b>${money(cash)}</b> + TDS <b>${money(tds)}</b> (booked to TDS Receivable).` : `Cash into account: <b>${money(settled)}</b>`;
+    const settled=num($("pAmt").value); const tds=on?num($("pTdsAmt").value):0;
+    const settle=settleB?settleB.total():0; const cash=Math.round((settled-tds-settle)*100)/100;
+    $("pSplit").innerHTML = `Clearing <b>${money(settled)}</b> = ${tds>0?('TDS '+money(tds)+' + '):''}${settle>0?('settled '+money(settle)+' + '):''}cash into account <b>${money(cash)}</b>.`+(tds>0?' <span class="muted">(TDS to TDS Receivable.)</span>':'');
   };
+  settleB = window.OPS.settle.block("pSettle", aItem); settleB.onChange(syncTds);
   $("pTds").addEventListener("change",()=>{ if($("pTds").checked && !num($("pTdsPct").value)) {} syncTds(); });
   $("pAmt").addEventListener("input",()=>{ if($("pTds").checked && num($("pTdsPct").value)) $("pTdsAmt").value=Math.round(num($("pAmt").value)*num($("pTdsPct").value))/100; syncTds(); });
   $("pTdsPct").addEventListener("input",()=>{ $("pTdsAmt").value=Math.round(num($("pAmt").value)*num($("pTdsPct").value))/100; syncTds(); });
@@ -120,12 +131,23 @@ function recordPayment(x, back){
     const settled=num($("pAmt").value); if(settled<=0){ $("pErr").textContent="Enter a positive amount."; return; }
     const on=$("pTds").checked; const tds=on?num($("pTdsAmt").value):0;
     if(tds<0 || tds>settled){ $("pErr").textContent="TDS must be between 0 and the amount settled."; return; }
-    const cash=Math.round((settled-tds)*100)/100;
+    const settleAmt=settleB?settleB.total():0;
+    if(settleAmt>settled-tds+0.01){ $("pErr").textContent="Settlements exceed the amount after TDS."; return; }
+    const cash=Math.round((settled-tds-settleAmt)*100)/100;
+    const date=$("pDate").value||todayISO();
     const acct=$("pAcct")?$("pAcct").value:null;
-    const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:cash,
-      tds_pct:on?(num($("pTdsPct").value)||null):null, tds_amount:tds,
-      paid_on:$("pDate").value||todayISO(), account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
-    if(error){ $("pErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact receipt was just recorded — check the list before re-entering.":error.message; return; }
+    if(cash>0.005){
+      const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:cash,
+        tds_pct:on?(num($("pTdsPct").value)||null):null, tds_amount:tds,
+        paid_on:date, account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
+      if(error){ $("pErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact receipt was just recorded — check the list before re-entering.":error.message; return; }
+    } else if(tds>0){
+      // TDS-only (fully settled by contra + TDS): still record the TDS receipt
+      const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:0, tds_pct:on?(num($("pTdsPct").value)||null):null, tds_amount:tds, paid_on:date, account_id:acct||null, mode:$("pMode").value, note:$("pNote").value||null, created_by:window.OPS.me.id });
+      if(error){ $("pErr").textContent=error.message; return; }
+    }
+    try{ if(settleAmt>0) await window.OPS.settle.saveLines(aItem, settleB.lines, date, "collections"); }
+    catch(e){ $("pErr").textContent="Settlement failed: "+e.message; return; }
     x.paid+=settled; await recomputeStatus(x);
     window.OPS.audit("payment","document",x.r.id,money(cash)+(tds>0?(" + TDS "+money(tds)):"")+" via "+$("pMode").value);
     window.OPS.flashTop("Payment recorded ✓"); back();

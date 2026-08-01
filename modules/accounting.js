@@ -261,18 +261,19 @@ const payStatusChip = st => st==='paid'?'<span class="chip paid">Paid</span>'
 
 // balance = total − payments (cash_txns) − vendor credit notes (payable_credits)
 async function loadPayables(){
-  const [{data:pys,error},{data:txns},{data:creds}]=await Promise.all([
+  const [{data:pys,error},{data:txns},{data:creds},settleMap]=await Promise.all([
     sb().from("payables").select("*, vendor:vendor_id(firm_name,name)").order("invoice_date",{ascending:false}).limit(500),
     sb().from("cash_txns").select("ref_id,amount,tds_amount").eq("ref_type","payable"),
-    sb().from("payable_credits").select("payable_id,amount")
+    sb().from("payable_credits").select("payable_id,amount"),
+    window.OPS.settle.settledBy("vendor_payable")
   ]);
   if(error) return { rows:[], error };
   const paidBy={}, credBy={};
   (txns||[]).forEach(t=>{ paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount)+num(t.tds_amount); });
   (creds||[]).forEach(c=>{ credBy[c.payable_id]=(credBy[c.payable_id]||0)+num(c.amount); });
-  const rows=(pys||[]).map(p=>{ const paid=paidBy[p.id]||0, credit=credBy[p.id]||0;
-    const bal=Math.round((num(p.total)-paid-credit)*100)/100;
-    return { p, paid, credit, balance:bal, vendor_name:vName(p.vendor) }; });
+  const rows=(pys||[]).map(p=>{ const paid=paidBy[p.id]||0, credit=credBy[p.id]||0, contra=num(settleMap[p.id]||0);
+    const bal=Math.round((num(p.total)-paid-credit-contra)*100)/100;
+    return { p, paid, credit, contra, balance:bal, vendor_name:vName(p.vendor) }; });
   return { rows };
 }
 
@@ -299,7 +300,7 @@ async function listPayables(){
         <td class="num">${x.credit>0.005?money(x.credit):'—'}</td>
         <td class="num" style="${x.balance>0.005?'font-weight:700':''}">${money(x.balance)}</td>
         <td>${payStatusChip(x.p.status)}</td>
-        <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button>${(window.OPS.canDelete()&&x.paid<=0.005&&x.credit<=0.005)?` <button class="btn sm" data-delp="${x.p.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
+        <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button>${(window.OPS.canDelete()&&x.paid<=0.005&&x.credit<=0.005&&num(x.contra||0)<=0.005)?` <button class="btn sm" data-delp="${x.p.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No supplier invoices'+(_payOnlyDue?' with a balance':'')+'.</div>'}</div>`;
   $("pyOnlyDue").addEventListener("change",()=>{ _payOnlyDue=$("pyOnlyDue").checked; listPayables(); });
   const find=id=>rows.find(x=>String(x.p.id)===id);
@@ -319,13 +320,15 @@ async function listPayables(){
 }
 
 async function recomputePayable(id, total){
-  const [{data:tx},{data:cr}]=await Promise.all([
+  const [{data:tx},{data:cr},{data:se}]=await Promise.all([
     sb().from("cash_txns").select("amount,tds_amount").eq("ref_type","payable").eq("ref_id",String(id)),
-    sb().from("payable_credits").select("amount").eq("payable_id",id)
+    sb().from("payable_credits").select("amount").eq("payable_id",id),
+    sb().from("settlements").select("amount").or(`and(a_type.eq.vendor_payable,a_id.eq.${id}),and(b_type.eq.vendor_payable,b_id.eq.${id})`)
   ]);
   const paid=(tx||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0);
   const credit=(cr||[]).reduce((s,c)=>s+num(c.amount),0);
-  const settled=paid+credit;   // a credit note settles the balance just like a payment
+  const contra=(se||[]).reduce((s,c)=>s+num(c.amount),0);
+  const settled=paid+credit+contra;   // a credit note / cross-module settlement clears the balance like a payment
   const status = settled>=num(total)-0.005 ? "paid" : (settled>0 ? "part_paid" : "unpaid");
   await sb().from("payables").update({ status }).eq("id",id);
 }
@@ -344,6 +347,7 @@ function payVendor(x, back){
       <div class="field full"><label style="display:inline"><input type="checkbox" id="vp_tds" style="width:auto"> We deducted TDS</label></div>
       <div class="field"><label>TDS %</label><input id="vp_tdspct" type="number" step="any" placeholder="e.g. 2" disabled></div>
       <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="vp_tdsamt" type="number" step="any" value="0" disabled></div>
+      <div class="field full" id="vp_settle"></div>
       <div class="field full"><div class="callout" id="vp_split" style="margin:0"></div></div>
       <div class="field"><label>Date paid *</label><input type="date" id="vp_date" value="${todayISO()}"></div>
       <div class="field"><label>Mode</label><select id="vp_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
@@ -352,9 +356,12 @@ function payVendor(x, back){
     <div class="row"><button class="btn green" id="vpGo">Record payment</button><button class="btn" id="vpCancel">Cancel</button></div>
     <div class="err" id="vpErr"></div></div>`;
   $("vpBack").addEventListener("click",back); $("vpCancel").addEventListener("click",back);
+  const vpItem={ type:"vendor_payable", id:x.p.id, label:x.p.vendor_invoice_no||'(no no.)', side:"payable" };
+  let vpSettleB=null;
   const vpSync=()=>{ const on=$("vp_tds").checked; $("vp_tdspct").disabled=!on; $("vp_tdsamt").disabled=!on;
-    const settled=num($("vp_amt").value), tds=on?num($("vp_tdsamt").value):0, cash=Math.round((settled-tds)*100)/100;
-    $("vp_split").innerHTML = on ? `Settling <b>${money(settled)}</b> = cash out <b>${money(cash)}</b> + TDS <b>${money(tds)}</b> (booked to TDS Payable).` : `Cash out of account: <b>${money(settled)}</b>`; };
+    const settled=num($("vp_amt").value), tds=on?num($("vp_tdsamt").value):0, settle=vpSettleB?vpSettleB.total():0, cash=Math.round((settled-tds-settle)*100)/100;
+    $("vp_split").innerHTML = `Clearing <b>${money(settled)}</b> = ${tds>0?('TDS '+money(tds)+' + '):''}${settle>0?('settled '+money(settle)+' + '):''}cash out <b>${money(cash)}</b>.`+(tds>0?' <span class="muted">(TDS to TDS Payable.)</span>':''); };
+  vpSettleB = window.OPS.settle.block("vp_settle", vpItem); vpSettleB.onChange(vpSync);
   $("vp_tds").addEventListener("change",vpSync);
   $("vp_amt").addEventListener("input",()=>{ if($("vp_tds").checked && num($("vp_tdspct").value)) $("vp_tdsamt").value=Math.round(num($("vp_amt").value)*num($("vp_tdspct").value))/100; vpSync(); });
   $("vp_tdspct").addEventListener("input",()=>{ $("vp_tdsamt").value=Math.round(num($("vp_amt").value)*num($("vp_tdspct").value))/100; vpSync(); });
@@ -363,12 +370,19 @@ function payVendor(x, back){
     const settled=num($("vp_amt").value); if(!(settled>0)){ $("vpErr").textContent="Enter an amount."; return; }
     const on=$("vp_tds").checked, tds=on?num($("vp_tdsamt").value):0;
     if(tds<0||tds>settled){ $("vpErr").textContent="TDS must be between 0 and the amount settled."; return; }
-    const cash=Math.round((settled-tds)*100)/100;
-    const { error }=await sb().from("cash_txns").insert({ account_id:$("vp_acct").value, direction:"out",
-      txn_date:$("vp_date").value||todayISO(), amount:cash, tds_pct:on?(num($("vp_tdspct").value)||null):null, tds_amount:tds, mode:$("vp_mode").value,
-      ref_type:"payable", ref_id:String(x.p.id), note:$("vp_note").value||("Payment — "+(x.p.vendor_invoice_no||"")),
-      created_by:window.OPS.me.id });
-    if(error){ $("vpErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
+    const settleAmt=vpSettleB?vpSettleB.total():0;
+    if(settleAmt>settled-tds+0.01){ $("vpErr").textContent="Settlements exceed the amount after TDS."; return; }
+    const cash=Math.round((settled-tds-settleAmt)*100)/100;
+    const date=$("vp_date").value||todayISO();
+    if(cash>0.005 || tds>0){
+      const { error }=await sb().from("cash_txns").insert({ account_id:$("vp_acct").value, direction:"out",
+        txn_date:date, amount:cash, tds_pct:on?(num($("vp_tdspct").value)||null):null, tds_amount:tds, mode:$("vp_mode").value,
+        ref_type:"payable", ref_id:String(x.p.id), note:$("vp_note").value||("Payment — "+(x.p.vendor_invoice_no||"")),
+        created_by:window.OPS.me.id });
+      if(error){ $("vpErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
+    }
+    try{ if(settleAmt>0) await window.OPS.settle.saveLines(vpItem, vpSettleB.lines, date, "vendor"); }
+    catch(e){ $("vpErr").textContent="Settlement failed: "+e.message; return; }
     await recomputePayable(x.p.id, x.p.total);
     window.OPS.audit("paid","payables",x.p.id,money(cash)+(tds>0?(" + TDS "+money(tds)):"")); window.OPS.flashTop("Payment recorded ✓"); back();
   }));
@@ -747,8 +761,43 @@ async function loadTrialBalance(){
     ${ok?'':'<div class="callout warn" style="margin-top:10px">⚠ The journal does not balance. Something was written without a matching entry — tell the developer.</div>'}</div>`;
 }
 
+/* General Ledger — account-wise entries from the journal (no longer background). */
+async function ledger(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Accounting</div><h1>Ledger</h1>
+    <div class="callout">Every receipt, payment, invoice, expense, advance and settlement posts here as double-entry. Pick an account to see its entries and running balance, or view the trial balance.</div>
+    <div class="row wrap" style="margin:6px 0;gap:8px;align-items:flex-end">
+      <div class="field" style="margin:0;min-width:220px"><label>Account</label><select id="lgAcct"><option value="">All — Trial balance</option></select></div>
+      <div class="field" style="margin:0"><label>From</label><input id="lgFrom" type="date"></div>
+      <div class="field" style="margin:0"><label>To</label><input id="lgTo" type="date"></div>
+      <button class="btn sm" id="lgGo">Apply</button></div>
+    <div id="lgBody" class="muted">Loading…</div>`;
+  const { data:tb }=await sb().from("v_trial_balance").select("account").order("account");
+  $("lgAcct").innerHTML='<option value="">All — Trial balance</option>'+(tb||[]).map(r=>`<option>${esc(r.account)}</option>`).join("");
+  $("lgGo").addEventListener("click",load); load();
+  async function load(){
+    const acct=$("lgAcct").value, from=$("lgFrom").value, to=$("lgTo").value;
+    if(!acct){
+      const { data }=await sb().from("v_trial_balance").select("*");
+      const dr=(data||[]).reduce((s,r)=>s+num(r.debit),0), cr=(data||[]).reduce((s,r)=>s+num(r.credit),0), ok=Math.abs(dr-cr)<0.005;
+      $("lgBody").innerHTML=`<div class="card"><h3>Trial balance</h3><div style="overflow:auto"><table><thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
+        <tbody>${(data||[]).map(r=>`<tr><td class="clickable" data-acct="${esc(r.account)}" style="text-decoration:underline;cursor:pointer">${esc(r.account)}</td><td class="num">${money(r.debit)}</td><td class="num">${money(r.credit)}</td><td class="num" style="font-weight:700">${money(r.balance)}</td></tr>`).join("")}</tbody>
+        <tfoot><tr><td><b>Total</b></td><td class="num"><b>${money(dr)}</b></td><td class="num"><b>${money(cr)}</b></td><td class="num" style="color:${ok?'#3e6b20':'#a3322a'}"><b>${ok?'balanced ✓':money(dr-cr)}</b></td></tr></tfoot></table></div></div>`;
+      $("lgBody").querySelectorAll("[data-acct]").forEach(el=>el.addEventListener("click",()=>{ $("lgAcct").value=el.getAttribute("data-acct"); load(); }));
+      return;
+    }
+    let q=sb().from("accounting_entries").select("*").eq("account",acct).order("voucher_date",{ascending:true});
+    if(from) q=q.gte("voucher_date",from); if(to) q=q.lte("voucher_date",to);
+    const { data }=await q; let bal=0;
+    const rows=(data||[]).map(e=>{ bal+=num(e.debit)-num(e.credit); return `<tr><td>${fmtDate(e.voucher_date)}</td><td>${esc(e.narration||"")}</td><td>${esc(e.ref_type||"")}</td><td class="num">${e.debit>0?money(e.debit):''}</td><td class="num">${e.credit>0?money(e.credit):''}</td><td class="num" style="font-weight:700">${money(bal)}</td></tr>`; }).join("");
+    $("lgBody").innerHTML=`<div class="card"><h3>${esc(acct)}</h3><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Narration</th><th>Source</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" class="muted">No entries.</td></tr>'}</tbody></table></div></div>`;
+  }
+}
+
 window.OPS.routes.day_book     = dayBook;
 window.OPS.routes.expense_mgmt = expenseMgmt;
 window.OPS.routes.advances     = advances;
 window.OPS.routes.acct_position = position;
+window.OPS.routes.ledger       = ledger;
 })();
