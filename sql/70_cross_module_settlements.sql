@@ -45,7 +45,7 @@ grant select, insert, update, delete on public.settlements to authenticated;
 -- control account + side for an open-item type
 create or replace function public.settle_meta(p_type text)
 returns table(account text, side text) language sql immutable as $$
-  select * from (values
+  select account, side from (values
     ('client_invoice','Accounts Receivable','receivable'),
     ('advance',       'Advances Recoverable','receivable'),
     ('vendor_payable','Accounts Payable',   'payable'),
