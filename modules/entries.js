@@ -139,12 +139,13 @@ async function sprayCombined(source){
   ]);
   const a=(aR||[])[0]||{}, f=(fR||[])[0]||{}; const cl=crops||[];
   const billed = !!(a.farmer_doc_id||a.client_doc_id||a.vendor_doc_id||a.farmer_billed_override||a.client_billed_override);
+  const admin = window.OPS.isAdmin() || (window.OPS.isApprover && window.OPS.isApprover());
   const val=(x)=>esc(x==null?"":x);
   m.innerHTML=`<button class="btn sm" id="eqBack">← Back to Entries</button>
     <div class="card" style="margin-top:12px"><div class="eyebrow">Daily Spray Entry · Edit entry</div><h1>Re-record this spray</h1>
     ${billed
       ? '<div class="callout warn">🔒 <b>This entry is on an invoice</b> and is locked. To change it, credit or withdraw that invoice first (Finance → Acre Invoicing → credit the document) — that releases the row for editing.</div>'
-      : '<div class="callout">Editing here <b>re-records the whole spray</b> — the Farmer and Acre sides update together, so the dashboards and Acre Invoicing stay in step.</div>'}
+      : ('<div class="callout">Editing here <b>re-records the whole spray</b> — the Farmer and Acre sides update together, so the dashboards and Acre Invoicing stay in step.</div>'+(admin?'':'<div class="callout warn">Your change is <b>submitted for approval</b> — it only takes effect once an approver accepts it in Review / Approvals.</div>'))}
     <div class="fgrid">
       <div class="field"><label>Date</label><input id="s_date" type="date" value="${val((a.entry_date||f.spray_date||'').slice(0,10))}" ${billed?'disabled':''}></div>
       <div class="field"><label>Location</label><select id="s_loc" ${billed?'disabled':''}><option value="">— none —</option>${locations.map(l=>`<option value="${l.id}" ${a.location_id===l.id?'selected':''}>${esc(l.name)}</option>`).join("")}</select></div>
@@ -158,24 +159,44 @@ async function sprayCombined(source){
       <div class="field"><label>Contact</label><input id="s_phone" value="${val(f.contact_no)}" ${billed?'disabled':''}></div>
       <div class="field"><label>Village</label><input id="s_village" value="${val(f.village)}" ${billed?'disabled':''}></div>
       <div class="field"><label>GPS image received</label><select id="s_gps" ${billed?'disabled':''}><option value="no" ${f.gps_image_present?'':'selected'}>No</option><option value="yes" ${f.gps_image_present?'selected':''}>Yes</option></select></div>
+      ${(!admin&&!billed)?`<div class="field full"><label>Send approval to *</label><select id="s_approver"><option value="">— select approver —</option></select></div>`:''}
     </div>
     ${billed?'' : `<div class="row"><button class="btn green" id="s_save">Save &amp; re-record</button><button class="btn" id="s_cancel">Cancel</button>
       <div class="spacer"></div>${window.OPS.canDelete()?'<button class="btn sm" id="s_del" style="color:#a3322a;border-color:#e4b4b4">Delete entry</button>':''}</div>`}
     <div class="err" id="s_err"></div></div>`;
   $("eqBack").addEventListener("click",view);
   if($("s_cancel")) $("s_cancel").addEventListener("click",view);
+  if($("s_approver")){ window.OPS.listProfiles().then(ps=>{ const opts=(ps||[]).filter(p=>!p.is_external && p.id!==window.OPS.me.id);
+    $("s_approver").innerHTML='<option value="">— select approver —</option>'+opts.map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)} (${esc(p.role)})</option>`).join(""); }); }
   if($("s_save")) $("s_save").addEventListener("click",async()=>{
     const acres=num($("s_acres").value), cr=num($("s_crate").value), fr=num($("s_frate").value);
     if(!(acres>0)){ $("s_err").textContent="Enter the acres."; return; }
+    const cropName=(($("s_crop").selectedOptions[0]||{}).text||"").replace(/^— crop —$/,'')||null;
     $("s_save").disabled=true;
-    const { error }=await sb().rpc("edit_spray",{ p_source:source, p_date:$("s_date").value||null, p_location:$("s_loc").value||null,
-      p_pilot:$("s_pilot").value||null, p_acres:acres, p_crate:cr, p_frate:fr,
-      p_crop:( ($("s_crop").selectedOptions[0]||{}).text||"").replace(/^— crop —$/,'')||null, p_crop_id:$("s_crop").value||null,
-      p_chemical:$("s_chem").value||null, p_farmer:$("s_farmer").value||null, p_phone:$("s_phone").value||null,
-      p_village:$("s_village").value||null, p_gps:$("s_gps").value==="yes" });
+    if(admin){
+      const { error }=await sb().rpc("edit_spray",{ p_source:source, p_date:$("s_date").value||null, p_location:$("s_loc").value||null,
+        p_pilot:$("s_pilot").value||null, p_acres:acres, p_crate:cr, p_frate:fr,
+        p_crop:cropName, p_crop_id:$("s_crop").value||null,
+        p_chemical:$("s_chem").value||null, p_farmer:$("s_farmer").value||null, p_phone:$("s_phone").value||null,
+        p_village:$("s_village").value||null, p_gps:$("s_gps").value==="yes" });
+      $("s_save").disabled=false;
+      if(error){ $("s_err").textContent=error.message; return; }
+      window.OPS.audit("edited","spray",source,$("s_pilot").value||""); window.OPS.flashTop("Re-recorded ✓"); view(); return;
+    }
+    // non-approver: park the full synced change for approval (applied to both tables on accept)
+    const approver=$("s_approver")?$("s_approver").value:"";
+    if(!approver){ $("s_save").disabled=false; $("s_err").textContent="Choose who should approve this change."; return; }
+    if(!a.id){ $("s_save").disabled=false; $("s_err").textContent="This entry can't be proposed for edit — ask an admin."; return; }
+    const changes={ _synced:true, entry_date:$("s_date").value||null, location_id:$("s_loc").value||null, pilot_name:$("s_pilot").value||null,
+      acres:acres, client_rate:cr||null, farmer_rate:fr||null, rate:(cr+fr)||null, amount:(acres*(cr+fr))||null,
+      crop:cropName, crop_id:$("s_crop").value||null, chemical:$("s_chem").value||null,
+      farmer:$("s_farmer").value||null, phone:$("s_phone").value||null, village:$("s_village").value||null, gps:$("s_gps").value==="yes" };
+    const { error }=await sb().rpc("propose_acre_edit",{ p_id:a.id, p_changes:changes, p_approver:approver });
     $("s_save").disabled=false;
     if(error){ $("s_err").textContent=error.message; return; }
-    window.OPS.audit("edited","spray",source,$("s_pilot").value||""); window.OPS.flashTop("Re-recorded ✓"); view();
+    try{ await sb().from("notifications").insert({ user_id:approver, message:"Review: spray edit ("+($("s_pilot").value||fmtDate($("s_date").value))+")" }); }catch(e){}
+    window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount();
+    window.OPS.audit("edit_requested","spray",source,"proposed synced edit"); window.OPS.flashTop("Edit submitted for approval ✓"); view();
   });
   if($("s_del")) $("s_del").addEventListener("click",async()=>{
     if(!confirm("Delete this spray? Removes both the Farmer and Acre rows.")) return;
