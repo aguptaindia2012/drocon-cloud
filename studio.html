@@ -1727,6 +1727,45 @@ function dcbBankFieldset(){
     </div></fieldset>`;
 }
 
+/* Offer / Internship letters — capture the recipient + engagement fields that
+   drive the letter tokens ({{RECIPIENT}}, {{ROLE}}, {{COMP}}, {{STARTTEXT}},
+   {{DURATION}}, {{WORKLOC}}, {{REPORTSTO}}). Without this the letter printed
+   these as blanks. */
+function panelLetter(){
+  const isIntern = draft.clauseSet==="internship";
+  const compLabel = isIntern ? "Stipend (₹)" : "Compensation";
+  return `
+  <div class="panel">
+    <h2>${isIntern?"Internship":"Offer"} details</h2>
+    <p class="sub">Fill the details for this letter. Anything left blank prints as a fill-in line.</p>
+    <fieldset class="fieldset"><legend>Letter</legend>
+    <div class="fgrid">
+      <div class="field full"><label>Title</label><input type="text" data-f="title" value="${esc(draft.title)}"></div>
+      <div class="field full"><label>Subtitle <span class="hint">(prints under the title)</span></label><input type="text" data-f="subtitle" value="${esc(draft.subtitle)}"></div>
+      <div class="field"><label>Letter date</label><input type="date" data-f="effectiveDate" value="${F('effectiveDate')}"></div>
+    </div></fieldset>
+    <fieldset class="fieldset"><legend>Recipient</legend>
+    <div class="fgrid">
+      <div class="field"><label>Name *</label><input type="text" data-f="recipientName" value="${F('recipientName')}" placeholder="Candidate / intern name"></div>
+      <div class="field"><label>Role / designation</label><input type="text" data-f="roleTitle" value="${F('roleTitle')}" placeholder="e.g. Operations Intern"></div>
+      <div class="field full"><label>Address</label><textarea data-f="recipientAddress" placeholder="Recipient's address">${F('recipientAddress')}</textarea></div>
+    </div></fieldset>
+    <fieldset class="fieldset"><legend>Engagement</legend>
+    <div class="fgrid">
+      <div class="field"><label>${compLabel}</label><input type="text" data-f="compensation" value="${F('compensation')}" placeholder="${isIntern?'e.g. ₹15,000 / month':'e.g. ₹4,50,000 p.a.'}"></div>
+      <div class="field"><label>Start date <span class="hint">(as it should read)</span></label><input type="text" data-f="startDateText" value="${F('startDateText')}" placeholder="e.g. 1 September 2026"></div>
+      ${isIntern?`<div class="field"><label>Duration</label><input type="text" data-f="duration" value="${F('duration')}" placeholder="e.g. 3 months"></div>`:''}
+      <div class="field"><label>Work location</label><input type="text" data-f="workLocation" value="${F('workLocation')}"></div>
+      <div class="field full"><label>Reports to</label><input type="text" data-f="reportsTo" value="${F('reportsTo')}"></div>
+    </div></fieldset>
+    <fieldset class="fieldset"><legend>DroCon Bharat signatory</legend>
+    <div class="fgrid">
+      <div class="field"><label>Signatory name</label><input type="text" data-f="droconSignName" value="${F('droconSignName')}"></div>
+      <div class="field"><label>Signatory title</label><input type="text" data-f="droconSignTitle" value="${F('droconSignTitle')}"></div>
+    </div></fieldset>
+  </div>`;
+}
+
 function panelParties(){
   const isVendor = draft.cat==="vendor";
   const cp = draft.cpRole;
@@ -1781,6 +1820,7 @@ function panelParties(){
       ${dcbBankFieldset()}
     </div>`;
   }
+  if((draft.kind||"agreement")==="letter"){ return panelLetter(); }
   return `
   <div class="panel">
     <h2>Parties &amp; Engagement</h2>
