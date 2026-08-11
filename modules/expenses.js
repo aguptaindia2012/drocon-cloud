@@ -167,7 +167,8 @@ async function saveMyAtt(){
   window.OPS.flashTop("Attendance saved ✓"); attendanceCard(att.emp);
 }
 
-function claimForm(emp, typeKey){
+function claimForm(emp, typeKey, back){
+  const goBack = back || myExpenses;
   const type=TYPES[typeKey]; const m=$("main");
   const common=`<div class="fgrid">
       <div class="field"><label>${type.monthly?"Month":"Period / ref"}</label><input id="ecPeriod" ${type.monthly?'type="month"':''} value="${type.monthly?todayISO().slice(0,7):''}"></div>
@@ -186,8 +187,8 @@ function claimForm(emp, typeKey){
   } else {
     inner=`${type.note?`<div class="muted" style="margin-bottom:6px">${esc(type.note)}</div>`:""}<div id="ecRows"></div>`;
   }
-  m.innerHTML=`<button class="btn sm" id="ecBack">← Back to My Expenses</button>
-    <div class="card" style="margin-top:12px"><div class="eyebrow">${esc(emp.name)}</div><h1 style="margin:2px 0">${esc(type.label)}</h1>
+  m.innerHTML=`<button class="btn sm" id="ecBack">← Back</button>
+    <div class="card" style="margin-top:12px"><div class="eyebrow">${esc(emp.name)}${back?' · entered by the team':''}</div><h1 style="margin:2px 0">${esc(type.label)}</h1>
       ${common}
       <h3 style="margin:12px 0 4px">Details</h3>
       ${inner}
@@ -197,7 +198,7 @@ function claimForm(emp, typeKey){
       <div class="row" style="margin-top:8px"><button class="btn green" id="ecSubmit">Submit claim</button><div class="spacer"></div><div class="err" id="ecErr"></div></div>
       <div class="muted" style="margin-top:8px;font-size:12px">All amounts are exclusive of GST; TDS applies as per the Income-tax Act, 1961.</div>
     </div>`;
-  $("ecBack").addEventListener("click",myExpenses);
+  $("ecBack").addEventListener("click",goBack);
   const setTot=t=>{ $("ecTotal").textContent=money(t); };
   let rows=[{}]; let advRows=ADV_CATS.map(c=>({category:c,amount:"",note:""}));
   if(type.special==="advance"){
@@ -239,17 +240,44 @@ function claimForm(emp, typeKey){
     const files=$("ecFiles").files;
     if(files&&files.length){ const rc=await uploadReceipts(ins.id, emp.id, files);
       if(rc.length) await sb().from("expense_claims").update({receipts:rc}).eq("id",ins.id); }
-    window.OPS.flashTop("Claim submitted ✓"); myExpenses();
+    window.OPS.flashTop("Claim submitted ✓"); goBack();
   }));
+}
+
+/* Internal: enter an expense on behalf of an employee, using the same templates
+   (for hard-copy / historical claims keyed in by the finance team). */
+async function newClaimForEmployee(){
+  const m=$("main");
+  const { data:emps }=await sb().from("employees").select("id,name").order("name");
+  const list=emps||[];
+  m.innerHTML=`<button class="btn sm" id="ncBack">← Back to Expense Claims</button>
+    <div class="card" style="margin-top:12px"><div class="eyebrow">Finance</div><h1>Enter an expense (on behalf of an employee)</h1>
+    <div class="callout">Use the same claim forms your team uses in My Space — pick the employee and the expense type, then fill the form and attach the hard-copy receipt.</div>
+    <div class="fgrid">
+      <div class="field"><label>Employee *</label><select id="ncEmp"><option value="">— select employee —</option>${list.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Expense type *</label><select id="ncType"><option value="">— select type —</option>${Object.keys(TYPES).map(k=>`<option value="${k}">${esc(TYPES[k].label)}</option>`).join("")}</select></div>
+    </div>
+    <div class="row"><button class="btn green" id="ncGo">Continue to the form</button></div>
+    <div class="err" id="ncErr"></div></div>`;
+  $("ncBack").addEventListener("click",expenseReview);
+  $("ncGo").addEventListener("click",()=>{
+    const eid=$("ncEmp").value, tk=$("ncType").value;
+    if(!eid){ $("ncErr").textContent="Select the employee."; return; }
+    if(!tk){ $("ncErr").textContent="Select the expense type."; return; }
+    const emp=list.find(e=>String(e.id)===String(eid));
+    claimForm({ id:emp.id, name:emp.name }, tk, expenseReview);
+  });
 }
 
 /* ============================ Review (Finance → Expense Claims) ============================ */
 async function expenseReview(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Finance</div><h1>Expense Claims</h1>
-    <div class="row" style="margin:10px 0"><label style="margin:0">Show</label>
-      <select id="erStatus" style="width:auto"><option value="submitted">Pending review</option><option value="approved">Approved (to pay)</option><option value="part_paid">Part-paid</option><option value="paid">Paid</option><option value="rejected">Rejected</option><option value="">All</option></select></div>
+    <div class="row wrap" style="margin:10px 0"><label style="margin:0">Show</label>
+      <select id="erStatus" style="width:auto"><option value="submitted">Pending review</option><option value="approved">Approved (to pay)</option><option value="part_paid">Part-paid</option><option value="paid">Paid</option><option value="rejected">Rejected</option><option value="">All</option></select>
+      <div class="spacer"></div><button class="btn green sm" id="erNew">+ Enter expense (on behalf of employee)</button></div>
     <div id="erBody" class="muted">Loading…</div>`;
+  $("erNew").addEventListener("click",newClaimForEmployee);
   const load=async()=>{
     const st=$("erStatus").value;
     let q=sb().from("expense_claims").select("*").order("created_at",{ascending:false});
