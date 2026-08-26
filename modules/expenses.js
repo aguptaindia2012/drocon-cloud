@@ -83,6 +83,64 @@ function lineEditor(host, type, rows, onTotal){
   draw();
 }
 
+/* ---------- printable BLANK claim form (fill by hand, then hand in) ---------- */
+function printBlankForm(typeKey){
+  const type=TYPES[typeKey]; if(!type) return;
+  const blankLines=(n)=>Array.from({length:n||6});
+  let bodyRows="";
+  if(type.special==="house_rent"){
+    const row=(l)=>`<tr><td class="lbl">${esc(l)}</td><td class="fill">&nbsp;</td></tr>`;
+    bodyRows=`<table class="kv">${row("Landlord name")}${row("Property address")}${row("Monthly rent (₹)")}${row("Landlord contact")}${row("Period / month")}</table>`;
+  } else if(type.special==="advance"){
+    bodyRows=`<table class="grid"><thead><tr><th>Category</th><th class="num">Estimated ₹</th><th>Notes</th></tr></thead>
+      <tbody>${ADV_CATS.map(c=>`<tr><td>${esc(c)}</td><td class="fill">&nbsp;</td><td class="fill">&nbsp;</td></tr>`).join("")}
+      <tr><td class="tot">Total</td><td class="fill">&nbsp;</td><td></td></tr></tbody></table>`;
+  } else {
+    const cols=type.cols||[];
+    bodyRows=`<table class="grid"><thead><tr>${cols.map(c=>`<th class="${(c.t==='num'||c.t==='ro')?'num':''}">${esc(c.l)}</th>`).join("")}</tr></thead>
+      <tbody>${blankLines(8).map(()=>`<tr>${cols.map(()=>'<td class="fill">&nbsp;</td>').join("")}</tr>`).join("")}
+      <tr>${cols.map((c,i)=> i===cols.length-1?'<td class="fill">&nbsp;</td>':(i===0?'<td class="tot">Total</td>':'<td></td>')).join("")}</tr></tbody></table>`;
+  }
+  const html=`<html><head><meta charset="utf-8"><title>${esc(type.label)} — claim form</title>
+    <style>body{font-family:Arial,sans-serif;color:#111;margin:28px;font-size:13px}
+    h1{font-size:19px;margin:0 0 2px} .sub{color:#555;margin:0 0 14px}
+    table{border-collapse:collapse;width:100%;margin:10px 0} th,td{border:1px solid #999;padding:7px 8px;vertical-align:top}
+    th{background:#eee;text-align:left} .num{text-align:right} .fill{height:26px} .lbl{width:32%;background:#f6f6f6;font-weight:bold}
+    .kv td{height:26px} .tot{font-weight:bold;background:#f6f6f6}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start}
+    .meta td{border:none;padding:3px 0;height:22px} .meta .lbl{background:none;width:120px}
+    .under{border-bottom:1px solid #333;display:inline-block;min-width:220px}
+    .sign{margin-top:26px;display:flex;justify-content:space-between} .sign div{width:45%}
+    .sline{border-bottom:1px solid #333;height:34px;margin-bottom:4px} .note{color:#666;font-size:11px;margin-top:10px}
+    @media print{.noprint{display:none}}</style></head><body>
+    <div class="noprint" style="margin-bottom:10px"><button onclick="window.print()">Print</button>
+      <span style="color:#666"> — blank form; fill by hand, attach receipts, and hand in.</span></div>
+    <div class="hdr"><div><h1>DroCon Bharat Private Limited</h1><div class="sub">Expense Claim — ${esc(type.label)}</div></div></div>
+    <table class="meta"><tr><td class="lbl">Employee name</td><td><span class="under">&nbsp;</span></td><td class="lbl">Employee ID</td><td><span class="under">&nbsp;</span></td></tr>
+      <tr><td class="lbl">Department</td><td><span class="under">&nbsp;</span></td><td class="lbl">${type.monthly?'Month':'Period / ref'}</td><td><span class="under">&nbsp;</span></td></tr></table>
+    ${type.note?`<div class="note">${esc(type.note)}</div>`:''}
+    ${bodyRows}
+    <table class="meta"><tr><td class="lbl">Purpose / justification</td></tr></table>
+    <div style="border:1px solid #999;height:56px"></div>
+    <div class="sign"><div><div class="sline"></div>Employee signature &amp; date</div><div><div class="sline"></div>Approved by (Manager / HR) &amp; date</div></div>
+    <div class="note">All amounts are exclusive of GST; TDS applies as per the Income-tax Act, 1961. Attach original receipts / bills.</div>
+    </body></html>`;
+  const w=window.open("","_blank"); if(!w){ alert("Allow pop-ups to open the printable form."); return; }
+  w.document.write(html); w.document.close();
+}
+
+/* A small picker to open a printable blank form for any expense type */
+function printFormPicker(back){
+  const m=$("main");
+  m.innerHTML=`<button class="btn sm" id="pfBack">← Back</button>
+    <div class="card" style="margin-top:12px"><div class="eyebrow">Expense</div><h1>Printable claim forms</h1>
+    <div class="callout">Open a blank form for any expense type, print it, and hand it in filled by hand. The team can then key it in and attach the receipt.</div>
+    <div style="overflow:auto"><table><thead><tr><th>Expense type</th><th></th></tr></thead>
+      <tbody>${Object.keys(TYPES).map(k=>`<tr><td><b>${esc(TYPES[k].label)}</b></td><td><button class="btn sm" data-print="${k}">Open / print</button></td></tr>`).join("")}</tbody></table></div></div>`;
+  $("pfBack").addEventListener("click", back||myExpenses);
+  m.querySelectorAll("[data-print]").forEach(b=>b.addEventListener("click",()=>printBlankForm(b.getAttribute("data-print"))));
+}
+
 /* ============================ My Expenses (self-service) ============================ */
 async function myExpenses(){
   const m=$("main");
@@ -94,7 +152,7 @@ async function myExpenses(){
   $("meBody").innerHTML=`
     <div class="callout">Welcome, <b>${esc(emp.name)}</b>. Mark your attendance and file expense claims below; HR reviews and processes them.</div>
     <div id="myAtt"></div>
-    <h3 style="margin-top:14px">File an expense claim</h3>
+    <div class="row wrap" style="margin-top:14px;align-items:center"><h3 style="margin:0">File an expense claim</h3><div class="spacer"></div><button class="btn sm" id="mePrint">🖨 Printable blank forms</button></div>
     <div class="row" style="flex-wrap:wrap;gap:6px;margin:8px 0">
       ${Object.keys(TYPES).map(k=>`<button class="btn sm" data-new="${k}">+ ${esc(TYPES[k].label)}</button>`).join("")}
     </div>
@@ -105,6 +163,7 @@ async function myExpenses(){
         <td>${(r.receipts||[]).length||0}</td><td>${window.OPS.statusChip(r.status)}</td>
         <td>${r.status==="submitted"||r.status==="draft"||r.status==="rejected"?`<button class="btn sm ghost" data-del="${r.id}">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No claims yet — pick a type above to file one.</div>'}`;
+  if($("mePrint")) $("mePrint").addEventListener("click",()=>printFormPicker(myExpenses));
   $("meBody").querySelectorAll("[data-new]").forEach(b=>b.addEventListener("click",()=>claimForm(emp, b.getAttribute("data-new"))));
   $("meBody").querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
     if(!confirm("Delete this claim?")) return;
@@ -257,9 +316,11 @@ async function newClaimForEmployee(){
       <div class="field"><label>Employee *</label><select id="ncEmp"><option value="">— select employee —</option>${list.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join("")}</select></div>
       <div class="field"><label>Expense type *</label><select id="ncType"><option value="">— select type —</option>${Object.keys(TYPES).map(k=>`<option value="${k}">${esc(TYPES[k].label)}</option>`).join("")}</select></div>
     </div>
-    <div class="row"><button class="btn green" id="ncGo">Continue to the form</button></div>
+    <div class="row"><button class="btn green" id="ncGo">Continue to the form</button>
+      <div class="spacer"></div><button class="btn sm" id="ncPrint">🖨 Printable blank forms</button></div>
     <div class="err" id="ncErr"></div></div>`;
   $("ncBack").addEventListener("click",expenseReview);
+  $("ncPrint").addEventListener("click",()=>printFormPicker(newClaimForEmployee));
   $("ncGo").addEventListener("click",()=>{
     const eid=$("ncEmp").value, tk=$("ncType").value;
     if(!eid){ $("ncErr").textContent="Select the employee."; return; }
