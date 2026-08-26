@@ -34,14 +34,19 @@ async function view(){
 async function dashboard(){
   const host=$("aBody");
   const { data }=await sb().from("acre_entries")
-    .select("entry_date,acres,amount,pilot_name,pilot_id, pilot:pilot_id(name), loc:location_id(name,state)").limit(20000);
+    .select("entry_date,acres,amount,pilot_name,pilot_id,farmer_doc_id,client_doc_id,farmer_billed_override,client_billed_override, pilot:pilot_id(name), loc:location_id(name,state)").limit(20000);
   const rows=data||[];
   if(!rows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
+  const isBilled=r=>!!(r.farmer_doc_id||r.client_doc_id||r.farmer_billed_override||r.client_billed_override);
   const totA=rows.reduce((s,r)=>s+num(r.acres),0), totR=rows.reduce((s,r)=>s+num(r.amount),0);
+  const billedA=rows.filter(isBilled).reduce((s,r)=>s+num(r.acres),0);
+  const unbilledA=Math.round((totA-billedA)*100)/100;
   const ym=d=>String(d).slice(0,7);
   const thisYM=ym(todayISO());
-  const monthA=rows.filter(r=>ym(r.entry_date)===thisYM).reduce((s,r)=>s+num(r.acres),0);
-  const monthR=rows.filter(r=>ym(r.entry_date)===thisYM).reduce((s,r)=>s+num(r.amount),0);
+  const monthRows=rows.filter(r=>ym(r.entry_date)===thisYM);
+  const monthA=monthRows.reduce((s,r)=>s+num(r.acres),0);
+  const monthR=monthRows.reduce((s,r)=>s+num(r.amount),0);
+  const monthBilled=monthRows.filter(isBilled).reduce((s,r)=>s+num(r.acres),0);
 
   // monthly
   const byM={}; rows.forEach(r=>{ const k=ym(r.entry_date); byM[k]=byM[k]||{a:0,r:0}; byM[k].a+=num(r.acres); byM[k].r+=num(r.amount); });
@@ -84,9 +89,11 @@ async function dashboard(){
 
   host.innerHTML=`
     <div class="statrow">
-      <div class="stat"><div class="n">${totA.toFixed(0)}</div><div class="l">Total acres</div></div>
+      <div class="stat"><div class="n">${totA.toFixed(0)}</div><div class="l">Total acres (all)</div></div>
+      <div class="stat"><div class="n" style="color:var(--green)">${billedA.toFixed(0)}</div><div class="l">Billed / invoiced</div></div>
+      <div class="stat" style="background:#fff0db"><div class="n" style="color:#9a5b00">${unbilledA.toFixed(0)}</div><div class="l">Unbilled (awaiting invoice)</div></div>
       <div class="stat"><div class="n">${money(totR)}</div><div class="l">Total revenue</div></div>
-      <div class="stat"><div class="n">${monthA.toFixed(0)}</div><div class="l">Acres this month</div></div>
+      <div class="stat"><div class="n">${monthA.toFixed(0)}</div><div class="l">Acres this month${monthBilled>0?` <span class="muted" style="font-size:11px">(${monthBilled.toFixed(0)} billed)</span>`:''}</div></div>
       <div class="stat"><div class="n">${money(monthR)}</div><div class="l">Revenue this month</div></div>
       <div class="stat" style="${redCount?'background:#fbe0de':(below.length?'background:#fff0db':'')}"><div class="n" style="${redCount?'color:#a3322a':(below.length?'color:#9a5b00':'')}">${below.length}</div><div class="l">Below ${MIN_ACRES} ac (7d)${redCount?" · "+redCount+" red":""}</div></div>
     </div>
