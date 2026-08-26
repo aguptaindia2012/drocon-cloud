@@ -33,45 +33,37 @@ async function view(){
 /* ---------- dashboard ---------- */
 async function dashboard(){
   const host=$("aBody");
-  const { data }=await sb().from("acre_entries")
-    .select("entry_date,acres,amount,pilot_name,pilot_id,farmer_doc_id,client_doc_id,farmer_billed_override,client_billed_override, pilot:pilot_id(name), loc:location_id(name,state)").limit(20000);
-  const rows=data||[];
-  if(!rows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
-  const isBilled=r=>!!(r.farmer_doc_id||r.client_doc_id||r.farmer_billed_override||r.client_billed_override);
-  const totA=rows.reduce((s,r)=>s+num(r.acres),0), totR=rows.reduce((s,r)=>s+num(r.amount),0);
-  const billedA=rows.filter(isBilled).reduce((s,r)=>s+num(r.acres),0);
+  // Aggregated server-side (sql/76) so growing row volume can never truncate totals.
+  const [{ data:mData },{ data:lData },{ data:pData }]=await Promise.all([
+    sb().from("v_acre_monthly").select("*"),
+    sb().from("v_acre_by_location").select("*"),
+    sb().from("v_acre_pilot_recent").select("*")
+  ]);
+  const mRows=mData||[];
+  if(!mRows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
+  const totA=mRows.reduce((s,r)=>s+num(r.acres),0), totR=mRows.reduce((s,r)=>s+num(r.revenue),0);
+  const billedA=Math.round(mRows.reduce((s,r)=>s+num(r.billed_acres),0)*100)/100;
   const unbilledA=Math.round((totA-billedA)*100)/100;
-  const ym=d=>String(d).slice(0,7);
-  const thisYM=ym(todayISO());
-  const monthRows=rows.filter(r=>ym(r.entry_date)===thisYM);
-  const monthA=monthRows.reduce((s,r)=>s+num(r.acres),0);
-  const monthR=monthRows.reduce((s,r)=>s+num(r.amount),0);
-  const monthBilled=monthRows.filter(isBilled).reduce((s,r)=>s+num(r.acres),0);
+  const thisYM=todayISO().slice(0,7);
+  const mCur=mRows.find(r=>r.ym===thisYM)||{acres:0,revenue:0,billed_acres:0};
+  const monthA=num(mCur.acres), monthR=num(mCur.revenue), monthBilled=num(mCur.billed_acres);
 
-  // monthly
-  const byM={}; rows.forEach(r=>{ const k=ym(r.entry_date); byM[k]=byM[k]||{a:0,r:0}; byM[k].a+=num(r.acres); byM[k].r+=num(r.amount); });
+  // monthly (from the view)
+  const byM={}; mRows.forEach(r=>{ byM[r.ym]={a:num(r.acres),r:num(r.revenue)}; });
   const months=Object.keys(byM).sort().reverse().slice(0,12);
-  // location-wise
-  const byL={}; rows.forEach(r=>{ const k=(r.loc&&r.loc.name)||"(none)"; byL[k]=byL[k]||{a:0,r:0}; byL[k].a+=num(r.acres); byL[k].r+=num(r.amount); });
-  const locs=Object.entries(byL).map(([k,o])=>({k,...o})).sort((a,b)=>b.r-a.r);
-  // last 7 days by location, broken down per pilot (to spot under-supplied days)
+  // location-wise (from the view)
+  const locs=(lData||[]).map(r=>({k:r.location,a:num(r.acres),r:num(r.revenue)})).sort((a,b)=>b.r-a.r);
+  // last 7 days by location + pilot (from the pre-aggregated recent view)
   const MIN_ACRES=15;    // green  — at/above the daily minimum
   const WARN_ACRES=13;   // yellow — 13 to under 15; below 13 is red
-  // band for a pilot-day: >=15 green, 13-14 yellow, <=12 red
   const band=v=> v>=MIN_ACRES  ? {key:"green", label:"OK",     color:"#3e6b20", bg:"#e3f0d9"}
                : v>=WARN_ACRES ? {key:"yellow",label:"Yellow", color:"#9a5b00", bg:"#fff0db"}
                                : {key:"red",   label:"Red",    color:"#a3322a", bg:"#fbe0de"};
   const since=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
-  const last7=rows.filter(r=>r.entry_date>=since);
-  // Prefer the linked master pilot; otherwise tidy the typed name so trailing
-  // spaces / casing don't split one person across two rows.
-  const pilotKey=r=>{
-    const nm=((r.pilot&&r.pilot.name)||r.pilot_name||"").replace(/\s+/g," ").trim();
-    return nm || "(unassigned)";
-  };
+  const last7=(pData||[]).filter(r=>r.entry_date>=since);
   const byLoc={}; const days=new Set(); const dayTotals={};
   last7.forEach(r=>{ const d=r.entry_date; days.add(d);
-    const k=(r.loc&&r.loc.name)||"(none)"; const p=pilotKey(r);
+    const k=r.location||"(none)"; const p=(r.pilot||"(unassigned)").replace(/\s+/g," ").trim();
     dayTotals[d]=(dayTotals[d]||0)+num(r.acres);
     byLoc[k]=byLoc[k]||{days:{},pilots:{}};
     byLoc[k].days[d]=(byLoc[k].days[d]||0)+num(r.acres);
