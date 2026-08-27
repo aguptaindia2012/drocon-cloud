@@ -831,27 +831,42 @@ const NDA_CLAUSES = [
 
 /* ---- Offer of Employment (letter sections) ---- */
 const OFFER_CLAUSES = [
-  { id:"intro", title:"Position and Reporting", on:true, body:`
-<p>We are pleased to offer you the position of <b>{{ROLE}}</b> at DroCon Bharat Private Limited. You will report directly to {{REPORTSTO}}, or any other person designated by the Company.</p>` },
-  { id:"comp", title:"Compensation", on:true, body:`
+  { id:"intro", title:"Our Offer", on:true, body:`
+<p>We are delighted to offer you employment with <b>DroCon Bharat Private Limited</b> (the "Company") in the position of <b>{{ROLE}}</b>. We were impressed by your background and believe your skills and experience will be a valuable addition to our team.</p>
+<p>The principal terms of your employment are set out below. This letter, together with the Company's policies as amended from time to time, forms your contract of employment.</p>` },
+  { id:"reporting", title:"Reporting", on:true, body:`
+<p>You will report to <b>{{REPORTSTO}}</b>, or to any other person the Company may designate. You will keep your reporting manager informed of your work, progress and any matters requiring attention.</p>` },
+  { id:"scope", title:"Role, Scope of Work & Key Responsibilities", on:true, body:`
+<p>As <b>{{ROLE}}</b>, your scope of work and key responsibilities include:</p>
+<p>{{SCOPE}}</p>
+<p>You will also perform such other duties, consistent with your role, skills and experience, as the Company may reasonably assign from time to time. You agree to devote your full working time, attention and best efforts to the business of the Company, and to discharge your responsibilities diligently, professionally and in the Company's best interests.</p>` },
+  { id:"location", title:"Place of Work", on:true, body:`
+<p>Your primary place of work will be <b>{{WORKLOC}}</b>. Given the field-based nature of the Company's operations, you may be required to travel to, or be deployed at, other sites and locations within India (and, where necessary, abroad) as the business requires. Any such deployment does not alter the other terms of your employment.</p>` },
+  { id:"start", title:"Commencement of Employment", on:true, body:`
+<p>Your employment will commence on <b>{{STARTTEXT}}</b>. You will be required to complete and submit all joining formalities and documentation on or before your start date.</p>` },
+  { id:"comp", title:"Compensation & Benefits", on:true, body:`
 <p>{{COMP}}</p>
-<p>All compensation is subject to applicable taxes and deductions as per Company policy and Indian law. Where timesheets apply, billing and payment shall occur monthly against an approved timesheet.</p>` },
-  { id:"travel", title:"Travel and Expenses", on:true, body:`
-<p>DroCon Bharat will reimburse all reasonable and pre-approved travel expenses incurred in connection with Company business, in accordance with the Company's travel and expense policy.</p>` },
-  { id:"location", title:"Deployment Location", on:true, body:`
-<p>Your primary place of deployment will be {{WORKLOC}}. Due to the nature of our operations, you may be required to work at other locations within India or abroad, as business demands.</p>` },
-  { id:"start", title:"Start Date", on:true, body:`
-<p>Your anticipated start date will be {{STARTTEXT}}.</p>` },
-  { id:"probation", title:"Probation Period", on:true, body:`
-<p>Your employment will commence with a probation period of ninety (90) days, during which your performance will be reviewed. The Company reserves the right to extend or conclude the probation period based on performance.</p>` },
-  { id:"notice", title:"Notice Period and Termination", on:true, body:`
-<p>During the probation period (including any extension), employment may be terminated by either party with fifteen (15) days' written notice or payment in lieu. After confirmation, employment may be terminated by either party with thirty (30) days' written notice or payment in lieu.</p>` },
-  { id:"terms", title:"Terms of Employment", on:true, body:`
-<p>Your employment will be governed by the Company's policies, rules and regulations, which may be modified from time to time. All compensation and timelines shall follow DroCon Bharat policies and procedures.</p>` },
-  { id:"conf", title:"Confidentiality and Non-Disclosure", on:true, body:`
-<p>During your employment you will have access to confidential and proprietary information of DroCon Bharat. You will be required to sign a separate Confidentiality and Non-Disclosure Agreement.</p>` },
+<p>Your compensation is subject to statutory deductions (including TDS, and Provident Fund / ESI where applicable) and to the Company's payroll cycle and policies. You will be eligible for statutory and Company benefits as applicable to your role and grade. Compensation is reviewed periodically at the Company's discretion, based on your performance and the Company's business.</p>` },
+  { id:"hours", title:"Working Hours, Leave & Holidays", on:true, body:`
+<p>You will observe the Company's normal working hours and days, and such reasonable additional hours as your role may require. Leave, weekly offs and public/festival holidays will be as per the Company's leave policy in force from time to time. All leave must be applied for and approved in advance, save in a genuine emergency.</p>` },
+  { id:"expenses", title:"Travel & Expenses", on:true, body:`
+<p>The Company will reimburse all reasonable, pre-approved and properly evidenced expenses incurred by you in the course of Company business, in accordance with its travel and expense policy.</p>` },
+  { id:"probation", title:"Probation & Confirmation", on:true, body:`
+<p>Your employment begins with a probation period of <b>ninety (90) days</b>, during which your performance and suitability will be assessed. The Company may extend the probation period, or confirm your employment, at its discretion. You will be considered confirmed only upon written confirmation from the Company.</p>` },
+  { id:"notice", title:"Notice Period & Termination", on:true, body:`
+<p>During probation (including any extension), either party may terminate the employment with <b>fifteen (15) days'</b> written notice or salary in lieu. After confirmation, either party may terminate with <b>thirty (30) days'</b> written notice or salary in lieu.</p>
+<p>The Company may terminate your employment without notice for misconduct, breach of policy, unsatisfactory performance, or any act prejudicial to the Company's interests. On cessation of employment for any reason, you will return all Company property, records and confidential information in your possession.</p>` },
+  { id:"conf", title:"Confidentiality, Intellectual Property & Non-Solicitation", on:true, body:`
+<p>You will have access to confidential and proprietary information of the Company, its clients and partners. You will keep all such information strictly confidential, both during and after your employment, and use it solely for the Company's business. All work product, inventions, data and intellectual property created by you in the course of your employment shall vest exclusively in the Company.</p>
+<p>During your employment and for <b>twelve (12) months</b> thereafter, you will not solicit or entice away any employee, client, farmer or partner introduced to you through the Company. You may be required to sign a separate Confidentiality &amp; Non-Disclosure Agreement.</p>` },
+  { id:"conduct", title:"Conduct, Policies & Compliance", on:true, body:`
+<p>You will comply with all Company policies, rules and codes of conduct, as amended from time to time, and with all applicable laws (including anti-bribery, data-protection and DGCA/regulatory requirements relevant to your role). You will not, without the Company's prior written consent, engage in any other employment, business or activity that conflicts with your duties or the Company's interests.</p>` },
+  { id:"verification", title:"Background Verification", on:true, body:`
+<p>This offer is contingent upon the satisfactory completion of background verification, reference checks, and verification of your qualifications, identity and documents. The Company may withdraw this offer, or terminate your employment, if any information provided by you is found to be false or misleading.</p>` },
+  { id:"general", title:"General", on:true, body:`
+<p>This letter and the Company's policies constitute the entire understanding between you and the Company regarding your employment and supersede all prior discussions and communications. Any amendment must be in writing and signed by an authorised representative of the Company. This employment is governed by the laws of India, subject to the jurisdiction of the courts at Meerut, Uttar Pradesh.</p>` },
   { id:"accept", title:"Acceptance of Offer", on:true, body:`
-<p>To accept this offer, please sign and return a copy of this letter. This offer is contingent upon successful completion of background verification, reference checks and any other pre-employment requirements. We look forward to your positive contribution to DroCon Bharat.</p>` }
+<p>We are excited about the prospect of you joining DroCon Bharat and are confident you will make a valuable contribution. To accept this offer, please sign and return a copy of this letter. Should you have any questions, please feel free to reach out to us.</p>` }
 ];
 
 /* ---- Internship Offer (letter sections) ---- */
@@ -1361,7 +1376,7 @@ function newDraft(key){
       pmAcreRate: t.clauseSet==="pm" ? "5" : "", pmSparesPct: t.clauseSet==="pm" ? "4" : "",
       // letter / JD specific
       recipientName:"", recipientAddress:"", roleTitle:t.roleTitle||"", reportsTo:"Abhishek Gupta, Director & Founder",
-      prevRole:"", prevCompensation:"", bonusReason:"",
+      prevRole:"", prevCompensation:"", bonusReason:"", scopeOfWork:"",
       compensation:"", startDateText:"", duration:"", workLocation:"Headquarters, Meerut, Uttar Pradesh",
       // deployment letter (sugar mill)
       depRef:"", depDate:"", depClientName:"", depClientPoc:"", depClientPocNo:"", depClientAddress:"",
@@ -1560,6 +1575,7 @@ function subTokens(text){
     .replace(/\{\{PREV_ROLE\}\}/g, esc(f.prevRole||"your current designation"))
     .replace(/\{\{PREV_COMP\}\}/g, esc(f.prevCompensation||"your current compensation"))
     .replace(/\{\{REASON\}\}/g, esc(f.bonusReason||"your performance and contribution"))
+    .replace(/\{\{SCOPE\}\}/g, esc(f.scopeOfWork||"the duties ordinarily associated with your role — including planning and executing assigned work, maintaining accurate records and timely reporting, coordinating with colleagues, clients and stakeholders, and upholding the Company's quality, safety and compliance standards"))
     .replace(/\{\{WORKLOC\}\}/g, esc(f.workLocation||"________________"))
     .replace(/\{\{RECIPIENT\}\}/g, esc(f.recipientName||"________________"))
     .replace(/\{\{CONSULT_RATE\}\}/g, esc(f.consultRate||"________"))
@@ -1786,7 +1802,7 @@ function dcbBankFieldset(){
    these as blanks. */
 function panelLetter(){
   const cs = draft.clauseSet;
-  const isIntern = cs==="internship", isInc = cs==="increment", isBonus = cs==="bonus";
+  const isIntern = cs==="internship", isInc = cs==="increment", isBonus = cs==="bonus", isOffer = cs==="offer";
   const heading = isInc?"Increment & Title Revision":(isBonus?"Bonus / Incentive":(isIntern?"Internship":"Offer"));
   const compLabel = isBonus?"Bonus amount (₹)":(isInc?"Revised compensation":(isIntern?"Stipend (₹)":"Compensation"));
   const roleLabel = isInc?"New designation":"Role / designation";
@@ -1814,6 +1830,7 @@ function panelLetter(){
       <div class="field"><label>${compLabel}</label><input type="text" data-f="compensation" value="${F('compensation')}" placeholder="${isBonus?'e.g. ₹25,000':(isIntern?'e.g. ₹15,000 / month':'e.g. ₹4,50,000 p.a.')}"></div>
       ${isInc?`<div class="field"><label>Previous compensation</label><input type="text" data-f="prevCompensation" value="${F('prevCompensation')}" placeholder="current pay"></div>`:''}
       ${isBonus?`<div class="field full"><label>Reason for the bonus *</label><textarea data-f="bonusReason" placeholder="e.g. exceptional performance during the 2026 spraying season">${F('bonusReason')}</textarea></div>`:''}
+      ${isOffer?`<div class="field full"><label>Scope of work / key responsibilities <span class="hint">(prints in the Role &amp; Scope section; left blank, a sensible default is used)</span></label><textarea data-f="scopeOfWork" placeholder="Describe the main duties and deliverables of the role">${F('scopeOfWork')}</textarea></div>`:''}
       <div class="field"><label>${dateLabel} <span class="hint">(as it should read)</span></label><input type="text" data-f="startDateText" value="${F('startDateText')}" placeholder="${isBonus?'e.g. September 2026':'e.g. 1 September 2026'}"></div>
       ${isIntern?`<div class="field"><label>Duration</label><input type="text" data-f="duration" value="${F('duration')}" placeholder="e.g. 3 months"></div>`:''}
       ${(!isBonus)?`<div class="field"><label>Work location</label><input type="text" data-f="workLocation" value="${F('workLocation')}"></div>
