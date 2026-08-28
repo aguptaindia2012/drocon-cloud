@@ -30,14 +30,56 @@ async function view(){
   dashboard();
 }
 
+/* ---------- Location → Month → Pilot expandable table ---------- */
+const MONTH_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function ymLabel(ym){ if(!ym) return "?"; const p=String(ym).split("-"); return (MONTH_ABBR[(+p[1])-1]||p[1])+" "+p[0]; }
+function locTreeTable(rows){
+  const tree={};
+  (rows||[]).forEach(r=>{ const loc=r.location||"(none)", ym=r.ym||"?", pilot=r.pilot||"(unassigned)"; const a=num(r.acres), rv=num(r.revenue);
+    const L=tree[loc]=tree[loc]||{a:0,r:0,m:{}}; L.a+=a; L.r+=rv;
+    const M=L.m[ym]=L.m[ym]||{a:0,r:0,p:{}}; M.a+=a; M.r+=rv;
+    const P=M.p[pilot]=M.p[pilot]||{a:0,r:0}; P.a+=a; P.r+=rv; });
+  const locKeys=Object.keys(tree).sort((x,y)=>tree[y].r-tree[x].r);
+  if(!locKeys.length) return '<div class="muted">No location data.</div>';
+  let html=`<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Month / Pilot</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead><tbody>`;
+  locKeys.forEach((loc,li)=>{ const L=tree[loc];
+    html+=`<tr class="lwLoc" data-li="${li}" style="cursor:pointer"><td><span class="lwcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> <b>${esc(loc)}</b></td><td class="num"><b>${L.a.toFixed(1)}</b></td><td class="num"><b>${money(L.r)}</b></td></tr>`;
+    Object.keys(L.m).sort().reverse().forEach((ym,mi)=>{ const M=L.m[ym]; const mk=li+"-"+mi;
+      html+=`<tr class="lwMo" data-parent-li="${li}" data-mk="${mk}" style="display:none;cursor:pointer;background:#f7f8f6"><td style="padding-left:24px"><span class="lwcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> ${esc(ymLabel(ym))}</td><td class="num">${M.a.toFixed(1)}</td><td class="num">${money(M.r)}</td></tr>`;
+      Object.keys(M.p).sort((x,y)=>M.p[y].a-M.p[x].a).forEach(p=>{ const P=M.p[p];
+        html+=`<tr class="lwPi" data-parent-mk="${mk}" style="display:none"><td style="padding-left:50px" class="muted">${esc(p)}</td><td class="num">${P.a.toFixed(1)}</td><td class="num">${money(P.r)}</td></tr>`; });
+    });
+  });
+  return html+`</tbody></table></div>`;
+}
+function wireLocTree(){
+  const host=$("aBody"); if(!host) return;
+  host.querySelectorAll(".lwLoc").forEach(tr=>tr.addEventListener("click",()=>{
+    const li=tr.getAttribute("data-li");
+    const months=host.querySelectorAll('.lwMo[data-parent-li="'+li+'"]');
+    const show = months.length && months[0].style.display==="none";
+    months.forEach(m=>{ m.style.display=show?"":"none";
+      if(!show){ const mk=m.getAttribute("data-mk"); host.querySelectorAll('.lwPi[data-parent-mk="'+mk+'"]').forEach(p=>p.style.display="none"); const c=m.querySelector(".lwcar"); if(c)c.textContent="▸"; } });
+    const car=tr.querySelector(".lwcar"); if(car) car.textContent=show?"▾":"▸";
+  }));
+  host.querySelectorAll(".lwMo").forEach(tr=>tr.addEventListener("click",e=>{ e.stopPropagation();
+    const mk=tr.getAttribute("data-mk");
+    const pilots=host.querySelectorAll('.lwPi[data-parent-mk="'+mk+'"]');
+    const show = pilots.length && pilots[0].style.display==="none";
+    pilots.forEach(p=>p.style.display=show?"":"none");
+    const car=tr.querySelector(".lwcar"); if(car) car.textContent=show?"▾":"▸";
+  }));
+}
+
 /* ---------- dashboard ---------- */
 async function dashboard(){
   const host=$("aBody");
   // Aggregated server-side (sql/76) so growing row volume can never truncate totals.
-  const [{ data:mData },{ data:lData },{ data:pData }]=await Promise.all([
+  const [{ data:mData },{ data:lData },{ data:pData },{ data:lmpData }]=await Promise.all([
     sb().from("v_acre_monthly").select("*"),
     sb().from("v_acre_by_location").select("*"),
-    sb().from("v_acre_pilot_recent").select("*")
+    sb().from("v_acre_pilot_recent").select("*"),
+    sb().from("v_acre_loc_month_pilot").select("*").limit(20000)
   ]);
   const mRows=mData||[];
   if(!mRows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
@@ -129,10 +171,12 @@ async function dashboard(){
         <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td></tr>`).join("")}</tbody></table></div></div>`:''}
     <div class="card"><h3>Monthly work</h3><table><thead><tr><th>Month</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
       <tbody>${months.map(k=>`<tr><td>${k}</td><td class="num">${byM[k].a.toFixed(1)}</td><td class="num">${money(byM[k].r)}</td></tr>`).join("")}</tbody></table></div>
-    <div class="card"><h3>Location-wise totals</h3><table><thead><tr><th>Location</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
-      <tbody>${locs.map(l=>`<tr><td><b>${esc(l.k)}</b></td><td class="num">${l.a.toFixed(1)}</td><td class="num">${money(l.r)}</td></tr>`).join("")}</tbody></table>
+    <div class="card"><h3>Location-wise totals</h3>
+      <p class="muted" style="margin-top:-4px">Click a <b>location</b> to see its months; click a <b>month</b> to see the per-pilot split.</p>
+      ${locTreeTable(lmpData||[])}
       <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>`;
   const cm=months.slice().reverse();
+  wireLocTree();
   loadUnbilled();
   window.OPS.report.line("acMonthly", cm, cm.map(k=>byM[k].a), "Acres / month", "#599533");
   const topL=locs.slice(0,10);
