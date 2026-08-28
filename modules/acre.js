@@ -30,46 +30,50 @@ async function view(){
   dashboard();
 }
 
-/* ---------- Location → Month → Pilot expandable table ---------- */
+/* ---------- generic expandable drill-down (Location/Month/Pilot) ----------
+   drillTable(rows, defs, prefix, header) builds a 3-level expandable table.
+   Each def = {get:(row)=>key, label?:(key)=>text, sort?:'rev'|'keyDesc'|'acres', bold?:bool}.
+   wireDrills() wires every drill table on the page (ids are prefixed & unique). */
 const MONTH_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function ymLabel(ym){ if(!ym) return "?"; const p=String(ym).split("-"); return (MONTH_ABBR[(+p[1])-1]||p[1])+" "+p[0]; }
-function locTreeTable(rows){
-  const tree={};
-  (rows||[]).forEach(r=>{ const loc=r.location||"(none)", ym=r.ym||"?", pilot=r.pilot||"(unassigned)"; const a=num(r.acres), rv=num(r.revenue);
-    const L=tree[loc]=tree[loc]||{a:0,r:0,m:{}}; L.a+=a; L.r+=rv;
-    const M=L.m[ym]=L.m[ym]||{a:0,r:0,p:{}}; M.a+=a; M.r+=rv;
-    const P=M.p[pilot]=M.p[pilot]||{a:0,r:0}; P.a+=a; P.r+=rv; });
-  const locKeys=Object.keys(tree).sort((x,y)=>tree[y].r-tree[x].r);
-  if(!locKeys.length) return '<div class="muted">No location data.</div>';
-  let html=`<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Month / Pilot</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead><tbody>`;
-  locKeys.forEach((loc,li)=>{ const L=tree[loc];
-    html+=`<tr class="lwLoc" data-li="${li}" style="cursor:pointer"><td><span class="lwcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> <b>${esc(loc)}</b></td><td class="num"><b>${L.a.toFixed(1)}</b></td><td class="num"><b>${money(L.r)}</b></td></tr>`;
-    Object.keys(L.m).sort().reverse().forEach((ym,mi)=>{ const M=L.m[ym]; const mk=li+"-"+mi;
-      html+=`<tr class="lwMo" data-parent-li="${li}" data-mk="${mk}" style="display:none;cursor:pointer;background:#f7f8f6"><td style="padding-left:24px"><span class="lwcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> ${esc(ymLabel(ym))}</td><td class="num">${M.a.toFixed(1)}</td><td class="num">${money(M.r)}</td></tr>`;
-      Object.keys(M.p).sort((x,y)=>M.p[y].a-M.p[x].a).forEach(p=>{ const P=M.p[p];
-        html+=`<tr class="lwPi" data-parent-mk="${mk}" style="display:none"><td style="padding-left:50px" class="muted">${esc(p)}</td><td class="num">${P.a.toFixed(1)}</td><td class="num">${money(P.r)}</td></tr>`; });
+function sortChildKeys(c, mode){ const ks=Object.keys(c);
+  if(mode==="keyDesc") return ks.sort().reverse();
+  if(mode==="acres")   return ks.sort((x,y)=>c[y].a-c[x].a);
+  return ks.sort((x,y)=>c[y].r-c[x].r); // 'rev' default
+}
+function drillTable(rows, defs, prefix, header){
+  const root={a:0,r:0,c:{}};
+  (rows||[]).forEach(row=>{ const a=num(row.acres), rv=num(row.revenue); let node=root; node.a+=a; node.r+=rv;
+    defs.forEach(d=>{ const k=d.get(row)||"—"; node.c[k]=node.c[k]||{a:0,r:0,c:{}}; node=node.c[k]; node.a+=a; node.r+=rv; }); });
+  if(!Object.keys(root.c).length) return '<div class="muted">No data.</div>';
+  const out=[]; const idRef={n:0};
+  (function walk(node, depth, parentId){
+    sortChildKeys(node.c, defs[depth].sort).forEach(k=>{ const child=node.c[k]; const id=prefix+(idRef.n++);
+      const leaf=depth===defs.length-1; const d=defs[depth];
+      const label=d.label?d.label(k):k; const txt=d.bold?`<b>${esc(label)}</b>`:esc(label);
+      const caret=leaf?'':'<span class="dcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> ';
+      out.push(`<tr class="drow ${leaf?'dleaf':'dgrp'}" data-id="${id}" data-parent="${parentId||''}" style="display:${depth===0?'':'none'};${leaf?'':'cursor:pointer'};${depth===1?'background:#f7f8f6':''}">`
+        +`<td style="padding-left:${4+depth*24}px"${leaf?' class="muted"':''}>${caret}${leaf?esc(label):txt}</td>`
+        +`<td class="num">${child.a.toFixed(1)}</td><td class="num">${d.bold?'<b>'+money(child.r)+'</b>':money(child.r)}</td></tr>`);
+      if(!leaf) walk(child, depth+1, id);
     });
-  });
-  return html+`</tbody></table></div>`;
+  })(root,0,"");
+  return `<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>${esc(header)}</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead><tbody>${out.join("")}</tbody></table></div>`;
 }
-function wireLocTree(){
+function wireDrills(){
   const host=$("aBody"); if(!host) return;
-  host.querySelectorAll(".lwLoc").forEach(tr=>tr.addEventListener("click",()=>{
-    const li=tr.getAttribute("data-li");
-    const months=host.querySelectorAll('.lwMo[data-parent-li="'+li+'"]');
-    const show = months.length && months[0].style.display==="none";
-    months.forEach(m=>{ m.style.display=show?"":"none";
-      if(!show){ const mk=m.getAttribute("data-mk"); host.querySelectorAll('.lwPi[data-parent-mk="'+mk+'"]').forEach(p=>p.style.display="none"); const c=m.querySelector(".lwcar"); if(c)c.textContent="▸"; } });
-    const car=tr.querySelector(".lwcar"); if(car) car.textContent=show?"▾":"▸";
-  }));
-  host.querySelectorAll(".lwMo").forEach(tr=>tr.addEventListener("click",e=>{ e.stopPropagation();
-    const mk=tr.getAttribute("data-mk");
-    const pilots=host.querySelectorAll('.lwPi[data-parent-mk="'+mk+'"]');
-    const show = pilots.length && pilots[0].style.display==="none";
-    pilots.forEach(p=>p.style.display=show?"":"none");
-    const car=tr.querySelector(".lwcar"); if(car) car.textContent=show?"▾":"▸";
+  const hideDesc=(id)=>{ host.querySelectorAll('.drow[data-parent="'+id+'"]').forEach(r=>{ r.style.display="none"; const c=r.querySelector(".dcar"); if(c)c.textContent="▸"; hideDesc(r.getAttribute("data-id")); }); };
+  host.querySelectorAll(".dgrp").forEach(tr=>tr.addEventListener("click",()=>{
+    const id=tr.getAttribute("data-id");
+    const kids=host.querySelectorAll('.drow[data-parent="'+id+'"]');
+    const show = kids.length && kids[0].style.display==="none";
+    if(show) kids.forEach(k=>k.style.display=""); else hideDesc(id);
+    const car=tr.querySelector(".dcar"); if(car) car.textContent=show?"▾":"▸";
   }));
 }
+const D_LOC   = {get:r=>r.location||"(none)", sort:"rev", bold:true};
+const D_MONTH = {get:r=>r.ym||"?", label:ymLabel, sort:"keyDesc", bold:true};
+const D_PILOT = {get:r=>r.pilot||"(unassigned)", sort:"acres"};
 
 /* ---------- dashboard ---------- */
 async function dashboard(){
@@ -169,14 +173,15 @@ async function dashboard(){
       <tbody>${below.sort((a,b)=>a.day<b.day?1:-1).map(x=>`<tr><td>${fmtDate(x.day)}</td><td>${esc(x.loc)}</td><td>${esc(x.pilot)}</td>
         <td class="num" style="color:${x.band.color};font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td>
         <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td></tr>`).join("")}</tbody></table></div></div>`:''}
-    <div class="card"><h3>Monthly work</h3><table><thead><tr><th>Month</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
-      <tbody>${months.map(k=>`<tr><td>${k}</td><td class="num">${byM[k].a.toFixed(1)}</td><td class="num">${money(byM[k].r)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="card"><h3>Monthly work</h3>
+      <p class="muted" style="margin-top:-4px">Click a <b>month</b> to see the locations worked; click a <b>location</b> to see the per-pilot split.</p>
+      ${drillTable(lmpData, [D_MONTH, D_LOC, D_PILOT], "mw", "Month / Location / Pilot")}</div>
     <div class="card"><h3>Location-wise totals</h3>
       <p class="muted" style="margin-top:-4px">Click a <b>location</b> to see its months; click a <b>month</b> to see the per-pilot split.</p>
-      ${locTreeTable(lmpData||[])}
+      ${drillTable(lmpData, [D_LOC, D_MONTH, D_PILOT], "lc", "Location / Month / Pilot")}
       <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>`;
   const cm=months.slice().reverse();
-  wireLocTree();
+  wireDrills();
   loadUnbilled();
   window.OPS.report.line("acMonthly", cm, cm.map(k=>byM[k].a), "Acres / month", "#599533");
   const topL=locs.slice(0,10);
