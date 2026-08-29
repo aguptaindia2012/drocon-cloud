@@ -59,21 +59,30 @@ async function view(){
         if(c[0]==='_cost'){ const t=num(r.cost_base)+num(r.cost_shipping); v = t>0?t:null; }
         if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
         else if(c[0]==='gst_rate') v=(v==null?'':v+'%'); else if(c[0]==='current_stock') v=(v==null?0:v);
-        return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td class="muted">edit ›</td></tr>`).join("")}</tbody></table>`
+        return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td><button class="btn sm ghost" data-copy="${r.id}" title="Duplicate this item">⧉ Copy</button> <span class="muted">edit ›</span></td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No items yet.</div>';
     $("cList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+    $("cList").querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
+      const src=all.find(x=>String(x.id)===b.getAttribute("data-copy")); if(src) form(null, dupSeed(src)); }));
   }
   render(all);
   $("cSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
     render(!q?all:all.filter(r=>String(r.name||"").toLowerCase().includes(q)|| String(r[cfg.hsnKey]||"").toLowerCase().includes(q))); });
 }
 
-function form(rec){
-  const cfg=CATS[active]; const e=rec||{};
+function dupSeed(src){
+  const cfg=CATS[active]; const seed={};
+  cfg.fields.forEach(f=>{ seed[f.key]=src[f.key]; });
+  if("name" in seed) seed.name=String(seed.name||"").replace(/\s*\(copy\)\s*$/i,"")+" (copy)";
+  return seed;
+}
+function form(rec, seed){
+  const cfg=CATS[active]; const e=rec||seed||{};
   const m=$("main");
   m.innerHTML=`<button class="btn sm" id="cBack">← Back to ${esc(cfg.label)}</button>
     <div class="card" style="margin-top:12px">
       <h1>${rec?"Edit":"New"} ${active==='service'?'service':'spare'}</h1>
+      ${(!rec&&seed)?'<div class="callout">Duplicated from an existing item — edit the details below and <b>Create</b> to save it as a new '+(active==='service'?'service':'spare')+'.</div>':''}
       ${rec&&active==='spare'?`<div class="callout">Current stock: <b>${num(rec.current_stock)}</b> ${esc(rec.unit||'')}. Adjust stock in the <b>Inventory</b> tool.</div>`:''}
       ${rec?'<div id="cUsage" class="muted">Checking where this item is used…</div>':''}
       <div class="fgrid">${cfg.fields.map(f=>{
@@ -83,10 +92,16 @@ function form(rec){
       }).join("")}</div>
       <div class="row"><button class="btn green" id="cSave">${rec?"Save":"Create"}</button>
         <button class="btn" id="cCancel">Cancel</button><div class="spacer"></div>
+        ${rec?'<button class="btn sm" id="cDup">⧉ Duplicate</button> ':''}
         ${rec?'<button class="btn sm" id="cDel" style="color:#a3322a;border-color:#e4b4b4" disabled title="Checking usage…">Delete</button>':''}</div>
       <div class="err" id="cErr"></div>
     </div>`;
   $("cBack").addEventListener("click",view); $("cCancel").addEventListener("click",view);
+  if($("cDup")) $("cDup").addEventListener("click",()=>{
+    const s={}; cfg.fields.forEach(f=>{ s[f.key]=$("cf_"+f.key).value; });
+    if("name" in s) s.name=String(s.name||"").replace(/\s*\(copy\)\s*$/i,"")+" (copy)";
+    form(null, s);
+  });
   if(rec) checkUsage(rec);
   $("cSave").addEventListener("click",async()=>{
     const out={};
