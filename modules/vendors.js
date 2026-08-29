@@ -10,6 +10,9 @@ window.OPS.routes.vendors = window.OPS.makeRegistry({
   tool:"vendors", table:"vendors", title:"Vendors", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"name",
   searchKeys:["name","firm_name","city","country","gstin","email"],
+  convertTo:{ tool:"clients", label:"→ Also add as Client",
+    map:r=>({ firm_name:r.firm_name||r.name, name:r.name, mobile:r.mobile, email:r.email, gstin:r.gstin,
+      address:r.address, city:r.city, state:r.state, pincode:r.pincode, notes:r.notes }) },
   listCols:[
     {key:"firm_name", label:"Firm", fmt:(v,r)=>esc(v||r.name||"")},
     {key:"name", label:"Contact"},

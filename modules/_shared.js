@@ -82,6 +82,9 @@ function makeRegistry(cfg){
   // cfg: { tool, table, title, eyebrow, fields[], listCols[], searchKeys[], orderBy }
   async function list(){
     const m=$("main");
+    // handoff: another registry asked to pre-fill a NEW record here (e.g. Client→Vendor)
+    const seed=window.OPS._registrySeed&&window.OPS._registrySeed[cfg.tool];
+    if(seed){ delete window.OPS._registrySeed[cfg.tool]; return form(null, seed); }
     m.innerHTML=`<div class="eyebrow">${esc(cfg.eyebrow)}</div><h1>${esc(cfg.title)}</h1>
       <div class="row wrap" style="margin:10px 0">
         <input id="rqSearch" placeholder="Search ${esc(cfg.title.toLowerCase())}…" style="max-width:280px">
@@ -129,17 +132,19 @@ function makeRegistry(cfg){
     $("rqImport").addEventListener("click",()=>importCSV());
   }
 
-  function form(rec){
-    const e=rec||(cfg.defaults?Object.assign({},cfg.defaults):{});
+  function form(rec, seed){
+    const e=rec||seed||(cfg.defaults?Object.assign({},cfg.defaults):{});
     const m=$("main");
     m.innerHTML=`<button class="btn sm" id="rqBack">← Back to ${esc(cfg.title)}</button>
       <div class="card" style="margin-top:12px">
         <div class="eyebrow">${esc(cfg.eyebrow)}</div><h1>${rec?"Edit":"New "+cfg.title.replace(/s$/,"")}</h1>
+        ${(!rec&&seed)?'<div class="callout">Pre-filled from another record — review the details and <b>Create</b> to save it here. The original is not changed.</div>':''}
         <div class="fgrid">${cfg.fields.map(f=>fieldHTML(f,e)).join("")}</div>
         <div class="row" style="margin-top:6px">
           <button class="btn green" id="rqSave">${rec?"Save changes":"Create"}</button>
           <button class="btn" id="rqCancel">Cancel</button>
           <div class="spacer"></div>
+          ${(cfg.convertTo&&rec)?`<button class="btn sm" id="rqConvert" title="Create a matching record in the other register">${esc(cfg.convertTo.label||("→ "+cfg.convertTo.tool))}</button> `:''}
           ${rec && window.OPS.canDelete()?'<button class="btn sm" id="rqDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
         </div>
         <div class="err" id="rqErr"></div>
@@ -166,6 +171,12 @@ function makeRegistry(cfg){
     });
     $("rqBack").addEventListener("click",list);
     $("rqCancel").addEventListener("click",list);
+    if($("rqConvert")) $("rqConvert").addEventListener("click",()=>{
+      const cur={}; cfg.fields.forEach(f=>{ const el=$("f_"+f.key); cur[f.key]= el?el.value:(rec?rec[f.key]:""); });
+      window.OPS._registrySeed=window.OPS._registrySeed||{};
+      window.OPS._registrySeed[cfg.convertTo.tool]=cfg.convertTo.map(cur);
+      window.OPS.openTool(cfg.convertTo.tool);
+    });
     $("rqSave").addEventListener("click",async()=>{
       const out={};
       for(const f of cfg.fields){

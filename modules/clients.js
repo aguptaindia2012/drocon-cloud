@@ -21,6 +21,10 @@ window.OPS.routes.clients = window.OPS.makeRegistry({
   tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"firm_name",
   autoNumber:{ field:"client_ref", rpc:"next_client_code" },
+  convertTo:{ tool:"vendors", label:"→ Also add as Vendor",
+    map:r=>({ firm_name:r.firm_name||r.name, name:r.name, mobile:r.mobile, email:r.email, gstin:r.gstin,
+      address:r.address, city:r.city||r.district, state:r.state, pincode:r.pincode, notes:r.notes,
+      country:"India", currency:"INR" }) },
   searchKeys:["name","firm_name","client_ref","mobile","district","state","gstin"],
   listCols:[
     {key:"firm_name", label:"Party Name", fmt:(v,r)=>esc(v||r.name||"")},
