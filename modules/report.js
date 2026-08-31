@@ -12,7 +12,7 @@ function mk(id,type,data,opts){
   const cv=document.getElementById(id); if(!cv || typeof Chart==="undefined") return null;
   if(charts[id]){ try{charts[id].destroy();}catch(e){} }
   charts[id]=new Chart(cv.getContext("2d"),{ type, data,
-    options:Object.assign({ animation:false, responsive:false, maintainAspectRatio:false,
+    options:Object.assign({ animation:false, responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{ display:(type==="pie"||type==="doughnut") } } }, opts||{}) });
   return charts[id];
 }
@@ -27,8 +27,10 @@ function lines(id,labels,series){ return mk(id,"line",{labels,datasets:(series||
     hidden:!!s.hidden, borderDash:s.dash?[6,4]:undefined }))},
   {scales:{y:{beginAtZero:true}},plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:12,font:{size:11}}}}}); }
 function img(id){ const cv=document.getElementById(id); try{ return cv?cv.toDataURL("image/png"):null; }catch(e){ return null; } }
-// a canvas element sized for both screen and capture
-function canvas(id,w,h){ return `<canvas id="${id}" width="${w||560}" height="${h||240}" style="max-width:100%;height:${(h||240)}px"></canvas>`; }
+// responsive chart holder — fills the card width, fixed height. The wrapper's
+// defined height lets Chart.js (responsive, maintainAspectRatio:false) size the
+// canvas to the full available width.
+function canvas(id,w,h){ return `<div style="position:relative;width:100%;height:${(h||260)}px"><canvas id="${id}"></canvas></div>`; }
 function wordButton(hostId, title, sectionsFn){
   const h=document.getElementById(hostId); if(!h) return;
   const b=document.createElement("button"); b.className="btn blue sm"; b.textContent="⬇ Download Word report";
