@@ -19,8 +19,13 @@ function mk(id,type,data,opts){
 function bar(id,labels,values,label,color){ return mk(id,"bar",{labels,datasets:[{label:label||"",data:values,backgroundColor:color||"#599533"}]},{scales:{y:{beginAtZero:true}}}); }
 function line(id,labels,values,label,color){ return mk(id,"line",{labels,datasets:[{label:label||"",data:values,borderColor:color||"#0A6496",backgroundColor:"rgba(10,100,150,.15)",fill:true,tension:.3}]},{scales:{y:{beginAtZero:true}}}); }
 function pie(id,labels,values){ return mk(id,"doughnut",{labels,datasets:[{data:values,backgroundColor:DCB_COLORS}]}); }
-// multi-series line chart with legend — series:[{label,data,color}]
-function lines(id,labels,series){ return mk(id,"line",{labels,datasets:(series||[]).map((s,i)=>({label:s.label||"",data:s.data,borderColor:s.color||DCB_COLORS[i%DCB_COLORS.length],backgroundColor:"transparent",fill:false,tension:.3,pointRadius:2}))},{scales:{y:{beginAtZero:true}},plugins:{legend:{display:true,position:"bottom"}}}); }
+// multi-series line chart with a clickable legend (toggle lines).
+// series:[{label,data,color,hidden,dash}]
+function lines(id,labels,series){ return mk(id,"line",{labels,datasets:(series||[]).map((s,i)=>({
+    label:s.label||"", data:s.data, borderColor:s.color||DCB_COLORS[i%DCB_COLORS.length],
+    backgroundColor:"transparent", fill:false, tension:.3, pointRadius:2,
+    hidden:!!s.hidden, borderDash:s.dash?[6,4]:undefined }))},
+  {scales:{y:{beginAtZero:true}},plugins:{legend:{display:true,position:"bottom",labels:{boxWidth:12,font:{size:11}}}}}); }
 function img(id){ const cv=document.getElementById(id); try{ return cv?cv.toDataURL("image/png"):null; }catch(e){ return null; } }
 // a canvas element sized for both screen and capture
 function canvas(id,w,h){ return `<canvas id="${id}" width="${w||560}" height="${h||240}" style="max-width:100%;height:${(h||240)}px"></canvas>`; }

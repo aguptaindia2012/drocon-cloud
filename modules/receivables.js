@@ -113,7 +113,9 @@ async function load(){
     <div class="row" id="recReport" style="margin-bottom:8px"></div>
     <div class="card"><h3>Monthly credit in market (invoiced)</h3>${window.OPS.report.canvas("recCredit",560,240)}</div>
     <div class="card"><h3>Flow of funds — payments received by month</h3>${window.OPS.report.canvas("recFunds",560,240)}</div>
-    <div class="card"><h3>Invoicing vs receipts (same timeline)</h3>${window.OPS.report.canvas("recTimeline",560,240)}</div>
+    <div class="card"><h3>Invoicing, receipts &amp; receivable — trend</h3>
+      <p class="muted" style="margin-top:-4px">Cumulative as-of-date totals are on each legend label. <b>Click a legend entry to show/hide that line</b> — the per-month lines (dashed) are hidden by default.</p>
+      ${window.OPS.report.canvas("recTimeline",640,280)}</div>
     <div class="card"><h3>Receivables aging</h3>
       <table><thead><tr><th>0–30 days</th><th>31–60 days</th><th>61–90 days</th><th>&gt; 90 days</th></tr></thead>
       <tbody><tr>
@@ -130,9 +132,20 @@ async function load(){
 
   window.OPS.report.bar("recCredit", months, months.map(k=>invByM[k]||0), "Invoiced (₹)", "#0A6496");
   window.OPS.report.line("recFunds", months, months.map(k=>payByM[k]||0), "Received (₹)", "#599533");
+  // build monthly + cumulative (trend) series; labels carry the as-of-date total
+  const cM=v=>{ v=num(v); const s=v<0?"-":""; v=Math.abs(v);
+    return s+(v>=1e7?"₹"+(v/1e7).toFixed(2)+"Cr":v>=1e5?"₹"+(v/1e5).toFixed(2)+"L":v>=1e3?"₹"+(v/1e3).toFixed(1)+"k":"₹"+v.toFixed(0)); };
+  const invM=months.map(k=>invByM[k]||0), recM=months.map(k=>payByM[k]||0), balM=months.map(k=>(invByM[k]||0)-(payByM[k]||0));
+  let ci=0,cr=0; const cumInv=[],cumRec=[],cumBal=[];
+  months.forEach(k=>{ ci+=invByM[k]||0; cr+=payByM[k]||0; cumInv.push(Math.round(ci*100)/100); cumRec.push(Math.round(cr*100)/100); cumBal.push(Math.round((ci-cr)*100)/100); });
+  const last=a=>a.length?a[a.length-1]:0;
   window.OPS.report.lines("recTimeline", months, [
-    { label:"Invoiced", data:months.map(k=>invByM[k]||0), color:"#0A6496" },
-    { label:"Received", data:months.map(k=>payByM[k]||0), color:"#599533" }
+    { label:"Invoiced trend · "+cM(last(cumInv)),   data:cumInv, color:"#0A6496" },
+    { label:"Received trend · "+cM(last(cumRec)),   data:cumRec, color:"#599533" },
+    { label:"Receivable / balance trend · "+cM(last(cumBal)), data:cumBal, color:"#a3322a" },
+    { label:"Invoiced / month",  data:invM, color:"#5b9bd5", dash:true, hidden:true },
+    { label:"Received / month",  data:recM, color:"#8fce7a", dash:true, hidden:true },
+    { label:"Balance / month",   data:balM, color:"#F48A1C", dash:true, hidden:true }
   ]);
   window.OPS.report.bar("recAging", ["0–30","31–60","61–90",">90"], [buckets["0-30"],buckets["31-60"],buckets["61-90"],buckets[">90"]], "Receivable (₹)", "#F48A1C");
   const due=rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age);
