@@ -685,7 +685,7 @@ async function position(){
     sb().from("v_advances_open").select("*").eq("status","open"),
     sb().from("v_accounting_flags").select("*").order("close_date",{ascending:false}).limit(20),
     sb().from("v_days_unclosed").select("*").order("day",{ascending:false}).limit(20),
-    sb().from("payables").select("invoice_date,total").limit(5000),
+    sb().from("payables").select("invoice_date,total,amount,gst_amount").limit(5000),
     sb().from("cash_txns").select("txn_date,amount,tds_amount").eq("ref_type","payable").limit(5000)
   ]);
   loadBankBalances();
@@ -698,7 +698,7 @@ async function position(){
   // monthly payables (billed) vs payments (paid) for the trend chart
   const ymOf=d=>String(d||"").slice(0,7);
   const billedByM={}, paidByM={};
-  (payAll.data||[]).forEach(p=>{ const k=ymOf(p.invoice_date); if(k) billedByM[k]=(billedByM[k]||0)+num(p.total); });
+  (payAll.data||[]).forEach(p=>{ const k=ymOf(p.invoice_date); if(k){ const billed=num(p.total)||(num(p.amount)+num(p.gst_amount)); billedByM[k]=(billedByM[k]||0)+billed; } });
   (payTx.data||[]).forEach(t=>{ const k=ymOf(t.txn_date); if(k) paidByM[k]=(paidByM[k]||0)+num(t.amount)+num(t.tds_amount); });
   const payMonths=[...new Set([...Object.keys(billedByM),...Object.keys(paidByM)])].sort().slice(-12);
 
