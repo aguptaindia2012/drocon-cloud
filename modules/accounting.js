@@ -679,12 +679,14 @@ async function position(){
       advances, and anything the Day Book has flagged.</div>
     <div id="poBody" class="muted">Loading…</div>`;
   await refs();
-  const [pay,rec,adv,flag,uncl]=await Promise.all([
+  const [pay,rec,adv,flag,uncl,payAll,payTx]=await Promise.all([
     sb().from("v_payables_open").select("*"),
     sb().from("v_receivables_open").select("*"),
     sb().from("v_advances_open").select("*").eq("status","open"),
     sb().from("v_accounting_flags").select("*").order("close_date",{ascending:false}).limit(20),
-    sb().from("v_days_unclosed").select("*").order("day",{ascending:false}).limit(20)
+    sb().from("v_days_unclosed").select("*").order("day",{ascending:false}).limit(20),
+    sb().from("payables").select("invoice_date,total").limit(5000),
+    sb().from("cash_txns").select("txn_date,amount,tds_amount").eq("ref_type","payable").limit(5000)
   ]);
   loadBankBalances();
   const P=(pay.data||[]), R=(rec.data||[]).filter(r=>num(r.balance)>0.01), A=(adv.data||[]);
@@ -692,6 +694,13 @@ async function position(){
   const tp=P.reduce((s,r)=>s+num(r.balance),0), tr=R.reduce((s,r)=>s+num(r.balance),0), ta=A.reduce((s,r)=>s+num(r.outstanding),0);
   const bucket=d=>d<=30?'0–30':d<=60?'31–60':d<=90?'61–90':'>90';
   const age={}; R.forEach(r=>{ const b=bucket(num(r.age_days)); age[b]=(age[b]||0)+num(r.balance); });
+
+  // monthly payables (billed) vs payments (paid) for the trend chart
+  const ymOf=d=>String(d||"").slice(0,7);
+  const billedByM={}, paidByM={};
+  (payAll.data||[]).forEach(p=>{ const k=ymOf(p.invoice_date); if(k) billedByM[k]=(billedByM[k]||0)+num(p.total); });
+  (payTx.data||[]).forEach(t=>{ const k=ymOf(t.txn_date); if(k) paidByM[k]=(paidByM[k]||0)+num(t.amount)+num(t.tds_amount); });
+  const payMonths=[...new Set([...Object.keys(billedByM),...Object.keys(paidByM)])].sort().slice(-12);
 
   const net=tr - tp + ta;   // due to us − we owe + advances we can recover
   $("poBody").innerHTML=`
@@ -730,7 +739,27 @@ async function position(){
         <tbody>${A.map(a=>`<tr><td>${fmtDate(a.issued_on)}</td><td><b>${esc(a.party_name||'')}</b></td>
           <td>${esc(a.purpose||'')}</td><td class="num" style="color:#9a5b00;font-weight:700">${money(a.outstanding)}</td></tr>`).join("")}</tbody></table>`
         :'<div class="muted">No advances outstanding.</div>'}</div>
+    <div class="card"><h3>Payables, payments &amp; balance — trend</h3>
+      <p class="muted" style="margin-top:-4px">Cumulative as-of-date totals are on each legend label. <b>Click a legend entry to show/hide that line</b> — the per-month lines (dashed) are hidden by default.</p>
+      ${window.OPS.report.canvas("poPayTrend",640,280)}</div>
     <div id="poTB"></div>`;
+  // render the payables trend (mirror of the receivables chart)
+  (function(){
+    const cM=v=>{ v=num(v); const s=v<0?"-":""; v=Math.abs(v);
+      return s+(v>=1e7?"₹"+(v/1e7).toFixed(2)+"Cr":v>=1e5?"₹"+(v/1e5).toFixed(2)+"L":v>=1e3?"₹"+(v/1e3).toFixed(1)+"k":"₹"+v.toFixed(0)); };
+    const bM=payMonths.map(k=>billedByM[k]||0), pM=payMonths.map(k=>paidByM[k]||0), balM=payMonths.map(k=>(billedByM[k]||0)-(paidByM[k]||0));
+    let cb=0,cp=0; const cumBill=[],cumPaid=[],cumBal=[];
+    payMonths.forEach(k=>{ cb+=billedByM[k]||0; cp+=paidByM[k]||0; cumBill.push(Math.round(cb*100)/100); cumPaid.push(Math.round(cp*100)/100); cumBal.push(Math.round((cb-cp)*100)/100); });
+    const last=a=>a.length?a[a.length-1]:0;
+    window.OPS.report.lines("poPayTrend", payMonths, [
+      { label:"Payables trend · "+cM(last(cumBill)), data:cumBill, color:"#a3322a" },
+      { label:"Paid trend · "+cM(last(cumPaid)),     data:cumPaid, color:"#599533" },
+      { label:"Balance trend · "+cM(last(cumBal)),   data:cumBal, color:"#9a5b00" },
+      { label:"Payables / month", data:bM, color:"#d98c8c", dash:true, hidden:true },
+      { label:"Paid / month",     data:pM, color:"#8fce7a", dash:true, hidden:true },
+      { label:"Balance / month",  data:balM, color:"#F48A1C", dash:true, hidden:true }
+    ]);
+  })();
   loadTrialBalance();
 }
 
