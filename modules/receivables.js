@@ -130,7 +130,10 @@ async function load(){
 
   window.OPS.report.bar("recCredit", months, months.map(k=>invByM[k]||0), "Invoiced (₹)", "#0A6496");
   window.OPS.report.line("recFunds", months, months.map(k=>payByM[k]||0), "Received (₹)", "#599533");
-  window.OPS.report.line("recTimeline", months, months.map(k=>invByM[k]||0), "Invoiced (₹)", "#0A6496");
+  window.OPS.report.lines("recTimeline", months, [
+    { label:"Invoiced", data:months.map(k=>invByM[k]||0), color:"#0A6496" },
+    { label:"Received", data:months.map(k=>payByM[k]||0), color:"#599533" }
+  ]);
   window.OPS.report.bar("recAging", ["0–30","31–60","61–90",">90"], [buckets["0-30"],buckets["31-60"],buckets["61-90"],buckets[">90"]], "Receivable (₹)", "#F48A1C");
   const due=rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age);
   window.OPS.report.wordButton("recReport","Invoices & Receivables Report"+(entity?(" — "+entity):""), ()=>([
