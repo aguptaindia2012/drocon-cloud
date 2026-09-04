@@ -1,0 +1,22 @@
+{
+  "name": "drocon-mail-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DroCon Cloud mail backend — bridges the static app to Hostinger IMAP/SMTP.",
+  "main": "src/server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/server.js",
+    "genkey": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "fastify": "^4.28.1",
+    "imapflow": "^1.0.164",
+    "jose": "^5.9.6",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.15"
+  }
+}
