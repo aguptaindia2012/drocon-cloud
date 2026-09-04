@@ -33,6 +33,7 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
 const SECTIONS = [
   { key:"reviews",    label:"Review / Approvals" },   // sits right after Home
   { key:"messenger",  label:"Messenger" },            // internal team chat
+  { key:"mail",       label:"Mail" },                 // in-app email (Hostinger)
   { key:"self",       label:"My Space" },             // employee self-service (attendance & expenses)
   { key:"trackers",   label:"Daily Spray Entry" },
   { key:"order",      label:"Business Development" },
@@ -54,6 +55,8 @@ const TOOLS = [
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
   // Internal messenger — team chat, DMs, threads (internal only)
   { key:"messenger", section:"messenger", label:"Team Chat", gate:"all" },
+  // In-app email — each user connects their own Hostinger mailbox (internal only)
+  { key:"mail", section:"mail", label:"Email", gate:"all" },
   // My Space — every internal employee can file their own attendance & expenses
   { key:"my_expenses", section:"self", label:"My Attendance & Expenses", gate:"all" },
   // Daily Spray Entry — the trackers lead, then entry and reporting
