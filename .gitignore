@@ -7,3 +7,8 @@ Thumbs.db
 # local-only helper (not needed by the hosted site)
 # (kept in repo for convenience; uncomment to exclude)
 # server.ps1
+
+# email migration — NEVER commit real credentials or copied mail
+docs/email-migration/accounts.csv
+docs/email-migration/logs/
+docs/email-migration/backup/
