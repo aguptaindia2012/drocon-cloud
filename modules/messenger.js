@@ -26,6 +26,62 @@ function when(ts){ try{ const d=new Date(ts), now=new Date();
 async function loadRoster(){ try{ const { data }=await sb().rpc("chat_roster"); ROSTER=data||[]; }catch(e){ ROSTER=[]; } }
 async function loadChannels(){ const { data }=await sb().rpc("chat_my_channels"); CHANNELS=data||[]; }
 
+/* ---------- attachments (Supabase 'chat' storage bucket) ---------- */
+const _pending={};   // composer id -> [File]
+async function uploadChatFiles(files){
+  const out=[];
+  for(const f of files){
+    const safe=(f.name||"file").replace(/[^\w.\-]+/g,"_");
+    const path=`${CUR.id}/${Date.now()}_${Math.random().toString(36).slice(2,7)}_${safe}`;
+    const { error }=await sb().storage.from("chat").upload(path, f, {upsert:false});
+    if(!error) out.push({ path, name:f.name||safe, type:f.type||"", size:f.size||0 });
+  }
+  return out;
+}
+async function chatFileLink(path){ try{ const { data }=await sb().storage.from("chat").createSignedUrl(path, 3600); return data&&data.signedUrl; }catch(e){ return null; } }
+function fileSize(n){ n=Number(n)||0; return n>1048576?(n/1048576).toFixed(1)+" MB":n>1024?Math.round(n/1024)+" KB":n+" B"; }
+
+/* ---------- lightweight, safe message formatting ---------- */
+function fmtBody(body){
+  let h=esc(body||"");
+  h=h.replace(/`([^`]+)`/g,'<code style="background:#eef2ec;padding:0 3px;border-radius:3px;font-size:13px">$1</code>');
+  h=h.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  h=h.replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>');
+  h=h.replace(/~~([^~\n]+)~~/g,'<s>$1</s>');
+  h=h.replace(/(^|[\s(>])\*([^*\n]+)\*/g,'$1<i>$2</i>');
+  h=h.replace(/(^|[\s(>])_([^_\n]+)_/g,'$1<i>$2</i>');
+  h=h.replace(/^(\s*)[-•]\s+/gm,'$1• ');
+  h=h.replace(/\n/g,'<br>');
+  ROSTER.concat([{name:(window.OPS.profile&&window.OPS.profile.full_name)||""}]).forEach(r=>{
+    if(!r.name) return; const n=esc(r.name);
+    h=h.replace(new RegExp("@"+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),'<b style="color:var(--blue)">@'+n+'</b>');
+  });
+  return h;
+}
+function attachHTML(atts){
+  if(!atts||!atts.length) return "";
+  return `<div class="msgAtt" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:8px">`+
+    atts.map(a=>`<span data-chatpath="${esc(a.path)}" data-name="${esc(a.name||'file')}" data-type="${esc(a.type||'')}"
+      style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:12px;color:var(--muted)">📎 ${esc(a.name||'file')} <span style="font-size:11px">${fileSize(a.size)}</span></span>`).join("")+
+    `</div>`;
+}
+async function hydrateAttachments(root){
+  if(!root) return;
+  const els=[...root.querySelectorAll("[data-chatpath]")];
+  for(const el of els){
+    if(el.dataset.done) continue; el.dataset.done="1";
+    const url=await chatFileLink(el.getAttribute("data-chatpath"));
+    if(!url) continue;
+    const name=el.getAttribute("data-name"), type=el.getAttribute("data-type")||"";
+    if(/^image\//.test(type)){
+      el.innerHTML=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${esc(name)}" style="max-width:220px;max-height:180px;border-radius:8px;display:block"></a>`;
+      el.style.border="none"; el.style.padding="0";
+    }else{
+      el.innerHTML=`📎 <a href="${url}" target="_blank" rel="noopener" download>${esc(name)}</a>`;
+    }
+  }
+}
+
 /* ------------------------------------ shell ------------------------------------ */
 async function route(){
   const m=$("main");
@@ -105,40 +161,70 @@ function msgHTML(x, replies){
   const mine=x.author===meId();
   const ref=x.ref_type?`<a href="#" data-ref="${esc(x.ref_type)}:${esc(x.ref_id||'')}" style="font-size:11px">🔗 ${esc(x.ref_type.replace(/_/g,' '))}</a>`:"";
   const rc=replies?`<a href="#" data-thread="${x.id}" style="font-size:12px">💬 ${replies} ${replies===1?'reply':'replies'}</a>`:`<a href="#" data-thread="${x.id}" style="font-size:12px;color:var(--muted)">Reply</a>`;
-  return `<div class="msgRow" style="margin-bottom:12px">
+  const own=mine?`<a href="#" data-edit="${x.id}" style="font-size:12px;color:var(--muted)">Edit</a> <a href="#" data-del="${x.id}" style="font-size:12px;color:#a3322a">Delete</a>`:"";
+  const atts=(typeof x.attachments==="string")?(()=>{try{return JSON.parse(x.attachments);}catch(e){return [];}})():(x.attachments||[]);
+  return `<div class="msgRow" data-msgid="${x.id}" style="margin-bottom:12px">
     <div class="row" style="gap:8px;align-items:baseline">
       <b style="font-size:13px">${esc(mine?'You':x.author_name)}</b>
       <span class="muted" style="font-size:11px">${when(x.created_at)}</span>${x.edited_at?'<span class="muted" style="font-size:11px">(edited)</span>':''}
     </div>
-    <div style="font-size:14px;white-space:pre-wrap;margin:1px 0 2px">${linkifyMentions(x.body)}</div>
-    <div class="row" style="gap:12px">${rc} ${ref}</div>
+    <div class="msgBody" data-raw="${esc(x.body||'')}" style="font-size:14px;margin:1px 0 2px">${fmtBody(x.body)}</div>
+    ${attachHTML(atts)}
+    <div class="row" style="gap:12px;margin-top:2px">${rc} ${ref} ${own}</div>
   </div>`;
-}
-function linkifyMentions(body){
-  // bold @Name tokens for readability (names come from roster)
-  let h=esc(body);
-  ROSTER.concat([{name:(window.OPS.profile&&window.OPS.profile.full_name)||"you"}]).forEach(r=>{
-    if(!r.name) return; const n=esc(r.name);
-    h=h.replace(new RegExp("@"+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"g"),'<b style="color:var(--blue)">@'+n+'</b>');
-  });
-  return h;
 }
 
 /* --------------------------------- composer + mentions --------------------------------- */
 function composerHTML(id){
   return `<div style="position:relative">
     <div id="${id}Ment" class="card" style="display:none;position:absolute;bottom:100%;left:0;max-height:180px;overflow:auto;z-index:5;min-width:200px;padding:4px"></div>
-    <textarea id="${id}Txt" class="in" rows="2" placeholder="Write a message… use @ to mention" style="width:100%;resize:vertical"></textarea>
+    <div class="row" style="gap:4px;margin-bottom:4px">
+      <button type="button" class="btn sm" data-fmt="bold" title="Bold  **text**" style="font-weight:700;min-width:30px">B</button>
+      <button type="button" class="btn sm" data-fmt="italic" title="Italic  *text*" style="font-style:italic;min-width:30px">I</button>
+      <button type="button" class="btn sm" data-fmt="strike" title="Strikethrough  ~~text~~" style="text-decoration:line-through;min-width:30px">S</button>
+      <button type="button" class="btn sm" data-fmt="code" title="Code  \`text\`" style="min-width:30px">&lt;/&gt;</button>
+      <button type="button" class="btn sm" data-fmt="list" title="Bullet list" style="min-width:30px">• </button>
+      <button type="button" class="btn sm" id="${id}Attach" title="Attach files">📎</button>
+      <input type="file" id="${id}File" multiple style="display:none">
+    </div>
+    <textarea id="${id}Txt" class="in" rows="2" placeholder="Write a message… **bold**, *italic*, @mention" style="width:100%;resize:vertical"></textarea>
+    <div id="${id}Files" class="row wrap" style="gap:6px;margin-top:5px"></div>
     <div class="row" style="justify-content:space-between;margin-top:6px">
-      <span class="muted" style="font-size:11px">Enter to send · Shift+Enter for a new line</span>
+      <span class="muted" style="font-size:11px">Enter to send · Shift+Enter = new line</span>
       <button class="btn green sm" id="${id}Send">Send</button>
     </div>
   </div>`;
 }
+function renderPending(id){
+  const host=$(id+"Files"); if(!host) return;
+  const list=_pending[id]||[];
+  host.innerHTML=list.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px">📎 ${esc(f.name)} <span style="font-size:11px;color:var(--muted)">${fileSize(f.size)}</span> <a href="#" data-rm="${i}" style="color:#a3322a;text-decoration:none">✕</a></span>`).join("");
+  host.querySelectorAll("[data-rm]").forEach(el=>el.addEventListener("click",e=>{ e.preventDefault();
+    _pending[id].splice(Number(el.getAttribute("data-rm")),1); renderPending(id); }));
+}
+function wrapSelection(txt, fmt){
+  const s=txt.selectionStart, e=txt.selectionEnd, v=txt.value, sel=v.slice(s,e);
+  const wrap=(pre,post,ph)=>{ const inner=sel||ph; txt.value=v.slice(0,s)+pre+inner+post+v.slice(e);
+    txt.focus(); txt.selectionStart=s+pre.length; txt.selectionEnd=s+pre.length+inner.length; };
+  if(fmt==="bold") wrap("**","**","bold");
+  else if(fmt==="italic") wrap("*","*","italic");
+  else if(fmt==="strike") wrap("~~","~~","text");
+  else if(fmt==="code") wrap("`","`","code");
+  else if(fmt==="list"){ const ls=(sel||"item").split("\n").map(l=>"- "+l).join("\n");
+    txt.value=v.slice(0,s)+(s>0&&v[s-1]!=="\n"?"\n":"")+ls+v.slice(e); txt.focus(); }
+}
 function wireComposer(id, parentId){
   const txt=$(id+"Txt"), send=$(id+"Send"), ment=$(id+"Ment");
   if(!txt) return;
-  _mentions=new Set();
+  _mentions=new Set(); _pending[id]=[];
+  // formatting toolbar (the row immediately before the textarea)
+  (function(){ const bar=txt.previousElementSibling; if(bar) bar.querySelectorAll("[data-fmt]").forEach(b=>
+    b.addEventListener("click",e=>{ e.preventDefault(); wrapSelection(txt, b.getAttribute("data-fmt")); })); })();
+  // attachments
+  const fileInput=$(id+"File"), attachBtn=$(id+"Attach");
+  if(attachBtn) attachBtn.addEventListener("click",()=>fileInput.click());
+  if(fileInput) fileInput.addEventListener("change",()=>{
+    _pending[id]=(_pending[id]||[]).concat([...fileInput.files]); fileInput.value=""; renderPending(id); });
   function closeMent(){ ment.style.display="none"; }
   txt.addEventListener("keydown",e=>{
     if(e.key==="Enter" && !e.shiftKey && ment.style.display==="none"){ e.preventDefault(); doSend(id,parentId); }
@@ -162,16 +248,20 @@ function wireComposer(id, parentId){
   send.addEventListener("click",()=>doSend(id,parentId));
 }
 async function doSend(id, parentId){
-  const txt=$(id+"Txt"); if(!txt) return;
-  const body=txt.value.trim(); if(!body) return;
+  const txt=$(id+"Txt"), send=$(id+"Send"); if(!txt) return;
+  const body=txt.value.trim();
+  const files=_pending[id]||[];
+  if(!body && !files.length) return;
   // keep only mentions whose @Name still appears in the text
   const mentions=[..._mentions].filter(uid=>{ const r=ROSTER.find(x=>x.id===uid); return r && body.indexOf("@"+r.name)>=0; });
-  txt.disabled=true;
+  txt.disabled=true; if(send){ send.disabled=true; send.textContent=files.length?"Uploading…":"Sending…"; }
+  let atts=[];
+  try{ if(files.length) atts=await uploadChatFiles(files); }catch(e){}
   const { error }=await sb().rpc("chat_post",{ p_channel:CUR.id, p_body:body, p_parent:parentId||null,
-    p_mentions:mentions.length?mentions:null });
-  txt.disabled=false;
+    p_mentions:mentions.length?mentions:null, p_attachments:atts });
+  txt.disabled=false; if(send){ send.disabled=false; send.textContent="Send"; }
   if(error){ alert("Couldn't send: "+error.message); return; }
-  txt.value=""; _mentions=new Set();
+  txt.value=""; _mentions=new Set(); _pending[id]=[]; renderPending(id);
   if(THREAD) openThread(THREAD, true); else openChannel(CUR);
 }
 
@@ -181,6 +271,28 @@ function wireMsgActions(){
   pane.querySelectorAll("[data-thread]").forEach(el=>el.addEventListener("click",e=>{ e.preventDefault(); openThread(el.getAttribute("data-thread")); }));
   pane.querySelectorAll("[data-ref]").forEach(el=>el.addEventListener("click",e=>{ e.preventDefault();
     const [t,i]=el.getAttribute("data-ref").split(":"); window.OPS.openTool && window.OPS.openTool("reviews"); }));
+  pane.querySelectorAll("[data-del]").forEach(el=>el.addEventListener("click",async e=>{ e.preventDefault();
+    if(!confirm("Delete this message?")) return;
+    const { error }=await sb().from("chat_messages").delete().eq("id", el.getAttribute("data-del"));
+    if(error){ alert("Couldn't delete: "+error.message); return; }
+    if(THREAD) openThread(THREAD); else openChannel(CUR);
+  }));
+  pane.querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",e=>{ e.preventDefault(); startEdit(el.getAttribute("data-edit")); }));
+  hydrateAttachments($("mMsgs"));
+}
+function startEdit(mid){
+  const row=$("mPane").querySelector(`.msgRow[data-msgid="${mid}"]`); if(!row) return;
+  const bodyEl=row.querySelector(".msgBody"); const raw=bodyEl.getAttribute("data-raw")||"";
+  bodyEl.innerHTML=`<textarea class="in" rows="2" style="width:100%">${esc(raw)}</textarea>
+    <div class="row" style="gap:6px;margin-top:4px"><button class="btn green sm" data-esave="${mid}">Save</button><button class="btn sm" data-ecancel="${mid}">Cancel</button></div>`;
+  const ta=bodyEl.querySelector("textarea"); ta.focus();
+  bodyEl.querySelector("[data-ecancel]").addEventListener("click",()=>{ THREAD?openThread(THREAD):openChannel(CUR); });
+  bodyEl.querySelector("[data-esave]").addEventListener("click",async()=>{
+    const nv=ta.value.trim(); if(!nv){ alert("Message can't be empty (delete it instead)."); return; }
+    const { error }=await sb().from("chat_messages").update({ body:nv, edited_at:new Date().toISOString() }).eq("id",mid);
+    if(error){ alert("Couldn't save: "+error.message); return; }
+    THREAD?openThread(THREAD):openChannel(CUR);
+  });
 }
 async function openThread(rootId, keepScroll){
   THREAD=rootId;
@@ -200,6 +312,7 @@ async function openThread(rootId, keepScroll){
     <div style="border-top:1px solid var(--line);padding:10px 12px">${composerHTML("mThr")}</div>`;
   $("mBack").addEventListener("click",()=>{ THREAD=null; openChannel(CUR); });
   wireComposer("mThr", rootId);
+  wireMsgActions();
   const box=$("mMsgs"); if(box) box.scrollTop=box.scrollHeight;
 }
 
