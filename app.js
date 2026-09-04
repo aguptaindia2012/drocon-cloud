@@ -32,6 +32,7 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
   { key:"reviews",    label:"Review / Approvals" },   // sits right after Home
+  { key:"messenger",  label:"Messenger" },            // internal team chat
   { key:"self",       label:"My Space" },             // employee self-service (attendance & expenses)
   { key:"trackers",   label:"Daily Spray Entry" },
   { key:"order",      label:"Business Development" },
@@ -51,6 +52,8 @@ const TOOLS = [
   // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
   // Review / Approvals — consolidated queue; everyone sees only their assigned items
   { key:"reviews",    section:"reviews", label:"My Queue",          gate:"all" },
+  // Internal messenger — team chat, DMs, threads (internal only)
+  { key:"messenger", section:"messenger", label:"Team Chat", gate:"all" },
   // My Space — every internal employee can file their own attendance & expenses
   { key:"my_expenses", section:"self", label:"My Attendance & Expenses", gate:"all" },
   // Daily Spray Entry — the trackers lead, then entry and reporting
@@ -206,8 +209,8 @@ function applyProfile(){
   $("meRole").textContent = isExternal() ? "PARTNER" : (profile.role||"drafter").toUpperCase();
   // always land on Home after a login or refresh
   goHome();
-  refreshNotifs(); refreshReviewCount();
-  if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); } }, 30000);
+  refreshNotifs(); refreshReviewCount(); refreshChatBadge();
+  if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); refreshChatBadge(); } }, 30000);
 }
 async function refreshRole(){
   const data = await loadProfile();
@@ -331,7 +334,8 @@ function renderNav(){
   const secs = visibleSections();
   const homeBtn = `<button data-sec="__home" class="${window.OPS.currentTool==='home'?'active':''}">🏠 Home</button>`;
   $("sectionBar").innerHTML = homeBtn + secs.map(s=>{
-    const badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
+    let badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
+    if(s.key==="messenger" && window.OPS.chatUnread) badge = ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">💬 ${window.OPS.chatUnread}</span>`;
     return `<button data-sec="${s.key}" class="${(window.OPS.currentTool!=='home' && s.key===window.OPS.currentSection)?'active':''}">${esc(s.label)}${badge}</button>`;
   }).join("");
   $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{
@@ -477,14 +481,18 @@ async function refreshNotifs(){
 }
 function renderNotifs(){
   const host=$("notifList"); if(!host) return;
-  host.innerHTML = _notifs.length ? _notifs.map(n=>`<div data-nid="${n.id}" data-ag="${n.agreement_id||''}" style="padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read?'opacity:.6':'background:#fbfdf8'}">
+  host.innerHTML = _notifs.length ? _notifs.map(n=>`<div data-nid="${n.id}" data-ag="${n.agreement_id||''}" data-link="${esc(n.link||'')}" style="padding:9px 14px;border-bottom:1px solid var(--line);cursor:pointer;${n.is_read?'opacity:.6':'background:#fbfdf8'}">
       <div style="font-size:13px">${esc(n.message)}</div><div class="muted" style="font-size:11px">${fmt(n.created_at)}</div></div>`).join("")
     : '<div class="muted" style="padding:14px">No notifications.</div>';
   host.querySelectorAll("[data-nid]").forEach(el=>el.addEventListener("click",async()=>{
-    const nid=el.getAttribute("data-nid"), ag=el.getAttribute("data-ag");
+    const nid=el.getAttribute("data-nid"), ag=el.getAttribute("data-ag"), link=el.getAttribute("data-link");
     await sb.from("notifications").update({is_read:true}).eq("id",nid);
     $("notifPanel").classList.add("hidden"); refreshNotifs();
-    if(ag && window.OPS.routes.viewAgreementDetail){ openTool("agreements"); window.OPS.routes.viewAgreementDetail(ag); }
+    if(ag && window.OPS.routes.viewAgreementDetail){ openTool("agreements"); window.OPS.routes.viewAgreementDetail(ag); return; }
+    if(link){ // link is "tool" or "tool:id"
+      const [tool,id]=link.split(":");
+      if(window.OPS.currentTool!==undefined){ openTool(tool); if(id && window.OPS._notifOpen && window.OPS._notifOpen[tool]) try{ window.OPS._notifOpen[tool](id); }catch(e){} }
+    }
   }));
 }
 function toggleNotif(){ const p=$("notifPanel"); if(p.classList.contains("hidden")){ renderNotifs(); p.classList.remove("hidden"); } else p.classList.add("hidden"); }
@@ -523,6 +531,14 @@ async function refreshReviewCount(){
   renderNav();
 }
 window.OPS.refreshReviewCount = refreshReviewCount;
+// ---------- unread chat counter (badge on the Messenger tab) ----------
+async function refreshChatBadge(){
+  if(!me || isExternal()){ window.OPS.chatUnread=0; return; }
+  try{ const { data }=await sb.rpc("chat_unread_total"); window.OPS.chatUnread=Number(data)||0; }
+  catch(e){ window.OPS.chatUnread=0; }
+  renderNav();
+}
+window.OPS.refreshChatBadge = refreshChatBadge;
 (function(){ const b=$("bell"); if(b) b.addEventListener("click",toggleNotif);
   const mk=$("notifMark"); if(mk) mk.addEventListener("click",markAllRead); })();
 
