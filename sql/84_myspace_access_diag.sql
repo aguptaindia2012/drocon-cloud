@@ -31,7 +31,9 @@ language sql stable security definer set search_path=public as $$
          end as reason
   from public.employees e
   left join public.profiles p on lower(btrim(p.email)) = lower(btrim(e.email))
-  where public.has_role(array['admin']::user_role[])
+  -- auth.uid() is null when run from the Supabase SQL editor (as owner); there
+  -- it's already trusted. From the app it must be an admin.
+  where (auth.uid() is null or public.has_role(array['admin']::user_role[]))
     and coalesce(e.status,'active') <> 'inactive'
   order by
     case when e.email is null or btrim(e.email)='' then 0

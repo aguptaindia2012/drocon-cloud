@@ -121,6 +121,7 @@ window.OPS.routes.hr_employees = window.OPS.makeRegistry({
   listCols:[
     {key:"name",label:"Name"},
     {key:"designation",label:"Designation"},
+    {key:"email",label:"Email",fmt:(v)=>v?esc(v):'<span style="color:#a3322a">— missing —</span>'},
     {key:"monthly_salary",label:"Monthly Salary",num:true,fmt:v=>v==null?"":money(v)},
     {key:"status",label:"Status"},
   ],

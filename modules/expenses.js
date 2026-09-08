@@ -146,7 +146,7 @@ async function myExpenses(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">My Space</div><h1>My Attendance &amp; Expenses</h1><div id="meBody" class="muted">Loading…</div>`;
   const emp=await resolveEmployee();
-  if(!emp){ $("meBody").innerHTML='<div class="card muted">Your login isn\'t linked to an employee record yet. Ask HR to set your <b>email</b> (the one you sign in with) on your entry in <b>Registers → Employees</b>.</div>'; return; }
+  if(!emp){ $("meBody").innerHTML='<div class="card muted">Your login isn\'t linked to an employee record yet. Ask HR to set your <b>email</b> (the one you sign in with) on your entry in <b>HR → Employees</b>.</div>'; return; }
   const { data:claims }=await sb().from("expense_claims").select("*").eq("employee_id",emp.id).order("created_at",{ascending:false});
   const rows=claims||[];
   $("meBody").innerHTML=`
