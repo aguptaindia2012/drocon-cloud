@@ -103,6 +103,7 @@ function form(rec){
         </select></div>
         <div class="field"><label>Pilot name *</label><input id="p_name" value="${esc(e.name||'')}"></div>
         <div class="field"><label>Phone number</label><input id="p_phone" value="${esc(e.phone||'')}"></div>
+        <div class="field"><label>Email <span class="muted">(for portal login)</span></label><input id="p_email" value="${esc(e.email||'')}"></div>
         <div class="field"><label>RPC number <span class="muted">(optional)</span></label><input id="p_rpc" value="${esc(e.rpc_no||'')}"></div>
         <div class="field"><label>Drone UIN <span class="muted">(optional)</span></label><input id="p_uin" value="${esc(e.drone_uin||'')}"></div>
         <div class="field"><label>PAN <span class="muted">(optional)</span></label><input id="p_pan" value="${esc(e.pan_no||'')}"></div>
@@ -117,12 +118,14 @@ function form(rec){
         ${rec?'<button class="btn sm" id="plDel" style="color:#a3322a;border-color:#e4b4b4">Delete duplicate</button>':''}</div>
       <div class="err" id="plErr"></div>
     </div>
-    ${rec?`<div class="card" id="plAssign"><h3>Location assignment</h3><div class="muted">Loading…</div></div>`:''}`;
+    ${rec?`<div class="card" id="plAssign"><h3>Location assignment</h3><div class="muted">Loading…</div></div>`:''}
+    ${rec?`<div id="plAccount"></div>`:''}`;
+  if(rec && window.OPS.accountAccess){ try{ window.OPS.accountAccess.panel({mode:"pilot"})(rec, $("plAccount")); }catch(e){ console.error(e); } }
   $("plBack").addEventListener("click",view); $("plCancel").addEventListener("click",view);
   if($("pNewVendor")) $("pNewVendor").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("vendors"); });
   $("plSave").addEventListener("click",async()=>{
     const out={ vendor_id:$("p_vendor").value||null, name:$("p_name").value.trim(),
-      phone:$("p_phone").value.trim()||null, rpc_no:$("p_rpc").value.trim()||null,
+      phone:$("p_phone").value.trim()||null, email:$("p_email").value.trim()||null, rpc_no:$("p_rpc").value.trim()||null,
       drone_uin:$("p_uin").value.trim()||null, pan_no:$("p_pan").value.trim()||null,
       aadhaar_no:$("p_aadhaar").value.trim()||null, is_active:$("p_active").value==="true" };
     if(!out.vendor_id){ $("plErr").textContent="Select the vendor who employs this pilot."; return; }

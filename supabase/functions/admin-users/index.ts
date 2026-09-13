@@ -65,6 +65,28 @@ async function handleStatus(body: any) {
   const users = await listAllAuthUsers();
   const byEmail = new Map(users.map((u) => [(u.email || "").trim().toLowerCase(), u]));
   const byId = new Map(users.map((u) => [u.id, u]));
+
+  // Preferred: status by email (works for any register — employee/vendor/pilot/consultant)
+  if (body.email) {
+    const u = byEmail.get((body.email || "").trim().toLowerCase());
+    let prof: any = null;
+    if (u) {
+      const { data } = await admin.from("profiles").select("role,is_external,party_type,party_id").eq("id", u.id).maybeSingle();
+      prof = data;
+    }
+    return json(200, { rows: [{
+      email: body.email,
+      has_account: !!u,
+      confirmed: !!(u && (u.email_confirmed_at || u.confirmed_at)),
+      last_sign_in_at: u ? u.last_sign_in_at : null,
+      user_id: u ? u.id : null,
+      is_external: prof?.is_external ?? null,
+      party_type: prof?.party_type ?? null,
+      party_id: prof?.party_id ?? null,
+    }] });
+  }
+
+  // Fallback: by employee_id / all (legacy)
   let q = admin.from("employees").select("id,name,email,user_id");
   if (body.employee_id) q = q.eq("id", body.employee_id);
   const { data: emps, error } = await q;
@@ -83,16 +105,17 @@ async function handleStatus(body: any) {
   return json(200, { rows });
 }
 
-async function applyAccess(userId: string, access: string) {
+async function applyAccess(userId: string, access: string, partyId: string | null) {
   const is_external = EXTERNAL.has(access);
   const patch: any = { is_external };
-  if (is_external) patch.party_type = access;
+  if (is_external) { patch.party_type = access; patch.party_id = partyId ?? null; }
   await admin.from("profiles").update(patch).eq("id", userId);
 }
 
 async function handleCreate(body: any) {
   const email = (body.email || "").trim().toLowerCase();
   const access = body.access || "internal";
+  const partyId = body.party_id ?? null;
   if (!email) return json(400, { error: "email required" });
 
   const users = await listAllAuthUsers();
@@ -113,10 +136,13 @@ async function handleCreate(body: any) {
     tempPassword = password;
   }
 
-  await applyAccess(userId, access);
-  if (body.employee_id) await admin.from("employees").update({ user_id: userId, email }).eq("id", body.employee_id);
+  await applyAccess(userId, access, partyId);
+  // internal employees also link via employees.user_id (My Space)
+  if (access === "internal" && body.employee_id) {
+    await admin.from("employees").update({ user_id: userId, email }).eq("id", body.employee_id);
+  }
 
-  return json(200, { created: !existing, user_id: userId, email, access, temp_password: tempPassword });
+  return json(200, { created: !existing, user_id: userId, email, access, party_id: partyId, temp_password: tempPassword });
 }
 
 async function handleReset(body: any) {
@@ -149,7 +175,7 @@ Deno.serve(async (req) => {
     if (cerr || !caller?.user) return json(401, { error: "invalid token" });
     const { data: prof, error: perr } = await admin.from("profiles").select("role,is_external").eq("id", caller.user.id).maybeSingle();
     if (!prof || prof.role !== "admin" || prof.is_external) {
-      return json(403, { error: "admin only", detail: { has_profile: !!prof, role: prof?.role ?? null, is_external: prof?.is_external ?? null, uid: caller.user.id, read_error: perr?.message ?? null, service_key_role: keyRole(SERVICE), code_version: "v2" } });
+      return json(403, { error: "admin only", detail: { has_profile: !!prof, role: prof?.role ?? null, is_external: prof?.is_external ?? null, uid: caller.user.id, read_error: perr?.message ?? null, service_key_role: keyRole(SERVICE), code_version: "v3" } });
     }
 
     const body = await req.json().catch(() => ({}));

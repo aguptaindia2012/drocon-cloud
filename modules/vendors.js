@@ -8,6 +8,7 @@ const { esc } = window.OPS.helpers;
 
 window.OPS.routes.vendors = window.OPS.makeRegistry({
   tool:"vendors", table:"vendors", title:"Vendors", eyebrow:"Finance", approvable:true, logView:true,
+  formExtra:(rec,host)=>window.OPS.accountAccess.panel({mode:"vendor"})(rec,host),
   orderBy:"name",
   searchKeys:["name","firm_name","city","country","gstin","email"],
   convertTo:{ tool:"clients", label:"→ Also add as Client",

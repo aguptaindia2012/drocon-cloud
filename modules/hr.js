@@ -113,77 +113,12 @@ async function attendanceDoc(emp, ym){
   ]});
 }
 
-/* ============================ Account provisioning (admin) ============================ */
-const ACCESS_OPTS=[
-  {v:"internal",           label:"Employee — My Space & internal access"},
-  {v:"vendor",             label:"Vendor portal (external)"},
-  {v:"authorized_partner", label:"Authorized Partner portal (external)"},
-  {v:"consultant",         label:"Consultant portal (external)"},
-  {v:"pilot",              label:"Pilot portal (external)"},
-];
-async function adminCall(payload){
-  const cfg=window.DCB_CONFIG||{};
-  const base=(cfg.SUPABASE_URL||"").replace(/\/+$/,"");
-  const anon=cfg.SUPABASE_ANON_KEY||"";
-  const { data:sess }=await window.OPS.sb.auth.getSession();
-  const tok=sess&&sess.session&&sess.session.access_token;
-  const res=await fetch(base+"/functions/v1/admin-users",{ method:"POST",
-    headers:{ "Content-Type":"application/json", apikey:anon, Authorization:"Bearer "+tok },
-    body:JSON.stringify(payload) });
-  const j=await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error((j.error||("HTTP "+res.status))+(j.detail?(" — "+JSON.stringify(j.detail)):""));
-  return j;
-}
-async function accountPanel(rec, host){
-  if(!window.OPS.isAdmin()){ host.innerHTML=""; return; } // admins provision accounts
-  host.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Account access</h3><div id="acctBody" class="muted">Checking…</div></div>`;
-  const body=$("acctBody");
-  if(!rec.email){ body.innerHTML='Add the <b>Email</b> above and <b>Save changes</b> first — then you can create a login here.'; return; }
-  let st;
-  try{ st=await adminCall({action:"status", employee_id:rec.id}); }
-  catch(e){ body.innerHTML='<span class="err">Account service unavailable: '+esc(e.message)+'</span><div class="muted" style="font-size:12px;margin-top:4px">The <code>admin-users</code> Edge Function may not be deployed yet.</div>'; return; }
-  const row=(st.rows&&st.rows[0])||{};
-  const badge = row.has_account
-    ? (row.last_sign_in_at ? '🟢 Active — last sign-in '+fmtDate(row.last_sign_in_at) : '🟡 Created — not signed in yet')
-    : '⚪ No account yet';
-  body.innerHTML=`
-    <div style="margin-bottom:8px">${badge}${row.has_account&&!row.linked?' <span class="muted">(account exists but not linked to this record)</span>':''}</div>
-    <label>Access type</label>
-    <select id="acAccess" style="max-width:340px">${ACCESS_OPTS.map(o=>`<option value="${o.v}">${esc(o.label)}</option>`).join("")}</select>
-    <div class="row" style="gap:8px;margin-top:8px">
-      ${row.has_account
-        ? '<button class="btn sm" id="acReset">Reset password</button><button class="btn sm" id="acLink">Apply access type</button>'
-        : '<button class="btn green sm" id="acCreate">Create login</button>'}
-    </div>
-    <div id="acOut" style="margin-top:8px"></div>`;
-  const out=$("acOut");
-  function showPw(email,pw,note){
-    out.innerHTML=`<div class="card" style="background:#fbfdf8"><b>${esc(note||"Login ready")}</b>
-      <div style="font-size:13px;margin-top:4px">Email: <code>${esc(email)}</code><br>Temporary password: <code style="font-size:15px">${esc(pw)}</code></div>
-      <div class="muted" style="font-size:12px;margin-top:6px">Share this with the employee securely (not in the messenger). They can sign in now and should change it after.</div></div>`;
-  }
-  if($("acCreate")) $("acCreate").addEventListener("click",async()=>{
-    const b=$("acCreate"); b.disabled=true; b.textContent="Creating…";
-    try{ const r=await adminCall({action:"create", employee_id:rec.id, email:rec.email, full_name:rec.name, access:$("acAccess").value});
-      if(r.temp_password){ showPw(r.email, r.temp_password, "Login created ✓"); }
-      else { out.innerHTML='<div class="card" style="background:#fbfdf8">An account already existed for this email — it is now linked. Use <b>Reset password</b> if they need a new one.</div>'; }
-    }catch(e){ out.innerHTML='<span class="err">'+esc(e.message)+'</span>'; b.disabled=false; b.textContent="Create login"; }
-  });
-  if($("acReset")) $("acReset").addEventListener("click",async()=>{
-    if(!confirm("Reset this person's password to a new temporary one?")) return;
-    try{ const r=await adminCall({action:"reset", employee_id:rec.id}); showPw(rec.email, r.temp_password, "Password reset ✓"); }
-    catch(e){ out.innerHTML='<span class="err">'+esc(e.message)+'</span>'; }
-  });
-  if($("acLink")) $("acLink").addEventListener("click",async()=>{
-    try{ await adminCall({action:"create", employee_id:rec.id, email:rec.email, full_name:rec.name, access:$("acAccess").value});
-      out.innerHTML='<div class="card" style="background:#fbfdf8">Access type updated ✓</div>'; }
-    catch(e){ out.innerHTML='<span class="err">'+esc(e.message)+'</span>'; }
-  });
-}
+/* Account provisioning uses the shared panel — see modules/account_access.js */
 
 /* ============================ Employees ============================ */
 window.OPS.routes.hr_employees = window.OPS.makeRegistry({
-  tool:"hr_employees", table:"employees", title:"Employees", eyebrow:"HR", logView:true, formExtra:accountPanel,
+  tool:"hr_employees", table:"employees", title:"Employees", eyebrow:"HR", logView:true,
+  formExtra:(rec,host)=>window.OPS.accountAccess.panel({mode:"employee"})(rec,host),
   orderBy:"name", filter:{col:"emp_type",val:"employee"},
   searchKeys:["name","designation","phone","email"],
   listCols:[
@@ -211,6 +146,7 @@ window.OPS.routes.hr_employees = window.OPS.makeRegistry({
 /* ============================ Consultants (Consultancy section) ============================ */
 window.OPS.routes.consultants = window.OPS.makeRegistry({
   tool:"consultants", table:"employees", title:"Consultants", eyebrow:"Partners · Consultancy", logView:true,
+  formExtra:(rec,host)=>window.OPS.accountAccess.panel({mode:"consultant"})(rec,host),
   orderBy:"name", filter:{col:"emp_type",val:"consultant"},
   searchKeys:["name","designation","phone","email"],
   listCols:[
