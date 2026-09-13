@@ -7,9 +7,72 @@
    ============================================================================ */
 (function(){
 const { $, esc, fmt } = window.OPS.helpers;
+const sb = ()=>window.OPS.sb;
 const API = ()=> (window.DCB_CONFIG && window.DCB_CONFIG.MAIL_API) || "";
 
-let STATE={ mailbox:"INBOX", messages:[], total:0, lowest:null, box:null, current:null, mailboxes:[] };
+let STATE={ mailbox:"INBOX", messages:[], total:0, lowest:null, box:null, current:null, mailboxes:[], signatures:[] };
+
+/* -------------------------------------------------- signatures -------------------------------------------------- */
+async function loadSignatures(){
+  try{ const { data }=await sb().from("mail_signatures").select("*").order("created_at"); STATE.signatures=data||[]; }
+  catch(e){ STATE.signatures=[]; }
+}
+function defaultSig(){ return STATE.signatures.find(s=>s.is_default) || null; }
+function signaturesPanel(){
+  const wrap=document.createElement("div");
+  wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:60;display:flex;align-items:center;justify-content:center";
+  wrap.innerHTML=`<div class="card" style="width:min(620px,94vw);max-height:88vh;overflow:auto">
+    <div class="row" style="justify-content:space-between"><h3 style="margin:0 0 8px">Email signatures</h3><button class="btn sm" id="sgClose">Close</button></div>
+    <div id="sgList" class="muted">Loading…</div>
+    <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
+      <h4 style="margin:0 0 6px" id="sgFormTitle">Add a signature</h4>
+      <input type="hidden" id="sgId">
+      <label>Name</label><input id="sgName" class="in" style="width:100%" placeholder="e.g. Full / Short">
+      <label>Signature text</label><textarea id="sgBody" class="in" rows="5" style="width:100%" placeholder="Abhishek Gupta&#10;Director, DroCon Bharat&#10;+91 …"></textarea>
+      <label class="row" style="gap:6px;margin-top:6px"><input type="checkbox" id="sgDefault"> Use as my default signature</label>
+      <div id="sgErr" class="err" style="min-height:16px"></div>
+      <div class="row" style="gap:8px"><button class="btn green sm" id="sgSave">Save signature</button><button class="btn sm" id="sgReset">Clear form</button></div>
+    </div>
+  </div>`;
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.addEventListener("click",e=>{ if(e.target===wrap) close(); });
+  $("sgClose").addEventListener("click",close);
+  function resetForm(){ $("sgId").value=""; $("sgName").value=""; $("sgBody").value=""; $("sgDefault").checked=false; $("sgFormTitle").textContent="Add a signature"; $("sgErr").textContent=""; }
+  $("sgReset").addEventListener("click",resetForm);
+  function renderList(){
+    const host=$("sgList");
+    host.innerHTML = STATE.signatures.length ? STATE.signatures.map(s=>`
+      <div class="row" style="gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)">
+        <div style="flex:1"><b>${esc(s.name)}</b>${s.is_default?' <span class="muted" style="font-size:11px">· default</span>':''}
+          <div class="muted" style="font-size:12px;white-space:pre-wrap;margin-top:2px">${esc(s.body)}</div></div>
+        <button class="btn sm" data-edit="${s.id}">Edit</button>
+        <button class="btn sm" data-del="${s.id}" style="color:#a3322a">Delete</button>
+      </div>`).join("") : '<div class="muted">No signatures yet — add one below.</div>';
+    host.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>{
+      const s=STATE.signatures.find(x=>x.id===b.getAttribute("data-edit")); if(!s) return;
+      $("sgId").value=s.id; $("sgName").value=s.name; $("sgBody").value=s.body; $("sgDefault").checked=!!s.is_default;
+      $("sgFormTitle").textContent="Edit signature"; $("sgName").focus();
+    }));
+    host.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
+      if(!confirm("Delete this signature?")) return;
+      await sb().from("mail_signatures").delete().eq("id",b.getAttribute("data-del"));
+      await loadSignatures(); renderList();
+    }));
+  }
+  $("sgSave").addEventListener("click",async()=>{
+    const err=$("sgErr"); err.textContent="";
+    const name=$("sgName").value.trim(), body=$("sgBody").value, isDef=$("sgDefault").checked, id=$("sgId").value;
+    if(!name){ err.textContent="Give the signature a name."; return; }
+    try{
+      if(isDef){ await sb().from("mail_signatures").update({is_default:false}).neq("id", id||"00000000-0000-0000-0000-000000000000"); }
+      if(id){ await sb().from("mail_signatures").update({name,body,is_default:isDef}).eq("id",id); }
+      else { await sb().from("mail_signatures").insert({name,body,is_default:isDef}); }
+      await loadSignatures(); renderList(); resetForm();
+    }catch(e){ err.textContent=e.message||"Save failed"; }
+  });
+  loadSignatures().then(renderList);
+}
 
 async function token(){ try{ const { data }=await window.OPS.sb.auth.getSession(); return data && data.session && data.session.access_token; }catch(e){ return null; } }
 async function api(path, opts){
@@ -126,6 +189,7 @@ async function renderMail(st){
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="muted">Signed in as <b>${esc(st.email)}</b>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
       <div class="row" style="gap:6px"><button class="btn green sm" id="mCompose">✏️ Compose</button>
+        <button class="btn sm" id="mSig">✍ Signatures</button>
         <button class="btn sm" id="mRefresh">↻</button><button class="btn sm" id="mDisc">Disconnect</button></div>
     </div>
     <div style="display:grid;grid-template-columns:170px 340px 1fr;gap:12px;align-items:start">
@@ -134,8 +198,10 @@ async function renderMail(st){
       <div class="card" id="mReader" style="padding:14px;min-height:60vh">Select a message.</div>
     </div>`;
   $("mCompose").addEventListener("click",()=>compose());
+  $("mSig").addEventListener("click",signaturesPanel);
   $("mRefresh").addEventListener("click",()=>loadList(STATE.mailbox,true));
   $("mDisc").addEventListener("click",async()=>{ if(confirm("Disconnect this mailbox from the app? (Your email is not deleted.)")){ await api("/mail/disconnect",{method:"DELETE"}); route(); } });
+  loadSignatures();
   try{
     const { mailboxes }=await api("/mail/mailboxes");
     STATE.mailboxes=(mailboxes||[]).sort((a,b)=>boxRank(a)-boxRank(b)||a.name.localeCompare(b.name));
@@ -251,13 +317,23 @@ function compose(seed){
     <label>To</label><input id="coTo" class="in" style="width:100%" value="${esc(seed.to||'')}">
     <label>Cc</label><input id="coCc" class="in" style="width:100%" value="${esc(seed.cc||'')}">
     <label>Subject</label><input id="coSub" class="in" style="width:100%" value="${esc(seed.subject||'')}">
-    <label>Message</label><textarea id="coBody" class="in" rows="10" style="width:100%">${esc(seed.body||'')}</textarea>
+    <label>Signature</label>
+    <select id="coSig" class="in" style="width:auto;max-width:100%;margin-bottom:6px">
+      <option value="">No signature</option>
+      ${STATE.signatures.map(s=>`<option value="${s.id}" ${s.is_default?'selected':''}>${esc(s.name)}</option>`).join("")}
+    </select>
+    <label>Message</label><textarea id="coBody" class="in" rows="10" style="width:100%"></textarea>
     <div class="row" style="gap:8px;margin-top:6px"><button class="btn sm" id="coAttach">📎 Attach</button><input type="file" id="coFile" multiple style="display:none"><span id="coFiles" class="muted" style="font-size:12px"></span></div>
     <div id="coErr" class="err" style="min-height:18px"></div>
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="btn sm" id="coCancel">Cancel</button><button class="btn green" id="coSend">Send</button></div>
   </div>`;
   document.body.appendChild(wrap);
   const close=()=>wrap.remove();
+  // signature: append the chosen one to the end of the body; default preselected
+  const baseBody = seed.body||"";
+  function applySig(){ const s=STATE.signatures.find(x=>x.id===$("coSig").value); $("coBody").value = baseBody + (s?("\n\n-- \n"+s.body):""); }
+  $("coSig").addEventListener("change",applySig);
+  applySig();
   wrap.addEventListener("click",e=>{ if(e.target===wrap) close(); });
   $("coCancel").addEventListener("click",close);
   $("coAttach").addEventListener("click",()=>$("coFile").click());
