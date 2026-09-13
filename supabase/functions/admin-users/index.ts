@@ -30,6 +30,19 @@ const json = (status: number, body: unknown) =>
 
 const EXTERNAL = new Set(["vendor", "authorized_partner", "consultant", "pilot"]);
 
+// Report which role the configured key maps to (for diagnostics) without leaking it.
+function keyRole(k: string): string {
+  if (!k) return "EMPTY";
+  if (k.startsWith("sb_secret")) return "sb_secret";
+  if (k.startsWith("sb_publishable")) return "sb_publishable";
+  try {
+    const p = JSON.parse(atob(k.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return p.role || "unknown-jwt";
+  } catch {
+    return "unknown";
+  }
+}
+
 function genPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
   const buf = new Uint8Array(12);
@@ -136,7 +149,7 @@ Deno.serve(async (req) => {
     if (cerr || !caller?.user) return json(401, { error: "invalid token" });
     const { data: prof, error: perr } = await admin.from("profiles").select("role,is_external").eq("id", caller.user.id).maybeSingle();
     if (!prof || prof.role !== "admin" || prof.is_external) {
-      return json(403, { error: "admin only", detail: { has_profile: !!prof, role: prof?.role ?? null, is_external: prof?.is_external ?? null, uid: caller.user.id, read_error: perr?.message ?? null } });
+      return json(403, { error: "admin only", detail: { has_profile: !!prof, role: prof?.role ?? null, is_external: prof?.is_external ?? null, uid: caller.user.id, read_error: perr?.message ?? null, service_key_role: keyRole(SERVICE), code_version: "v2" } });
     }
 
     const body = await req.json().catch(() => ({}));
