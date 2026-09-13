@@ -15,7 +15,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Prefer an explicitly-set secret (DCB_SERVICE_KEY) because on projects using the
+// new API-key system the reserved SUPABASE_SERVICE_ROLE_KEY may be empty.
+const SERVICE = Deno.env.get("DCB_SERVICE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
 
 const CORS = {
@@ -127,12 +129,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json(405, { error: "POST only" });
   try {
+    if (!SERVICE) return json(500, { error: "service key not configured — set the DCB_SERVICE_KEY secret" });
     const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     if (!jwt) return json(401, { error: "missing token" });
     const { data: caller, error: cerr } = await admin.auth.getUser(jwt);
     if (cerr || !caller?.user) return json(401, { error: "invalid token" });
-    const { data: prof } = await admin.from("profiles").select("role,is_external").eq("id", caller.user.id).maybeSingle();
-    if (!prof || prof.role !== "admin" || prof.is_external) return json(403, { error: "admin only" });
+    const { data: prof, error: perr } = await admin.from("profiles").select("role,is_external").eq("id", caller.user.id).maybeSingle();
+    if (!prof || prof.role !== "admin" || prof.is_external) {
+      return json(403, { error: "admin only", detail: { has_profile: !!prof, role: prof?.role ?? null, is_external: prof?.is_external ?? null, uid: caller.user.id, read_error: perr?.message ?? null } });
+    }
 
     const body = await req.json().catch(() => ({}));
     switch (body.action) {

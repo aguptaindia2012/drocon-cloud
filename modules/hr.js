@@ -131,7 +131,7 @@ async function adminCall(payload){
     headers:{ "Content-Type":"application/json", apikey:anon, Authorization:"Bearer "+tok },
     body:JSON.stringify(payload) });
   const j=await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(j.error||("HTTP "+res.status));
+  if(!res.ok) throw new Error((j.error||("HTTP "+res.status))+(j.detail?(" — "+JSON.stringify(j.detail)):""));
   return j;
 }
 async function accountPanel(rec, host){
