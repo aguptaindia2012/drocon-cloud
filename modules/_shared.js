@@ -161,6 +161,8 @@ function makeRegistry(cfg){
         }).catch(()=>{ el.placeholder=""; });
       }
     }
+    // optional per-record extra panel (e.g. account access on Employees)
+    if(cfg.formExtra && rec){ const ex=document.createElement("div"); ex.id="rqExtra"; $("rqApproval").before(ex); try{ cfg.formExtra(rec, ex); }catch(e){ console.error(e); } }
     if(cfg.approvable && rec && window.OPS.approvals){ window.OPS.approvals.bar(cfg.table, rec, $("rqApproval"), ()=>{ sb().from(cfg.table).select("*").eq("id",rec.id).single().then(({data})=>form(data||rec)); }); }
     if(cfg.logView && rec && window.OPS.access){ window.OPS.access.log(cfg.table, rec.id, rec[cfg.fields[0].key]||""); }
     // dependent State -> District dropdowns

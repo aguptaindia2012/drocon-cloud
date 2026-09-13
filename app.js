@@ -229,6 +229,10 @@ $("auToggle").addEventListener("click",e=>{ e.preventDefault(); signupMode=!sign
   $("auToggle").textContent = signupMode?"Sign in":"Create an account";
   $("auErr").textContent="";
 });
+// Public self-signup is disabled — accounts are provisioned by HR/admin
+// (HR → Employees → Account access). Hide the "Create an account" switch so the
+// login screen is sign-in only. (Also turn off signups in Supabase Auth settings.)
+(function(){ const t=$("auToggle"), tt=$("auToggleText"); if(t) t.style.display="none"; if(tt) tt.style.display="none"; })();
 $("auGo").addEventListener("click", async ()=>{
   const email=$("auEmail").value.trim(), pass=$("auPass").value;
   $("auErr").textContent=""; if(!email||!pass){ $("auErr").textContent="Enter email and password."; return; }
