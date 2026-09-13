@@ -5,5 +5,6 @@
 // ============================================================
 window.DCB_CONFIG = {
   SUPABASE_URL: "https://dnmztcwhdnjkvedzlkgh.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_0npJdZeUgz_2WtSiej3WDQ_HvSyiLtx"
+  SUPABASE_ANON_KEY: "sb_publishable_0npJdZeUgz_2WtSiej3WDQ_HvSyiLtx",
+  MAIL_API: "https://mail-api.droconbharat.com"
 };
