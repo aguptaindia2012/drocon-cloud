@@ -35,6 +35,25 @@ function htmlToText(h){ const d=document.createElement("div");
 function sigToHtml(s){ if(!s) return ""; return sigIsHtml(s.body)? sanitizeHtml(s.body) : esc(s.body).replace(/\n/g,"<br>"); }
 function sigToText(s){ if(!s) return ""; return sigIsHtml(s.body)? htmlToText(s.body) : s.body; }
 
+// Company-branded standard signature (hosted logo). Name/email prefilled from the
+// user's profile; they fill designation + phone, and can edit anything.
+const DROCON_LOGO="https://aguptaindia2012.github.io/drocon-cloud/assets/drocon-logo.png";
+function droconSigHtml(){
+  const p=window.OPS.profile||{};
+  const name=esc(p.full_name||"[Your Name]");
+  const email=esc(p.email||"you@droconbharat.com");
+  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#333333;line-height:1.5"><tr>`
+    +`<td style="padding-right:16px;border-right:3px solid #599533;vertical-align:middle"><img src="${DROCON_LOGO}" alt="DroCon Bharat" width="120" style="display:block;width:120px;height:auto"></td>`
+    +`<td style="padding-left:16px;vertical-align:middle">`
+      +`<div style="font-size:16px;font-weight:bold;color:#111111">${name}</div>`
+      +`<div style="font-size:13px;font-weight:bold;color:#599533">[Designation]</div>`
+      +`<div style="margin-top:6px;font-size:12px;color:#333333">M: [Your Phone] &nbsp;|&nbsp; E: <a href="mailto:${email}" style="color:#0A6496;text-decoration:none">${email}</a></div>`
+      +`<div style="margin-top:8px;font-size:12px;color:#555555"><span style="font-weight:bold;color:#333333">DroCon Bharat Private Limited</span><br>`
+      +`315/7 Thapar Nagar, Meerut, Uttar Pradesh 250001, India<br>`
+      +`T: +91 73026 27122 &nbsp;|&nbsp; <a href="mailto:info@droconbharat.com" style="color:#0A6496;text-decoration:none">info@droconbharat.com</a> &nbsp;|&nbsp; <a href="https://droconbharat.com" style="color:#0A6496;text-decoration:none">droconbharat.com</a></div>`
+    +`</td></tr></table>`;
+}
+
 function signaturesPanel(){
   const wrap=document.createElement("div");
   wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:60;display:flex;align-items:center;justify-content:center";
@@ -56,6 +75,7 @@ function signaturesPanel(){
         <button type="button" class="btn sm" id="sgImgUrl">🌐 Image URL</button>
         <input type="file" id="sgImgFile" accept="image/*" style="display:none">
         <button type="button" class="btn sm" data-cmd="removeFormat">Clear</button>
+        <button type="button" class="btn blue sm" id="sgTpl" style="margin-left:auto">★ DroCon template</button>
       </div>
       <div id="sgBody" contenteditable="true" class="in" style="width:100%;min-height:120px;overflow:auto;background:#fff" placeholder="Your name, title, phone, links…"></div>
       <div class="muted" style="font-size:11px;margin-top:3px">Tip for a logo: <b>Upload image</b> from your computer (it's hosted automatically), or <b>Image URL</b> to link one already online.</div>
@@ -75,6 +95,9 @@ function signaturesPanel(){
   function capImages(){ ed.querySelectorAll("img:not([data-sized])").forEach(im=>{ im.style.maxWidth="220px"; im.style.height="auto"; im.setAttribute("data-sized","1"); }); }
   function insertImg(url){ ed.focus(); document.execCommand("insertImage",false,url); capImages(); }
   $("sgImgUrl").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Image URL (https://…)"); if(u) insertImg(u); });
+  $("sgTpl").addEventListener("mousedown",e=>{ e.preventDefault();
+    if(ed.innerHTML.trim() && !confirm("Replace the current signature content with the DroCon standard template?")) return;
+    ed.innerHTML=droconSigHtml(); capImages(); if(!$("sgName").value.trim()) $("sgName").value="DroCon standard"; });
   $("sgImgUp").addEventListener("mousedown",e=>{ e.preventDefault(); $("sgImgFile").click(); });
   $("sgImgFile").addEventListener("change",async()=>{
     const f=$("sgImgFile").files[0]; if(!f) return;
