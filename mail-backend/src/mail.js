@@ -33,12 +33,12 @@ export async function listMailboxes(acct) {
   const c = imapClient(acct);
   await c.connect();
   try {
-    const boxes = [];
-    for await (const b of c.list()) {
-      boxes.push({ path: b.path, name: b.name, specialUse: b.specialUse || null,
-        subscribed: b.subscribed !== false });
-    }
-    return boxes;
+    // imapflow client.list() resolves to an array of mailbox objects
+    const list = await c.list();
+    return (list || []).map((b) => ({
+      path: b.path, name: b.name, specialUse: b.specialUse || null,
+      subscribed: b.subscribed !== false,
+    }));
   } finally { await c.logout().catch(() => {}); }
 }
 

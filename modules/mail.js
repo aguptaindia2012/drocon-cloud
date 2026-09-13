@@ -25,7 +25,23 @@ async function api(path, opts){
 }
 
 /* -------------------------------------------------- entry -------------------------------------------------- */
+let _poll=null;
+function startPoll(){
+  stopPoll();
+  _poll=setInterval(async()=>{
+    if(window.OPS.currentTool!=="mail"){ stopPoll(); return; }
+    if(document.getElementById("coTo")) return;           // compose modal open — don't disrupt
+    try{
+      const r=await api(`/mail/messages?mailbox=${encodeURIComponent(STATE.mailbox)}&limit=30`);
+      STATE.total=r.total||0; STATE.messages=r.messages||[];
+      STATE.lowest=STATE.messages.length?Math.min(...STATE.messages.map(m=>m.seq)):null;
+      renderList();
+    }catch(e){}
+  }, 60000);
+}
+function stopPoll(){ if(_poll){ clearInterval(_poll); _poll=null; } }
 async function route(){
+  stopPoll();
   const m=$("main");
   if(!API()){
     m.innerHTML=`<div class="eyebrow">Mail</div><h1>Email</h1>
@@ -106,6 +122,7 @@ async function renderMail(st){
     STATE.mailboxes=(mailboxes||[]).sort((a,b)=>boxRank(a)-boxRank(b)||a.name.localeCompare(b.name));
     renderBoxes();
     loadList("INBOX", true);
+    startPoll();
   }catch(e){ $("mBoxes").innerHTML=`<div class="err">${esc(e.message)}</div>`; }
 }
 function renderBoxes(){
