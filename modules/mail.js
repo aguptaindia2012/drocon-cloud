@@ -18,17 +18,45 @@ async function loadSignatures(){
   catch(e){ STATE.signatures=[]; }
 }
 function defaultSig(){ return STATE.signatures.find(s=>s.is_default) || null; }
+// signatures may be rich HTML or plain text — helpers to render each safely
+function sigIsHtml(b){ return /<[a-z!/][\s\S]*>/i.test(b||""); }
+function sanitizeHtml(h){
+  const d=document.createElement("div"); d.innerHTML=h||"";
+  d.querySelectorAll("script,style,iframe,object,embed,link,meta").forEach(n=>n.remove());
+  d.querySelectorAll("*").forEach(n=>[...n.attributes].forEach(a=>{
+    if(/^on/i.test(a.name)) n.removeAttribute(a.name);
+    if((a.name==="href"||a.name==="src")&&/^\s*javascript:/i.test(a.value)) n.removeAttribute(a.name);
+  }));
+  return d.innerHTML;
+}
+function htmlToText(h){ const d=document.createElement("div");
+  d.innerHTML=(h||"").replace(/<br\s*\/?>/gi,"\n").replace(/<\/(p|div|li|tr|h[1-6])>/gi,"\n");
+  return (d.textContent||"").replace(/\n{3,}/g,"\n\n").trim(); }
+function sigToHtml(s){ if(!s) return ""; return sigIsHtml(s.body)? sanitizeHtml(s.body) : esc(s.body).replace(/\n/g,"<br>"); }
+function sigToText(s){ if(!s) return ""; return sigIsHtml(s.body)? htmlToText(s.body) : s.body; }
+
 function signaturesPanel(){
   const wrap=document.createElement("div");
   wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:60;display:flex;align-items:center;justify-content:center";
-  wrap.innerHTML=`<div class="card" style="width:min(620px,94vw);max-height:88vh;overflow:auto">
+  wrap.innerHTML=`<div class="card" style="width:min(660px,94vw);max-height:90vh;overflow:auto">
     <div class="row" style="justify-content:space-between"><h3 style="margin:0 0 8px">Email signatures</h3><button class="btn sm" id="sgClose">Close</button></div>
     <div id="sgList" class="muted">Loading…</div>
     <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px">
       <h4 style="margin:0 0 6px" id="sgFormTitle">Add a signature</h4>
       <input type="hidden" id="sgId">
       <label>Name</label><input id="sgName" class="in" style="width:100%" placeholder="e.g. Full / Short">
-      <label>Signature text</label><textarea id="sgBody" class="in" rows="5" style="width:100%" placeholder="Abhishek Gupta&#10;Director, DroCon Bharat&#10;+91 …"></textarea>
+      <label>Signature</label>
+      <div class="row" style="gap:3px;flex-wrap:wrap;margin:4px 0">
+        <button type="button" class="btn sm" data-cmd="bold" style="font-weight:700;min-width:28px">B</button>
+        <button type="button" class="btn sm" data-cmd="italic" style="font-style:italic;min-width:28px">I</button>
+        <button type="button" class="btn sm" data-cmd="underline" style="text-decoration:underline;min-width:28px">U</button>
+        <button type="button" class="btn sm" data-cmd="insertUnorderedList" style="min-width:28px">• </button>
+        <button type="button" class="btn sm" id="sgLink">🔗 Link</button>
+        <button type="button" class="btn sm" id="sgImg">🖼 Image</button>
+        <button type="button" class="btn sm" data-cmd="removeFormat">Clear</button>
+      </div>
+      <div id="sgBody" contenteditable="true" class="in" style="width:100%;min-height:120px;overflow:auto;background:#fff" placeholder="Your name, title, phone, links…"></div>
+      <div class="muted" style="font-size:11px;margin-top:3px">Tip: for a logo, click 🖼 Image and paste a public image URL (e.g. your website logo).</div>
       <label class="row" style="gap:6px;margin-top:6px"><input type="checkbox" id="sgDefault"> Use as my default signature</label>
       <div id="sgErr" class="err" style="min-height:16px"></div>
       <div class="row" style="gap:8px"><button class="btn green sm" id="sgSave">Save signature</button><button class="btn sm" id="sgReset">Clear form</button></div>
@@ -38,20 +66,25 @@ function signaturesPanel(){
   const close=()=>wrap.remove();
   wrap.addEventListener("click",e=>{ if(e.target===wrap) close(); });
   $("sgClose").addEventListener("click",close);
-  function resetForm(){ $("sgId").value=""; $("sgName").value=""; $("sgBody").value=""; $("sgDefault").checked=false; $("sgFormTitle").textContent="Add a signature"; $("sgErr").textContent=""; }
+  const ed=$("sgBody");
+  // rich-text toolbar (execCommand keeps the selection when we preventDefault on mousedown)
+  wrap.querySelectorAll("[data-cmd]").forEach(b=>b.addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); document.execCommand(b.getAttribute("data-cmd"),false,null); }));
+  $("sgLink").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Link URL (https://…)"); if(u) document.execCommand("createLink",false,u); });
+  $("sgImg").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Image URL (https://…)"); if(u) document.execCommand("insertImage",false,u); });
+  function resetForm(){ $("sgId").value=""; $("sgName").value=""; ed.innerHTML=""; $("sgDefault").checked=false; $("sgFormTitle").textContent="Add a signature"; $("sgErr").textContent=""; }
   $("sgReset").addEventListener("click",resetForm);
   function renderList(){
     const host=$("sgList");
     host.innerHTML = STATE.signatures.length ? STATE.signatures.map(s=>`
       <div class="row" style="gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)">
         <div style="flex:1"><b>${esc(s.name)}</b>${s.is_default?' <span class="muted" style="font-size:11px">· default</span>':''}
-          <div class="muted" style="font-size:12px;white-space:pre-wrap;margin-top:2px">${esc(s.body)}</div></div>
+          <div style="font-size:13px;margin-top:2px;border-left:2px solid var(--line);padding-left:8px">${sigToHtml(s)}</div></div>
         <button class="btn sm" data-edit="${s.id}">Edit</button>
         <button class="btn sm" data-del="${s.id}" style="color:#a3322a">Delete</button>
       </div>`).join("") : '<div class="muted">No signatures yet — add one below.</div>';
     host.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>{
       const s=STATE.signatures.find(x=>x.id===b.getAttribute("data-edit")); if(!s) return;
-      $("sgId").value=s.id; $("sgName").value=s.name; $("sgBody").value=s.body; $("sgDefault").checked=!!s.is_default;
+      $("sgId").value=s.id; $("sgName").value=s.name; ed.innerHTML=sigIsHtml(s.body)?s.body:esc(s.body).replace(/\n/g,"<br>"); $("sgDefault").checked=!!s.is_default;
       $("sgFormTitle").textContent="Edit signature"; $("sgName").focus();
     }));
     host.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
@@ -62,7 +95,7 @@ function signaturesPanel(){
   }
   $("sgSave").addEventListener("click",async()=>{
     const err=$("sgErr"); err.textContent="";
-    const name=$("sgName").value.trim(), body=$("sgBody").value, isDef=$("sgDefault").checked, id=$("sgId").value;
+    const name=$("sgName").value.trim(), body=sanitizeHtml(ed.innerHTML), isDef=$("sgDefault").checked, id=$("sgId").value;
     if(!name){ err.textContent="Give the signature a name."; return; }
     try{
       if(isDef){ await sb().from("mail_signatures").update({is_default:false}).neq("id", id||"00000000-0000-0000-0000-000000000000"); }
@@ -322,18 +355,20 @@ function compose(seed){
       <option value="">No signature</option>
       ${STATE.signatures.map(s=>`<option value="${s.id}" ${s.is_default?'selected':''}>${esc(s.name)}</option>`).join("")}
     </select>
-    <label>Message</label><textarea id="coBody" class="in" rows="10" style="width:100%"></textarea>
+    <label>Message</label><textarea id="coBody" class="in" rows="10" style="width:100%">${esc(seed.body||'')}</textarea>
+    <div id="coSigPrev" style="margin-top:4px"></div>
     <div class="row" style="gap:8px;margin-top:6px"><button class="btn sm" id="coAttach">📎 Attach</button><input type="file" id="coFile" multiple style="display:none"><span id="coFiles" class="muted" style="font-size:12px"></span></div>
     <div id="coErr" class="err" style="min-height:18px"></div>
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="btn sm" id="coCancel">Cancel</button><button class="btn green" id="coSend">Send</button></div>
   </div>`;
   document.body.appendChild(wrap);
   const close=()=>wrap.remove();
-  // signature: append the chosen one to the end of the body; default preselected
-  const baseBody = seed.body||"";
-  function applySig(){ const s=STATE.signatures.find(x=>x.id===$("coSig").value); $("coBody").value = baseBody + (s?("\n\n-- \n"+s.body):""); }
-  $("coSig").addEventListener("change",applySig);
-  applySig();
+  // signature is appended at send time; show a live preview of the chosen one
+  const curSig=()=>STATE.signatures.find(x=>x.id===$("coSig").value)||null;
+  function renderSigPrev(){ const s=curSig();
+    $("coSigPrev").innerHTML = s ? `<div class="muted" style="font-size:11px">Signature (added on send):</div><div style="border-left:2px solid var(--line);padding-left:8px;font-size:13px">${sigToHtml(s)}</div>` : ""; }
+  $("coSig").addEventListener("change",renderSigPrev);
+  renderSigPrev();
   wrap.addEventListener("click",e=>{ if(e.target===wrap) close(); });
   $("coCancel").addEventListener("click",close);
   $("coAttach").addEventListener("click",()=>$("coFile").click());
@@ -346,9 +381,17 @@ function compose(seed){
     try{
       const attachments=[];
       for(const f of pending){ attachments.push({ filename:f.name, content_type:f.type||"application/octet-stream", content_base64:await toB64(f) }); }
-      await api("/mail/send",{ method:"POST", body:{ to, cc:$("coCc").value.trim()||undefined,
-        subject:$("coSub").value.trim(), text:$("coBody").value,
-        inReplyTo:seed.inReplyTo, references:seed.references, attachments } });
+      const bodyText=$("coBody").value, s=curSig();
+      const payload={ to, cc:$("coCc").value.trim()||undefined, subject:$("coSub").value.trim(),
+        inReplyTo:seed.inReplyTo, references:seed.references, attachments };
+      if(s && sigIsHtml(s.body)){
+        // rich signature → send HTML (with a plain-text fallback)
+        payload.html = esc(bodyText).replace(/\n/g,"<br>") + "<br><br>-- <br>" + sigToHtml(s);
+        payload.text = bodyText + "\n\n-- \n" + sigToText(s);
+      } else {
+        payload.text = bodyText + (s ? "\n\n-- \n"+s.body : "");
+      }
+      await api("/mail/send",{ method:"POST", body:payload });
       close();
     }catch(e){ err.textContent=e.message; $("coSend").disabled=false; $("coSend").textContent="Send"; }
   });
