@@ -66,10 +66,17 @@ function renderConnect(){
   const email=(window.OPS.profile && window.OPS.profile.email) || (window.OPS.me && window.OPS.me.email) || "";
   $("mailHost").innerHTML=`<div class="card" style="max-width:520px">
     <h3 style="margin:0 0 6px">Connect your mailbox</h3>
-    <p class="muted" style="margin:0 0 10px">Enter your Hostinger email password once. It's stored encrypted on the mail server and never shown again. <b>Never share it in chat.</b></p>
+    <p class="muted" style="margin:0 0 10px">Enter your email password once. It's stored encrypted on the mail server and never shown again. <b>Never share it in chat.</b></p>
+    <label>Mail provider</label>
+    <select id="cProvider" class="in" style="width:100%;margin-bottom:8px">
+      <option value="hostinger">Hostinger (Hostinger Email)</option>
+      <option value="zoho">Zoho Mail (paid / Pro)</option>
+      <option value="titan">Titan (Hostinger Business Email)</option>
+      <option value="custom">Other / custom servers</option>
+    </select>
     <label>Email address</label><input id="cEmail" class="in" style="width:100%" value="${esc(email)}">
     <label>Mailbox password</label><input id="cPass" type="password" class="in" style="width:100%">
-    <details style="margin:8px 0"><summary class="muted" style="cursor:pointer">Advanced server settings (usually leave blank)</summary>
+    <details id="cAdv" style="margin:8px 0"><summary class="muted" style="cursor:pointer">Advanced server settings</summary>
       <div class="row wrap" style="gap:8px;margin-top:6px">
         <div><label>IMAP host</label><input id="cImapHost" class="in" placeholder="imap.hostinger.com"></div>
         <div><label>IMAP port</label><input id="cImapPort" class="in" placeholder="993" style="width:90px"></div>
@@ -79,6 +86,18 @@ function renderConnect(){
     <div id="cErr" class="err" style="min-height:18px"></div>
     <button class="btn green" id="cGo">Connect</button>
   </div>`;
+  const PRESETS={
+    hostinger:{ imap:"imap.hostinger.com", smtp:"smtp.hostinger.com" },
+    zoho:     { imap:"imappro.zoho.in",    smtp:"smtppro.zoho.in" },
+    titan:    { imap:"imap.titan.email",   smtp:"smtp.titan.email" },
+  };
+  function applyPreset(){
+    const p=PRESETS[$("cProvider").value];
+    if(p){ $("cImapHost").value=p.imap; $("cImapPort").value=993; $("cSmtpHost").value=p.smtp; $("cSmtpPort").value=465; }
+    else { $("cImapHost").value=""; $("cImapPort").value=""; $("cSmtpHost").value=""; $("cSmtpPort").value=""; $("cAdv").open=true; }
+  }
+  $("cProvider").addEventListener("change",applyPreset);
+  applyPreset();
   $("cGo").addEventListener("click",async()=>{
     const err=$("cErr"); err.textContent="";
     const email=$("cEmail").value.trim(), password=$("cPass").value;
