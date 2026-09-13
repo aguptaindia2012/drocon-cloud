@@ -52,11 +52,13 @@ function signaturesPanel(){
         <button type="button" class="btn sm" data-cmd="underline" style="text-decoration:underline;min-width:28px">U</button>
         <button type="button" class="btn sm" data-cmd="insertUnorderedList" style="min-width:28px">• </button>
         <button type="button" class="btn sm" id="sgLink">🔗 Link</button>
-        <button type="button" class="btn sm" id="sgImg">🖼 Image</button>
+        <button type="button" class="btn sm" id="sgImgUp">🖼 Upload image</button>
+        <button type="button" class="btn sm" id="sgImgUrl">🌐 Image URL</button>
+        <input type="file" id="sgImgFile" accept="image/*" style="display:none">
         <button type="button" class="btn sm" data-cmd="removeFormat">Clear</button>
       </div>
       <div id="sgBody" contenteditable="true" class="in" style="width:100%;min-height:120px;overflow:auto;background:#fff" placeholder="Your name, title, phone, links…"></div>
-      <div class="muted" style="font-size:11px;margin-top:3px">Tip: for a logo, click 🖼 Image and paste a public image URL (e.g. your website logo).</div>
+      <div class="muted" style="font-size:11px;margin-top:3px">Tip for a logo: <b>Upload image</b> from your computer (it's hosted automatically), or <b>Image URL</b> to link one already online.</div>
       <label class="row" style="gap:6px;margin-top:6px"><input type="checkbox" id="sgDefault"> Use as my default signature</label>
       <div id="sgErr" class="err" style="min-height:16px"></div>
       <div class="row" style="gap:8px"><button class="btn green sm" id="sgSave">Save signature</button><button class="btn sm" id="sgReset">Clear form</button></div>
@@ -70,7 +72,23 @@ function signaturesPanel(){
   // rich-text toolbar (execCommand keeps the selection when we preventDefault on mousedown)
   wrap.querySelectorAll("[data-cmd]").forEach(b=>b.addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); document.execCommand(b.getAttribute("data-cmd"),false,null); }));
   $("sgLink").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Link URL (https://…)"); if(u) document.execCommand("createLink",false,u); });
-  $("sgImg").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Image URL (https://…)"); if(u) document.execCommand("insertImage",false,u); });
+  function capImages(){ ed.querySelectorAll("img:not([data-sized])").forEach(im=>{ im.style.maxWidth="220px"; im.style.height="auto"; im.setAttribute("data-sized","1"); }); }
+  function insertImg(url){ ed.focus(); document.execCommand("insertImage",false,url); capImages(); }
+  $("sgImgUrl").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Image URL (https://…)"); if(u) insertImg(u); });
+  $("sgImgUp").addEventListener("mousedown",e=>{ e.preventDefault(); $("sgImgFile").click(); });
+  $("sgImgFile").addEventListener("change",async()=>{
+    const f=$("sgImgFile").files[0]; if(!f) return;
+    if(f.size>2*1024*1024){ alert("Please use an image under 2 MB."); $("sgImgFile").value=""; return; }
+    const safe=(f.name||"logo").replace(/[^\w.\-]+/g,"_");
+    const path=`${(window.OPS.me&&window.OPS.me.id)||"x"}/${Date.now()}_${safe}`;
+    try{
+      const { error }=await sb().storage.from("sig-assets").upload(path, f, { upsert:false, contentType:f.type||"image/png" });
+      if(error) throw error;
+      const { data }=sb().storage.from("sig-assets").getPublicUrl(path);
+      if(data&&data.publicUrl) insertImg(data.publicUrl);
+    }catch(err){ alert("Upload failed: "+(err.message||err)); }
+    $("sgImgFile").value="";
+  });
   function resetForm(){ $("sgId").value=""; $("sgName").value=""; ed.innerHTML=""; $("sgDefault").checked=false; $("sgFormTitle").textContent="Add a signature"; $("sgErr").textContent=""; }
   $("sgReset").addEventListener("click",resetForm);
   function renderList(){
