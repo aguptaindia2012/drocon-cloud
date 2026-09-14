@@ -113,6 +113,19 @@ app.post("/mail/flags", async (req, reply) => {
   catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
 });
 
+app.post("/mail/folder", async (req, reply) => {
+  const user = await requireUser(req, reply); if (!user) return;
+  const a = await acctOr409(user, reply); if (!a) return;
+  const { op, path, newPath } = req.body || {};
+  try {
+    if (op === "create") { if (!path) return reply.code(400).send({ error: "path required" }); await mail.createFolder(a, path); }
+    else if (op === "rename") { if (!path || !newPath) return reply.code(400).send({ error: "path and newPath required" }); await mail.renameFolder(a, path, newPath); }
+    else if (op === "delete") { if (!path) return reply.code(400).send({ error: "path required" }); await mail.deleteFolder(a, path); }
+    else return reply.code(400).send({ error: "unknown op" });
+    return { ok: true };
+  } catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
+});
+
 app.get("/mail/search", async (req, reply) => {
   const user = await requireUser(req, reply); if (!user) return;
   const a = await acctOr409(user, reply); if (!a) return;

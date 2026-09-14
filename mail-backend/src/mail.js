@@ -144,6 +144,20 @@ export async function moveMessage(acct, mailbox, uid, dest) {
   } finally { await c.logout().catch(() => {}); }
 }
 
+// Folder management
+export async function createFolder(acct, path) {
+  const c = imapClient(acct); await c.connect();
+  try { await c.mailboxCreate(path); return true; } finally { await c.logout().catch(() => {}); }
+}
+export async function renameFolder(acct, path, newPath) {
+  const c = imapClient(acct); await c.connect();
+  try { await c.mailboxRename(path, newPath); return true; } finally { await c.logout().catch(() => {}); }
+}
+export async function deleteFolder(acct, path) {
+  const c = imapClient(acct); await c.connect();
+  try { await c.mailboxDelete(path); return true; } finally { await c.logout().catch(() => {}); }
+}
+
 // Full-text search a mailbox (subject/from/body) — returns envelope summaries.
 export async function searchMessages(acct, mailbox, query, { limit = 50 } = {}) {
   const c = imapClient(acct);

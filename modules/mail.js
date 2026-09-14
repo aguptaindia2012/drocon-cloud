@@ -10,7 +10,7 @@ const { $, esc, fmt } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const API = ()=> (window.DCB_CONFIG && window.DCB_CONFIG.MAIL_API) || "";
 
-let STATE={ mailbox:"INBOX", messages:[], total:0, lowest:null, box:null, current:null, mailboxes:[], signatures:[], search:"" };
+let STATE={ mailbox:"INBOX", messages:[], total:0, lowest:null, box:null, current:null, mailboxes:[], signatures:[], search:"", selected:new Set() };
 
 /* -------------------------------------------------- signatures -------------------------------------------------- */
 async function loadSignatures(){
@@ -167,7 +167,7 @@ function startPoll(){
   stopPoll();
   _poll=setInterval(async()=>{
     if(window.OPS.currentTool!=="mail"){ stopPoll(); return; }
-    if(STATE.search) return;                              // don't clobber search results
+    if(STATE.search || STATE.selected.size) return;       // don't clobber search / selection
     if(document.getElementById("coTo")) return;           // compose modal open — don't disrupt
     try{
       const r=await api(`/mail/messages?mailbox=${encodeURIComponent(STATE.mailbox)}&limit=30`);
@@ -293,16 +293,35 @@ async function renderMail(st){
     startPoll();
   }catch(e){ $("mBoxes").innerHTML=`<div class="err">${esc(e.message)}</div>`; }
 }
+function isCustomBox(b){ return !b.specialUse && b.path!=="INBOX"; }
+async function reloadBoxes(){
+  try{ const { mailboxes }=await api("/mail/mailboxes");
+    STATE.mailboxes=(mailboxes||[]).sort((a,b)=>boxRank(a)-boxRank(b)||a.name.localeCompare(b.name)); renderBoxes(); }catch(e){}
+}
 function renderBoxes(){
   const host=$("mBoxes"); if(!host) return;
-  host.innerHTML=STATE.mailboxes.map(b=>`<div data-box="${esc(b.path)}" style="padding:7px 8px;border-radius:7px;cursor:pointer;${b.path===STATE.mailbox?'background:#eef4e8;font-weight:600':''}">${esc(boxLabel(b))}</div>`).join("");
-  host.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("click",()=>loadList(el.getAttribute("data-box"),true)));
+  host.innerHTML=STATE.mailboxes.map(b=>{ const active=b.path===STATE.mailbox, cust=isCustomBox(b);
+    return `<div class="row" data-box="${esc(b.path)}" style="gap:2px;padding:6px;border-radius:7px;cursor:pointer;${active?'background:#eef4e8;font-weight:600':''}">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(boxLabel(b))}">${esc(boxLabel(b))}</span>
+      ${cust?`<a href="#" data-ren="${esc(b.path)}" title="Rename" style="color:var(--muted);text-decoration:none">✎</a> <a href="#" data-delf="${esc(b.path)}" title="Delete" style="color:#a3322a;text-decoration:none">🗑</a>`:''}
+    </div>`; }).join("")
+    +`<div style="padding:8px 4px 2px"><button class="btn sm" id="mNewFolder" style="width:100%">＋ New folder</button></div>`;
+  host.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("click",e=>{ if(e.target.closest("[data-ren],[data-delf]")) return; loadList(el.getAttribute("data-box"),true); }));
+  host.querySelectorAll("[data-ren]").forEach(a=>a.addEventListener("click",async e=>{ e.preventDefault(); e.stopPropagation();
+    const path=a.getAttribute("data-ren"), cur=path.split("/").pop(), name=(prompt("Rename folder:",cur)||"").trim();
+    if(!name||name===cur) return; const parent=path.includes("/")?path.slice(0,path.lastIndexOf("/")+1):"";
+    try{ await api("/mail/folder",{method:"POST",body:{op:"rename",path,newPath:parent+name}}); if(STATE.mailbox===path) STATE.mailbox=parent+name; await reloadBoxes(); }catch(err){ alert(err.message); } }));
+  host.querySelectorAll("[data-delf]").forEach(a=>a.addEventListener("click",async e=>{ e.preventDefault(); e.stopPropagation();
+    const path=a.getAttribute("data-delf"); if(!confirm(`Delete folder "${path}"? Any messages in it are removed.`)) return;
+    try{ await api("/mail/folder",{method:"POST",body:{op:"delete",path}}); if(STATE.mailbox===path){ STATE.mailbox="INBOX"; } await reloadBoxes(); loadList(STATE.mailbox,true); }catch(err){ alert(err.message); } }));
+  if($("mNewFolder")) $("mNewFolder").addEventListener("click",async()=>{ const name=(prompt("New folder name:")||"").trim(); if(!name) return;
+    try{ await api("/mail/folder",{method:"POST",body:{op:"create",path:name}}); await reloadBoxes(); }catch(err){ alert(err.message); } });
 }
 
 async function runSearch(q){
   q=(q||"").trim();
   if(!q){ clearSearch(); return; }
-  STATE.search=q; if($("mSearchClear")) $("mSearchClear").style.display="";
+  STATE.search=q; STATE.selected.clear(); if($("mSearchClear")) $("mSearchClear").style.display="";
   const host=$("mList"); host.innerHTML='<div class="muted" style="padding:12px">Searching…</div>';
   try{
     const r=await api(`/mail/search?mailbox=${encodeURIComponent(STATE.mailbox)}&q=${encodeURIComponent(q)}`);
@@ -312,7 +331,7 @@ async function runSearch(q){
 function clearSearch(){ STATE.search=""; if($("mSearchClear")) $("mSearchClear").style.display="none"; if($("mSearch")) $("mSearch").value=""; loadList(STATE.mailbox,true); }
 
 async function loadList(mailbox, reset){
-  STATE.mailbox=mailbox; STATE.search=""; if($("mSearchClear")) $("mSearchClear").style.display="none"; if($("mSearch")) $("mSearch").value="";
+  STATE.mailbox=mailbox; STATE.search=""; STATE.selected.clear(); if($("mSearchClear")) $("mSearchClear").style.display="none"; if($("mSearch")) $("mSearch").value="";
   renderBoxes();
   const host=$("mList"); if(reset){ host.innerHTML='<div class="muted" style="padding:12px">Loading…</div>'; STATE.messages=[]; STATE.lowest=null; }
   try{
@@ -329,15 +348,43 @@ function renderList(){
   const host=$("mList"); if(!host) return;
   const banner = STATE.search ? `<div class="row" style="padding:8px 11px;background:#eef4e8;font-size:12px"><span>Results for “<b>${esc(STATE.search)}</b>” · ${STATE.messages.length}</span><a href="#" id="mSbClear" style="margin-left:auto">✕ Clear</a></div>` : "";
   if(!STATE.messages.length){ host.innerHTML=banner+'<div class="muted" style="padding:14px">'+(STATE.search?'No matches.':'No messages.')+'</div>'; if($("mSbClear")) $("mSbClear").addEventListener("click",e=>{e.preventDefault();clearSearch();}); return; }
+  const sel=STATE.selected;
+  const bulk = sel.size ? `<div class="row" style="padding:8px 11px;background:#fff3e0;gap:8px;font-size:12px;align-items:center">
+      <b>${sel.size} selected</b>
+      <select id="mBulkMove" class="in sm" style="width:auto"><option value="">Move to…</option>${STATE.mailboxes.filter(b=>b.path!==STATE.mailbox).map(b=>`<option value="${esc(b.path)}">${esc(boxLabel(b))}</option>`).join("")}</select>
+      <button class="btn sm" id="mBulkDel" style="color:#a3322a">Delete</button>
+      <a href="#" id="mBulkClear" style="margin-left:auto">Clear</a>
+    </div>` : "";
   const more = !STATE.search && STATE.messages.length < STATE.total;
-  host.innerHTML=banner+STATE.messages.map(m=>{ const u=!m.seen; return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${u?'#fff7ec':'transparent'}">
-      <div class="row" style="gap:6px"><b style="font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'}">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
-        <span style="font-size:11px;margin-left:auto;color:${u?'#F48A1C':'var(--muted)'}">${m.date?fmt(m.date):''}</span></div>
-      <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'}">${esc(m.subject)}</div></div>`; }).join("")
+  host.innerHTML=bulk+banner+STATE.messages.map(m=>{ const u=!m.seen, ck=sel.has(String(m.uid)); return `<div class="row" data-uid="${m.uid}" data-seq="${m.seq}" style="gap:8px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${ck?'#eef4e8':(u?'#fff7ec':'transparent')}">
+      <input type="checkbox" class="mchk" data-sel="${m.uid}" ${ck?'checked':''} style="margin-top:3px">
+      <div style="flex:1;min-width:0">
+        <div class="row" style="gap:6px"><b style="font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
+          <span style="font-size:11px;margin-left:auto;color:${u?'#F48A1C':'var(--muted)'};white-space:nowrap">${m.date?fmt(m.date):''}</span></div>
+        <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject)}</div>
+      </div></div>`; }).join("")
     + (more?`<div style="padding:10px;text-align:center"><button class="btn sm" id="mMore">Load older</button></div>`:"");
-  host.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",()=>openMessage(el.getAttribute("data-uid"))));
+  host.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",e=>{ if(e.target.classList.contains("mchk")) return; openMessage(el.getAttribute("data-uid")); }));
+  host.querySelectorAll(".mchk").forEach(cb=>cb.addEventListener("click",e=>{ e.stopPropagation();
+    const uid=cb.getAttribute("data-sel"); if(cb.checked) STATE.selected.add(uid); else STATE.selected.delete(uid); renderList(); }));
   if($("mMore")) $("mMore").addEventListener("click",()=>loadList(STATE.mailbox,false));
   if($("mSbClear")) $("mSbClear").addEventListener("click",e=>{e.preventDefault();clearSearch();});
+  if($("mBulkClear")) $("mBulkClear").addEventListener("click",e=>{e.preventDefault(); STATE.selected.clear(); renderList();});
+  if($("mBulkMove")) $("mBulkMove").addEventListener("change",e=>{ if(e.target.value) bulkAction("move",e.target.value); });
+  if($("mBulkDel")) $("mBulkDel").addEventListener("click",()=>bulkAction("delete"));
+}
+async function bulkAction(kind, dest){
+  const uids=[...STATE.selected]; if(!uids.length) return;
+  const trash=trashPath(), inTrash=STATE.mailbox===trash;
+  if(kind==="delete" && (inTrash||!trash) && !confirm(`Permanently delete ${uids.length} message(s)?`)) return;
+  try{
+    for(const uid of uids){
+      if(kind==="move") await api("/mail/move",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid),dest}});
+      else if(inTrash||!trash) await api("/mail/delete",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid)}});
+      else await api("/mail/move",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid),dest:trash}});
+    }
+  }catch(e){ alert("Action failed: "+e.message); }
+  STATE.selected.clear(); loadList(STATE.mailbox,true);
 }
 
 function specialPath(su, names){
