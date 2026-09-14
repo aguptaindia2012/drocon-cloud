@@ -79,7 +79,7 @@ function signaturesPanel(){
       </div>
       <div id="sgBody" contenteditable="true" class="in" style="width:100%;min-height:120px;overflow:auto;background:#fff" placeholder="Your name, title, phone, links…"></div>
       <div class="muted" style="font-size:11px;margin-top:3px">Tip for a logo: <b>Upload image</b> from your computer (it's hosted automatically), or <b>Image URL</b> to link one already online.</div>
-      <label class="row" style="gap:6px;margin-top:6px"><input type="checkbox" id="sgDefault"> Use as my default signature</label>
+      <label class="row" style="gap:6px;margin-top:6px"><input type="checkbox" id="sgDefault" style="width:auto;padding:0;flex:0 0 auto"> Use as my default signature</label>
       <div id="sgErr" class="err" style="min-height:16px"></div>
       <div class="row" style="gap:8px"><button class="btn green sm" id="sgSave">Save signature</button><button class="btn sm" id="sgReset">Clear form</button></div>
     </div>
@@ -263,7 +263,7 @@ async function renderMail(st){
   $("mailHost").innerHTML=`
     <style>.mfrow .mfacts{visibility:hidden} .mfrow:hover .mfacts{visibility:visible}</style>
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div class="muted">Signed in as <b>${esc(st.email)}</b> · <span style="font-size:11px">build 168</span>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
+      <div class="muted">Signed in as <b>${esc(st.email)}</b> · <span style="font-size:11px">build 169</span>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
       <div class="row" style="gap:6px"><button class="btn green sm" id="mCompose">✏️ Compose</button>
         <button class="btn sm" id="mSig">✍ Signatures</button>
         <button class="btn sm" id="mRefresh">↻</button><button class="btn sm" id="mDisc">Disconnect</button></div>
@@ -358,7 +358,7 @@ function renderList(){
     </div>` : "";
   const more = !STATE.search && STATE.messages.length < STATE.total;
   host.innerHTML=bulk+banner+STATE.messages.map(m=>{ const u=!m.seen, ck=sel.has(String(m.uid)); return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;overflow:hidden;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${ck?'#eef4e8':(u?'#fff7ec':'transparent')}">
-      <input type="checkbox" class="mchk" data-sel="${m.uid}" ${ck?'checked':''} style="margin-top:3px;flex:0 0 auto">
+      <input type="checkbox" class="mchk" data-sel="${m.uid}" ${ck?'checked':''} style="margin-top:3px;flex:0 0 auto;width:auto;padding:0">
       <div style="flex:1;min-width:0;overflow:hidden">
         <div style="display:flex;gap:6px;align-items:baseline;overflow:hidden">
           <b style="flex:1;min-width:0;font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
