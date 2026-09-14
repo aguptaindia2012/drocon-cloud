@@ -421,8 +421,8 @@ async function downloadAttachment(uid, index, name){
 function quoteHtml(m){
   const who=(m.from&&m.from[0])?(m.from[0].name||m.from[0].address):"";
   const orig=m.html? sanitizeHtml(m.html) : esc(m.text||"").replace(/\n/g,"<br>");
-  return `<br><br><div style="color:#777;font-size:12px">----- On ${m.date?esc(fmt(m.date)):''}, ${esc(who)} wrote: -----</div>`
-    +`<blockquote style="margin:6px 0 0;padding-left:10px;border-left:2px solid #ccc;color:#555">${orig}</blockquote>`;
+  return `<div class="dcb-quoted"><br><br><div style="color:#777;font-size:12px">----- On ${m.date?esc(fmt(m.date)):''}, ${esc(who)} wrote: -----</div>`
+    +`<blockquote style="margin:6px 0 0;padding-left:10px;border-left:2px solid #ccc;color:#555">${orig}</blockquote></div>`;
 }
 function replyDraft(m, all){
   const to=(m.from||[]).map(a=>a.address).join(", ");
@@ -490,12 +490,18 @@ function compose(seed){
     try{
       const attachments=[];
       for(const f of pending){ attachments.push({ filename:f.name, content_type:f.type||"application/octet-stream", content_base64:await toB64(f) }); }
-      const bodyHtml=sanitizeHtml($("coBody").innerHTML), s=curSig();
-      const sigH = s ? "<br><br>-- <br>"+sigToHtml(s) : "";
-      const sigT = s ? "\n\n-- \n"+sigToText(s) : "";
+      const s=curSig();
+      // insert the signature AFTER the typed body but BEFORE the quoted chain
+      const clone=$("coBody").cloneNode(true);
+      if(s){
+        const sigNode=document.createElement("div"); sigNode.innerHTML="<br>-- <br>"+sigToHtml(s);
+        const q=clone.querySelector(".dcb-quoted");
+        if(q) q.parentNode.insertBefore(sigNode,q); else clone.appendChild(sigNode);
+      }
+      const bodyHtml=sanitizeHtml(clone.innerHTML);
       const payload={ to, cc:$("coCc").value.trim()||undefined, subject:$("coSub").value.trim(),
-        html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">${bodyHtml}${sigH}</div>`,
-        text: htmlToText(bodyHtml)+sigT,
+        html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">${bodyHtml}</div>`,
+        text: htmlToText(bodyHtml),
         inReplyTo:seed.inReplyTo, references:seed.references, attachments };
       await api("/mail/send",{ method:"POST", body:payload });
       close();
