@@ -87,7 +87,7 @@ const TOOLS = [
   { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
   { key:"expense_mgmt",  section:"finance", label:"Expense Management", gate:"perm" },
   { key:"advances",      section:"finance", label:"Advances",           gate:"perm" },
-  { key:"expense_review",section:"finance", label:"Expense Claims",     gate:"approver" },
+  { key:"expense_review",section:"finance", label:"Expense Claims",     gate:"perm" },
   // Accounting — dashboards first (daily cash-flow review), then the ledgers
   { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
   { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
