@@ -307,10 +307,10 @@ function renderList(){
   const host=$("mList"); if(!host) return;
   if(!STATE.messages.length){ host.innerHTML='<div class="muted" style="padding:14px">No messages.</div>'; return; }
   const more = STATE.messages.length < STATE.total;
-  host.innerHTML=STATE.messages.map(m=>`<div data-uid="${m.uid}" data-seq="${m.seq}" style="padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;${!m.seen?'background:#fbfdf8':''}">
-      <div class="row" style="gap:6px"><b style="font-size:13px;${!m.seen?'':'font-weight:500'}">${esc(addr(m.from)||'(unknown)')}</b>
-        <span class="muted" style="font-size:11px;margin-left:auto">${m.date?fmt(m.date):''}</span></div>
-      <div style="font-size:13px;${!m.seen?'font-weight:600':''}">${esc(m.subject)}</div></div>`).join("")
+  host.innerHTML=STATE.messages.map(m=>{ const u=!m.seen; return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${u?'#fff7ec':'transparent'}">
+      <div class="row" style="gap:6px"><b style="font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'}">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
+        <span style="font-size:11px;margin-left:auto;color:${u?'#F48A1C':'var(--muted)'}">${m.date?fmt(m.date):''}</span></div>
+      <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'}">${esc(m.subject)}</div></div>`; }).join("")
     + (more?`<div style="padding:10px;text-align:center"><button class="btn sm" id="mMore">Load older</button></div>`:"");
   host.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",()=>openMessage(el.getAttribute("data-uid"))));
   if($("mMore")) $("mMore").addEventListener("click",()=>loadList(STATE.mailbox,false));
