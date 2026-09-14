@@ -133,6 +133,28 @@ export async function setFlags(acct, mailbox, uid, { seen } = {}) {
   } finally { await c.logout().catch(() => {}); }
 }
 
+// Move a message to another folder (archive / restore / move-to).
+export async function moveMessage(acct, mailbox, uid, dest) {
+  const c = imapClient(acct);
+  await c.connect();
+  try {
+    const lock = await c.getMailboxLock(mailbox);
+    try { await c.messageMove(String(uid), dest, { uid: true }); return true; }
+    finally { lock.release(); }
+  } finally { await c.logout().catch(() => {}); }
+}
+
+// Permanently delete a message (used when it's already in Trash).
+export async function deleteMessage(acct, mailbox, uid) {
+  const c = imapClient(acct);
+  await c.connect();
+  try {
+    const lock = await c.getMailboxLock(mailbox);
+    try { await c.messageDelete(String(uid), { uid: true }); return true; }
+    finally { lock.release(); }
+  } finally { await c.logout().catch(() => {}); }
+}
+
 // Send a message; also append a copy to the Sent mailbox (best-effort).
 export async function sendMail(acct, { to, cc, bcc, subject, text, html, inReplyTo, references, attachments }) {
   const info = await smtpTransport(acct).sendMail({

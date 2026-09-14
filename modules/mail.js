@@ -316,6 +316,17 @@ function renderList(){
   if($("mMore")) $("mMore").addEventListener("click",()=>loadList(STATE.mailbox,false));
 }
 
+function specialPath(su, names){
+  const b=STATE.mailboxes.find(x=>(x.specialUse||"").replace(/\\/g,"")===su);
+  if(b) return b.path;
+  const n=STATE.mailboxes.find(x=>names.includes(String(x.name||"").toLowerCase())||names.includes(String(x.path||"").toLowerCase()));
+  return n?n.path:null;
+}
+const trashPath=()=>specialPath("Trash",["trash","deleted","deleted items","deleted messages"]);
+const archivePath=()=>specialPath("Archive",["archive","archives"]);
+const inboxPath=()=>(STATE.mailboxes.find(x=>x.path==="INBOX")||{}).path||"INBOX";
+async function afterMsgAction(){ $("mReader").innerHTML='<div class="muted">Select a message.</div>'; STATE.current=null; await loadList(STATE.mailbox,true); }
+
 async function openMessage(uid){
   const reader=$("mReader"); reader.innerHTML='<div class="muted">Loading…</div>';
   try{
@@ -325,12 +336,18 @@ async function openMessage(uid){
     const from=(m.from||[]).map(a=>esc(a.name?`${a.name} <${a.address}>`:a.address)).join(", ");
     const to=(m.to||[]).map(a=>esc(a.address)).join(", ");
     const atts=(m.attachments||[]).map(a=>`<button class="btn sm" data-att="${a.index}" data-name="${esc(a.filename)}" style="margin:2px 4px 0 0">📎 ${esc(a.filename)} <span class="muted">${a.size?Math.round(a.size/1024)+'KB':''}</span></button>`).join("");
+    const arch=archivePath(), trash=trashPath(), inTrash=STATE.mailbox===trash;
+    const moveOpts=STATE.mailboxes.filter(b=>b.path!==STATE.mailbox).map(b=>`<option value="${esc(b.path)}">${esc(boxLabel(b))}</option>`).join("");
     reader.innerHTML=`
-      <div class="row" style="gap:6px;margin-bottom:6px">
+      <div class="row wrap" style="gap:6px;margin-bottom:6px">
         <button class="btn sm" id="mReply">↩ Reply</button>
         <button class="btn sm" id="mReplyAll">↩ Reply all</button>
         <button class="btn sm" id="mFwd">➡ Forward</button>
+        ${arch && STATE.mailbox!==arch && !inTrash ? '<button class="btn sm" id="mArchive">🗄 Archive</button>':''}
+        ${inTrash ? '<button class="btn sm" id="mRestore">♻ Restore</button>':''}
+        <button class="btn sm" id="mDelete" style="color:#a3322a">🗑 ${inTrash?'Delete permanently':'Delete'}</button>
         <button class="btn sm" id="mUnread">Mark unread</button>
+        <select id="mMoveTo" class="in sm" style="width:auto"><option value="">Move to…</option>${moveOpts}</select>
       </div>
       <h3 style="margin:4px 0">${esc(m.subject)}</h3>
       <div class="muted" style="font-size:12px">From: ${from}</div>
@@ -352,6 +369,16 @@ async function openMessage(uid){
     $("mReplyAll").addEventListener("click",()=>compose(replyDraft(m,true)));
     $("mFwd").addEventListener("click",()=>compose(forwardDraft(m)));
     $("mUnread").addEventListener("click",async()=>{ await api("/mail/flags",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid),seen:false}}); const it=STATE.messages.find(x=>String(x.uid)===String(uid)); if(it) it.seen=false; renderList(); });
+    const move=async(dest)=>{ try{ await api("/mail/move",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid),dest}}); await afterMsgAction(); }catch(e){ alert("Couldn't move: "+e.message); } };
+    if($("mArchive")) $("mArchive").addEventListener("click",()=>move(arch));
+    if($("mRestore")) $("mRestore").addEventListener("click",()=>move(inboxPath()));
+    if($("mMoveTo")) $("mMoveTo").addEventListener("change",e=>{ if(e.target.value) move(e.target.value); });
+    $("mDelete").addEventListener("click",async()=>{
+      if(inTrash || !trash){
+        if(!confirm("Permanently delete this message? This can't be undone.")) return;
+        try{ await api("/mail/delete",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid)}}); await afterMsgAction(); }catch(e){ alert("Couldn't delete: "+e.message); }
+      } else { move(trash); }
+    });
     reader.querySelectorAll("[data-att]").forEach(el=>el.addEventListener("click",()=>downloadAttachment(uid, el.getAttribute("data-att"), el.getAttribute("data-name"))));
   }catch(e){ reader.innerHTML=`<div class="err">${esc(e.message)}</div>`; }
 }
@@ -367,19 +394,20 @@ async function downloadAttachment(uid, index, name){
 }
 
 /* -------------------------------------------------- compose -------------------------------------------------- */
-function quote(m){
+function quoteHtml(m){
   const who=(m.from&&m.from[0])?(m.from[0].name||m.from[0].address):"";
-  const body=m.text || (m.html?m.html.replace(/<[^>]+>/g," "):"");
-  return `\n\n----- On ${m.date?fmt(m.date):''}, ${who} wrote: -----\n`+String(body).split("\n").map(l=>"> "+l).join("\n");
+  const orig=m.html? sanitizeHtml(m.html) : esc(m.text||"").replace(/\n/g,"<br>");
+  return `<br><br><div style="color:#777;font-size:12px">----- On ${m.date?esc(fmt(m.date)):''}, ${esc(who)} wrote: -----</div>`
+    +`<blockquote style="margin:6px 0 0;padding-left:10px;border-left:2px solid #ccc;color:#555">${orig}</blockquote>`;
 }
 function replyDraft(m, all){
   const to=(m.from||[]).map(a=>a.address).join(", ");
   const cc=all?(m.to||[]).map(a=>a.address).filter(x=>x&&x!==((window.OPS.profile&&window.OPS.profile.email))).join(", "):"";
-  return { to, cc, subject:/^re:/i.test(m.subject||"")?m.subject:("Re: "+(m.subject||"")), body:quote(m),
+  return { to, cc, subject:/^re:/i.test(m.subject||"")?m.subject:("Re: "+(m.subject||"")), bodyHtml:quoteHtml(m),
     inReplyTo:m.messageId, references:m.messageId };
 }
 function forwardDraft(m){
-  return { to:"", subject:/^fwd:/i.test(m.subject||"")?m.subject:("Fwd: "+(m.subject||"")), body:quote(m) };
+  return { to:"", subject:/^fwd:/i.test(m.subject||"")?m.subject:("Fwd: "+(m.subject||"")), bodyHtml:quoteHtml(m) };
 }
 function compose(seed){
   seed=seed||{};
@@ -396,7 +424,18 @@ function compose(seed){
       <option value="">No signature</option>
       ${STATE.signatures.map(s=>`<option value="${s.id}" ${s.is_default?'selected':''}>${esc(s.name)}</option>`).join("")}
     </select>
-    <label>Message</label><textarea id="coBody" class="in" rows="10" style="width:100%">${esc(seed.body||'')}</textarea>
+    <label>Message</label>
+    <div class="row" style="gap:3px;flex-wrap:wrap;margin:4px 0">
+      <button type="button" class="btn sm" data-cmd="bold" style="font-weight:700;min-width:28px">B</button>
+      <button type="button" class="btn sm" data-cmd="italic" style="font-style:italic;min-width:28px">I</button>
+      <button type="button" class="btn sm" data-cmd="underline" style="text-decoration:underline;min-width:28px">U</button>
+      <button type="button" class="btn sm" data-cmd="strikeThrough" style="text-decoration:line-through;min-width:28px">S</button>
+      <button type="button" class="btn sm" data-cmd="insertUnorderedList" style="min-width:28px">•</button>
+      <button type="button" class="btn sm" data-cmd="insertOrderedList" style="min-width:28px">1.</button>
+      <button type="button" class="btn sm" id="coLink">🔗 Link</button>
+      <button type="button" class="btn sm" data-cmd="removeFormat">Clear</button>
+    </div>
+    <div id="coBody" contenteditable="true" class="in" style="width:100%;min-height:200px;max-height:45vh;overflow:auto;background:#fff"></div>
     <div id="coSigPrev" style="margin-top:4px"></div>
     <div class="row" style="gap:8px;margin-top:6px"><button class="btn sm" id="coAttach">📎 Attach</button><input type="file" id="coFile" multiple style="display:none"><span id="coFiles" class="muted" style="font-size:12px"></span></div>
     <div id="coErr" class="err" style="min-height:18px"></div>
@@ -404,6 +443,11 @@ function compose(seed){
   </div>`;
   document.body.appendChild(wrap);
   const close=()=>wrap.remove();
+  const ed=$("coBody");
+  ed.innerHTML = seed.bodyHtml || (seed.body? esc(seed.body).replace(/\n/g,"<br>") : "");
+  // rich-text toolbar
+  wrap.querySelectorAll("[data-cmd]").forEach(b=>b.addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); document.execCommand(b.getAttribute("data-cmd"),false,null); }));
+  $("coLink").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Link URL (https://…)"); if(u) document.execCommand("createLink",false,u); });
   // signature is appended at send time; show a live preview of the chosen one
   const curSig=()=>STATE.signatures.find(x=>x.id===$("coSig").value)||null;
   function renderSigPrev(){ const s=curSig();
@@ -422,16 +466,13 @@ function compose(seed){
     try{
       const attachments=[];
       for(const f of pending){ attachments.push({ filename:f.name, content_type:f.type||"application/octet-stream", content_base64:await toB64(f) }); }
-      const bodyText=$("coBody").value, s=curSig();
+      const bodyHtml=sanitizeHtml($("coBody").innerHTML), s=curSig();
+      const sigH = s ? "<br><br>-- <br>"+sigToHtml(s) : "";
+      const sigT = s ? "\n\n-- \n"+sigToText(s) : "";
       const payload={ to, cc:$("coCc").value.trim()||undefined, subject:$("coSub").value.trim(),
+        html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">${bodyHtml}${sigH}</div>`,
+        text: htmlToText(bodyHtml)+sigT,
         inReplyTo:seed.inReplyTo, references:seed.references, attachments };
-      if(s && sigIsHtml(s.body)){
-        // rich signature → send HTML (with a plain-text fallback)
-        payload.html = esc(bodyText).replace(/\n/g,"<br>") + "<br><br>-- <br>" + sigToHtml(s);
-        payload.text = bodyText + "\n\n-- \n" + sigToText(s);
-      } else {
-        payload.text = bodyText + (s ? "\n\n-- \n"+s.body : "");
-      }
       await api("/mail/send",{ method:"POST", body:payload });
       close();
     }catch(e){ err.textContent=e.message; $("coSend").disabled=false; $("coSend").textContent="Send"; }

@@ -113,6 +113,25 @@ app.post("/mail/flags", async (req, reply) => {
   catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
 });
 
+// ---- move / delete (archive, restore, move-to, permanent delete) ----
+app.post("/mail/move", async (req, reply) => {
+  const user = await requireUser(req, reply); if (!user) return;
+  const a = await acctOr409(user, reply); if (!a) return;
+  const { mailbox = "INBOX", uid, dest } = req.body || {};
+  if (!uid || !dest) return reply.code(400).send({ error: "uid and dest required" });
+  try { await mail.moveMessage(a, mailbox, uid, dest); return { ok: true }; }
+  catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
+});
+
+app.post("/mail/delete", async (req, reply) => {
+  const user = await requireUser(req, reply); if (!user) return;
+  const a = await acctOr409(user, reply); if (!a) return;
+  const { mailbox = "INBOX", uid } = req.body || {};
+  if (!uid) return reply.code(400).send({ error: "uid required" });
+  try { await mail.deleteMessage(a, mailbox, uid); return { ok: true }; }
+  catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
+});
+
 // ---- send ----
 app.post("/mail/send", async (req, reply) => {
   const user = await requireUser(req, reply); if (!user) return;
