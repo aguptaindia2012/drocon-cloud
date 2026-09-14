@@ -263,7 +263,7 @@ async function renderMail(st){
   $("mailHost").innerHTML=`
     <style>.mfrow .mfacts{visibility:hidden} .mfrow:hover .mfacts{visibility:visible}</style>
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div class="muted">Signed in as <b>${esc(st.email)}</b>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
+      <div class="muted">Signed in as <b>${esc(st.email)}</b> · <span style="font-size:11px">build 168</span>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
       <div class="row" style="gap:6px"><button class="btn green sm" id="mCompose">✏️ Compose</button>
         <button class="btn sm" id="mSig">✍ Signatures</button>
         <button class="btn sm" id="mRefresh">↻</button><button class="btn sm" id="mDisc">Disconnect</button></div>
@@ -357,14 +357,14 @@ function renderList(){
       <a href="#" id="mBulkClear" style="margin-left:auto">Clear</a>
     </div>` : "";
   const more = !STATE.search && STATE.messages.length < STATE.total;
-  host.innerHTML=bulk+banner+STATE.messages.map(m=>{ const u=!m.seen, ck=sel.has(String(m.uid)); return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${ck?'#eef4e8':(u?'#fff7ec':'transparent')}">
+  host.innerHTML=bulk+banner+STATE.messages.map(m=>{ const u=!m.seen, ck=sel.has(String(m.uid)); return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;overflow:hidden;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${ck?'#eef4e8':(u?'#fff7ec':'transparent')}">
       <input type="checkbox" class="mchk" data-sel="${m.uid}" ${ck?'checked':''} style="margin-top:3px;flex:0 0 auto">
-      <div style="flex:1 1 auto;min-width:0">
-        <div style="display:flex;gap:6px;align-items:baseline;min-width:0">
-          <b style="flex:1 1 auto;min-width:0;font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="display:flex;gap:6px;align-items:baseline;overflow:hidden">
+          <b style="flex:1;min-width:0;font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
           <span style="flex:0 0 auto;font-size:11px;color:${u?'#F48A1C':'var(--muted)'};white-space:nowrap">${m.date?fmt(m.date):''}</span>
         </div>
-        <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject)}</div>
+        <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject||'(no subject)')}</div>
       </div></div>`; }).join("")
     + (more?`<div style="padding:10px;text-align:center"><button class="btn sm" id="mMore">Load older</button></div>`:"");
   host.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",e=>{ if(e.target.classList.contains("mchk")) return; openMessage(el.getAttribute("data-uid")); }));
