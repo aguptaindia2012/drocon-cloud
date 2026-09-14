@@ -356,11 +356,13 @@ function renderList(){
       <a href="#" id="mBulkClear" style="margin-left:auto">Clear</a>
     </div>` : "";
   const more = !STATE.search && STATE.messages.length < STATE.total;
-  host.innerHTML=bulk+banner+STATE.messages.map(m=>{ const u=!m.seen, ck=sel.has(String(m.uid)); return `<div class="row" data-uid="${m.uid}" data-seq="${m.seq}" style="gap:8px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${ck?'#eef4e8':(u?'#fff7ec':'transparent')}">
-      <input type="checkbox" class="mchk" data-sel="${m.uid}" ${ck?'checked':''} style="margin-top:3px">
-      <div style="flex:1;min-width:0">
-        <div class="row" style="gap:6px"><b style="font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
-          <span style="font-size:11px;margin-left:auto;color:${u?'#F48A1C':'var(--muted)'};white-space:nowrap">${m.date?fmt(m.date):''}</span></div>
+  host.innerHTML=bulk+banner+STATE.messages.map(m=>{ const u=!m.seen, ck=sel.has(String(m.uid)); return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="display:flex;gap:8px;align-items:flex-start;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${ck?'#eef4e8':(u?'#fff7ec':'transparent')}">
+      <input type="checkbox" class="mchk" data-sel="${m.uid}" ${ck?'checked':''} style="margin-top:3px;flex:0 0 auto">
+      <div style="flex:1 1 auto;min-width:0">
+        <div style="display:flex;gap:6px;align-items:baseline;min-width:0">
+          <b style="flex:1 1 auto;min-width:0;font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
+          <span style="flex:0 0 auto;font-size:11px;color:${u?'#F48A1C':'var(--muted)'};white-space:nowrap">${m.date?fmt(m.date):''}</span>
+        </div>
         <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject)}</div>
       </div></div>`; }).join("")
     + (more?`<div style="padding:10px;text-align:center"><button class="btn sm" id="mMore">Load older</button></div>`:"");
