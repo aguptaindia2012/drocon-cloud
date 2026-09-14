@@ -10,7 +10,7 @@ const { $, esc, fmt } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const API = ()=> (window.DCB_CONFIG && window.DCB_CONFIG.MAIL_API) || "";
 
-let STATE={ mailbox:"INBOX", messages:[], total:0, lowest:null, box:null, current:null, mailboxes:[], signatures:[] };
+let STATE={ mailbox:"INBOX", messages:[], total:0, lowest:null, box:null, current:null, mailboxes:[], signatures:[], search:"" };
 
 /* -------------------------------------------------- signatures -------------------------------------------------- */
 async function loadSignatures(){
@@ -167,6 +167,7 @@ function startPoll(){
   stopPoll();
   _poll=setInterval(async()=>{
     if(window.OPS.currentTool!=="mail"){ stopPoll(); return; }
+    if(STATE.search) return;                              // don't clobber search results
     if(document.getElementById("coTo")) return;           // compose modal open — don't disrupt
     try{
       const r=await api(`/mail/messages?mailbox=${encodeURIComponent(STATE.mailbox)}&limit=30`);
@@ -266,6 +267,11 @@ async function renderMail(st){
         <button class="btn sm" id="mSig">✍ Signatures</button>
         <button class="btn sm" id="mRefresh">↻</button><button class="btn sm" id="mDisc">Disconnect</button></div>
     </div>
+    <div class="row" style="gap:6px;margin-bottom:8px">
+      <input id="mSearch" class="in" placeholder="Search this folder (sender, subject, text)…" style="max-width:380px">
+      <button class="btn sm" id="mSearchGo">🔍 Search</button>
+      <button class="btn sm" id="mSearchClear" style="display:none">✕ Clear</button>
+    </div>
     <div style="display:grid;grid-template-columns:170px 340px 1fr;gap:12px;align-items:start">
       <div class="card" id="mBoxes" style="padding:8px">Loading…</div>
       <div class="card" id="mList" style="padding:0;max-height:70vh;overflow:auto">Loading…</div>
@@ -275,6 +281,9 @@ async function renderMail(st){
   $("mSig").addEventListener("click",signaturesPanel);
   $("mRefresh").addEventListener("click",()=>loadList(STATE.mailbox,true));
   $("mDisc").addEventListener("click",async()=>{ if(confirm("Disconnect this mailbox from the app? (Your email is not deleted.)")){ await api("/mail/disconnect",{method:"DELETE"}); route(); } });
+  $("mSearchGo").addEventListener("click",()=>runSearch($("mSearch").value));
+  $("mSearch").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); runSearch($("mSearch").value); } });
+  $("mSearchClear").addEventListener("click",clearSearch);
   loadSignatures();
   try{
     const { mailboxes }=await api("/mail/mailboxes");
@@ -290,8 +299,21 @@ function renderBoxes(){
   host.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("click",()=>loadList(el.getAttribute("data-box"),true)));
 }
 
+async function runSearch(q){
+  q=(q||"").trim();
+  if(!q){ clearSearch(); return; }
+  STATE.search=q; if($("mSearchClear")) $("mSearchClear").style.display="";
+  const host=$("mList"); host.innerHTML='<div class="muted" style="padding:12px">Searching…</div>';
+  try{
+    const r=await api(`/mail/search?mailbox=${encodeURIComponent(STATE.mailbox)}&q=${encodeURIComponent(q)}`);
+    STATE.messages=r.messages||[]; STATE.total=r.total||0; STATE.lowest=null; renderList();
+  }catch(e){ host.innerHTML=`<div class="err" style="padding:12px">${esc(e.message)}</div>`; }
+}
+function clearSearch(){ STATE.search=""; if($("mSearchClear")) $("mSearchClear").style.display="none"; if($("mSearch")) $("mSearch").value=""; loadList(STATE.mailbox,true); }
+
 async function loadList(mailbox, reset){
-  STATE.mailbox=mailbox; renderBoxes();
+  STATE.mailbox=mailbox; STATE.search=""; if($("mSearchClear")) $("mSearchClear").style.display="none"; if($("mSearch")) $("mSearch").value="";
+  renderBoxes();
   const host=$("mList"); if(reset){ host.innerHTML='<div class="muted" style="padding:12px">Loading…</div>'; STATE.messages=[]; STATE.lowest=null; }
   try{
     const q=`/mail/messages?mailbox=${encodeURIComponent(mailbox)}&limit=30${STATE.lowest&&!reset?`&before=${STATE.lowest}`:""}`;
@@ -305,15 +327,17 @@ async function loadList(mailbox, reset){
 function addr(a){ return a && a.length ? (a[0].name||a[0].address||"") : ""; }
 function renderList(){
   const host=$("mList"); if(!host) return;
-  if(!STATE.messages.length){ host.innerHTML='<div class="muted" style="padding:14px">No messages.</div>'; return; }
-  const more = STATE.messages.length < STATE.total;
-  host.innerHTML=STATE.messages.map(m=>{ const u=!m.seen; return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${u?'#fff7ec':'transparent'}">
+  const banner = STATE.search ? `<div class="row" style="padding:8px 11px;background:#eef4e8;font-size:12px"><span>Results for “<b>${esc(STATE.search)}</b>” · ${STATE.messages.length}</span><a href="#" id="mSbClear" style="margin-left:auto">✕ Clear</a></div>` : "";
+  if(!STATE.messages.length){ host.innerHTML=banner+'<div class="muted" style="padding:14px">'+(STATE.search?'No matches.':'No messages.')+'</div>'; if($("mSbClear")) $("mSbClear").addEventListener("click",e=>{e.preventDefault();clearSearch();}); return; }
+  const more = !STATE.search && STATE.messages.length < STATE.total;
+  host.innerHTML=banner+STATE.messages.map(m=>{ const u=!m.seen; return `<div data-uid="${m.uid}" data-seq="${m.seq}" style="padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;border-left:4px solid ${u?'#F48A1C':'transparent'};background:${u?'#fff7ec':'transparent'}">
       <div class="row" style="gap:6px"><b style="font-size:13px;font-weight:${u?'700':'500'};color:${u?'#F48A1C':'#333'}">${u?'● ':''}${esc(addr(m.from)||'(unknown)')}</b>
         <span style="font-size:11px;margin-left:auto;color:${u?'#F48A1C':'var(--muted)'}">${m.date?fmt(m.date):''}</span></div>
       <div style="font-size:13px;font-weight:${u?'700':'400'};color:${u?'#c96a00':'#555'}">${esc(m.subject)}</div></div>`; }).join("")
     + (more?`<div style="padding:10px;text-align:center"><button class="btn sm" id="mMore">Load older</button></div>`:"");
   host.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",()=>openMessage(el.getAttribute("data-uid"))));
   if($("mMore")) $("mMore").addEventListener("click",()=>loadList(STATE.mailbox,false));
+  if($("mSbClear")) $("mSbClear").addEventListener("click",e=>{e.preventDefault();clearSearch();});
 }
 
 function specialPath(su, names){

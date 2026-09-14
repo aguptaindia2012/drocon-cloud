@@ -113,6 +113,16 @@ app.post("/mail/flags", async (req, reply) => {
   catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
 });
 
+app.get("/mail/search", async (req, reply) => {
+  const user = await requireUser(req, reply); if (!user) return;
+  const a = await acctOr409(user, reply); if (!a) return;
+  const mailbox = req.query.mailbox || "INBOX";
+  const q = (req.query.q || "").trim();
+  if (!q) return { messages: [], total: 0 };
+  try { return await mail.searchMessages(a, mailbox, q, { limit: 50 }); }
+  catch (e) { return reply.code(502).send({ error: "imap_error", detail: String(e.message).slice(0, 200) }); }
+});
+
 // ---- move / delete (archive, restore, move-to, permanent delete) ----
 app.post("/mail/move", async (req, reply) => {
   const user = await requireUser(req, reply); if (!user) return;

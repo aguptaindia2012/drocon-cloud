@@ -144,6 +144,33 @@ export async function moveMessage(acct, mailbox, uid, dest) {
   } finally { await c.logout().catch(() => {}); }
 }
 
+// Full-text search a mailbox (subject/from/body) — returns envelope summaries.
+export async function searchMessages(acct, mailbox, query, { limit = 50 } = {}) {
+  const c = imapClient(acct);
+  await c.connect();
+  try {
+    const lock = await c.getMailboxLock(mailbox);
+    try {
+      let uids = await c.search({ text: query }, { uid: true });
+      if (!uids || !uids.length) return { messages: [], total: 0 };
+      uids = uids.sort((a, b) => b - a).slice(0, limit);
+      const out = [];
+      for await (const m of c.fetch(uids.join(","), { envelope: true, flags: true, size: true, uid: true }, { uid: true })) {
+        out.push({
+          seq: m.seq, uid: m.uid, size: m.size, flags: [...(m.flags || [])],
+          seen: (m.flags || new Set()).has("\\Seen"),
+          subject: m.envelope?.subject || "(no subject)",
+          from: (m.envelope?.from || []).map(a => ({ name: a.name || "", address: a.address || "" })),
+          to: (m.envelope?.to || []).map(a => ({ name: a.name || "", address: a.address || "" })),
+          date: m.envelope?.date || null,
+        });
+      }
+      out.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      return { messages: out, total: out.length };
+    } finally { lock.release(); }
+  } finally { await c.logout().catch(() => {}); }
+}
+
 // Permanently delete a message (used when it's already in Trash).
 export async function deleteMessage(acct, mailbox, uid) {
   const c = imapClient(acct);
