@@ -261,6 +261,7 @@ function boxRank(b){ const su=(b.specialUse||"").replace(/\\/g,""); const o={Inb
 
 async function renderMail(st){
   $("mailHost").innerHTML=`
+    <style>.mfrow .mfacts{visibility:hidden} .mfrow:hover .mfacts{visibility:visible}</style>
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="muted">Signed in as <b>${esc(st.email)}</b>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
       <div class="row" style="gap:6px"><button class="btn green sm" id="mCompose">✏️ Compose</button>
@@ -301,9 +302,9 @@ async function reloadBoxes(){
 function renderBoxes(){
   const host=$("mBoxes"); if(!host) return;
   host.innerHTML=STATE.mailboxes.map(b=>{ const active=b.path===STATE.mailbox, cust=isCustomBox(b);
-    return `<div class="row" data-box="${esc(b.path)}" style="gap:2px;padding:6px;border-radius:7px;cursor:pointer;${active?'background:#eef4e8;font-weight:600':''}">
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(boxLabel(b))}">${esc(boxLabel(b))}</span>
-      ${cust?`<a href="#" data-ren="${esc(b.path)}" title="Rename" style="color:var(--muted);text-decoration:none">✎</a> <a href="#" data-delf="${esc(b.path)}" title="Delete" style="color:#a3322a;text-decoration:none">🗑</a>`:''}
+    return `<div class="row mfrow" data-box="${esc(b.path)}" style="gap:2px;padding:6px;border-radius:7px;cursor:pointer;${active?'background:#eef4e8;font-weight:600':''}">
+      <span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(boxLabel(b))}">${esc(boxLabel(b))}</span>
+      ${cust?`<span class="mfacts" style="flex:0 0 auto;white-space:nowrap"><a href="#" data-ren="${esc(b.path)}" title="Rename" style="color:var(--muted);text-decoration:none">✎</a> <a href="#" data-delf="${esc(b.path)}" title="Delete" style="color:#a3322a;text-decoration:none">🗑</a></span>`:''}
     </div>`; }).join("")
     +`<div style="padding:8px 4px 2px"><button class="btn sm" id="mNewFolder" style="width:100%">＋ New folder</button></div>`;
   host.querySelectorAll("[data-box]").forEach(el=>el.addEventListener("click",e=>{ if(e.target.closest("[data-ren],[data-delf]")) return; loadList(el.getAttribute("data-box"),true); }));
