@@ -263,7 +263,7 @@ async function renderMail(st){
   $("mailHost").innerHTML=`
     <style>.mfrow .mfacts{visibility:hidden} .mfrow:hover .mfacts{visibility:visible}</style>
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div class="muted">Signed in as <b>${esc(st.email)}</b> · <span style="font-size:11px">build 169</span>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
+      <div class="muted">Signed in as <b>${esc(st.email)}</b>${st.status==='error'?' · <span class="err">connection issue</span>':''}</div>
       <div class="row" style="gap:6px"><button class="btn green sm" id="mCompose">✏️ Compose</button>
         <button class="btn sm" id="mSig">✍ Signatures</button>
         <button class="btn sm" id="mRefresh">↻</button><button class="btn sm" id="mDisc">Disconnect</button></div>

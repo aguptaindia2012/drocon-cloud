@@ -1,7 +1,7 @@
 /* DroCon Bharat Agreement Studio — Cloud service worker.
    Caches the app shell so it installs and launches like an app.
    IMPORTANT: never caches your Supabase API responses (those stay live). */
-const VERSION = "dcb-cloud-v169";
+const VERSION = "dcb-cloud-v170";
 const SHELL = [
   "./", "./index.html", "./studio.html", "./manifest.webmanifest",
   "./app.js", "./logo.js", "./docgen.js", "./modules/report.js", "./agreement.js", "./config.js",
@@ -19,6 +19,10 @@ const CACHE_HOSTS = ["cdn.jsdelivr.net","cdnjs.cloudflare.com","fonts.googleapis
 
 self.addEventListener("install", e=>{
   e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL).catch(()=>{})).then(()=>self.skipWaiting()));
+});
+// report the running version (used by the header build tag)
+self.addEventListener("message", e=>{
+  if(e.data==="version" && e.ports && e.ports[0]) e.ports[0].postMessage({ build: VERSION });
 });
 self.addEventListener("activate", e=>{
   e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));

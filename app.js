@@ -660,3 +660,20 @@ window.OPS.softRefresh = softRefresh;
 if("serviceWorker" in navigator && (location.protocol==="https:"||location.protocol==="http:")){
   window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));
 }
+// Always-on build tag in the header (reads the running service-worker version).
+(function showBuild(){
+  const el=document.getElementById("buildTag"); if(!el) return;
+  function paint(v){ const m=(v||"").match(/v(\d+)/); el.textContent = m ? ("build "+m[1]) : (v?("build "+v):""); }
+  function ask(){
+    try{
+      const sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if(!sw){ el.textContent=""; return; }
+      const ch=new MessageChannel();
+      ch.port1.onmessage=e=>paint(e.data&&e.data.build);
+      sw.postMessage("version",[ch.port2]);
+    }catch(e){ el.textContent=""; }
+  }
+  ask();
+  if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("controllerchange", ()=>setTimeout(ask,300));
+  setTimeout(ask, 1500); // controller may attach shortly after first load
+})();
