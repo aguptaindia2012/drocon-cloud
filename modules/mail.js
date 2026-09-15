@@ -423,12 +423,14 @@ async function openMessage(uid){
         <button class="btn sm" id="mUnread">Mark unread</button>
         <select id="mMoveTo" class="in sm" style="width:auto"><option value="">Move to…</option>${moveOpts}</select>
       </div>
-      <h3 style="margin:4px 0">${esc(m.subject)}</h3>
-      <div class="muted" style="font-size:12px">From: ${from}</div>
-      <div class="muted" style="font-size:12px">To: ${to}</div>
-      <div class="muted" style="font-size:12px;margin-bottom:8px">${m.date?fmt(m.date):''}</div>
+      <div style="background:#599533;border-radius:8px;padding:10px 14px;margin-bottom:10px">
+        <div style="font-size:16px;font-weight:700;color:#FBF4E0">${esc(m.subject)}</div>
+        <div style="font-size:12px;margin-top:5px;color:#EBE2C4"><span style="opacity:.8">From:</span> ${from}</div>
+        <div style="font-size:12px;color:#EBE2C4"><span style="opacity:.8">To:</span> ${to}</div>
+        <div style="font-size:11px;color:#D6C79E;margin-top:2px">${m.date?fmt(m.date):''}</div>
+      </div>
       ${atts?`<div style="margin-bottom:8px">${atts}</div>`:""}
-      <div id="mBodyWrap" style="border-top:1px solid var(--line);padding-top:10px"></div>`;
+      <div id="mBodyWrap"></div>`;
     const bw=$("mBodyWrap");
     if(m.html){
       const ifr=document.createElement("iframe");
@@ -518,7 +520,10 @@ function compose(seed){
   document.body.appendChild(wrap);
   const close=()=>wrap.remove();
   const ed=$("coBody");
-  ed.innerHTML = seed.bodyHtml || (seed.body? esc(seed.body).replace(/\n/g,"<br>") : "");
+  // For replies/forwards, give an empty line ABOVE the quoted chain to type into,
+  // so the caret starts there and the signature lands after your text, before the quote.
+  ed.innerHTML = seed.bodyHtml ? ('<div><br></div>'+seed.bodyHtml) : (seed.body? esc(seed.body).replace(/\n/g,"<br>") : "");
+  if(seed.bodyHtml){ setTimeout(()=>{ try{ ed.focus(); const r=document.createRange(); r.setStart(ed,0); r.collapse(true); const sl=window.getSelection(); sl.removeAllRanges(); sl.addRange(r); }catch(e){} }, 0); }
   // rich-text toolbar
   wrap.querySelectorAll("[data-cmd]").forEach(b=>b.addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); document.execCommand(b.getAttribute("data-cmd"),false,null); }));
   $("coLink").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Link URL (https://…)"); if(u) document.execCommand("createLink",false,u); });
