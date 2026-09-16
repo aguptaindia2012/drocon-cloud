@@ -26,11 +26,17 @@ DST = (os.environ["DST_HOST"], os.environ["DST_USER"], os.environ["DST_PASS"])
 DAYS = int(os.environ.get("DAYS", "3"))
 FOLDER = os.environ.get("FOLDER", "INBOX")
 DRY = os.environ.get("DRY", "0") == "1"
+# Optional explicit IMAP-date window (DD-Mon-YYYY, e.g. 07-Sep-2026). SINCE is
+# inclusive; BEFORE is EXCLUSIVE (BEFORE 15-Sep-2026 => up to and incl. 14th).
+SINCE_DATE = os.environ.get("SINCE", "").strip()
+BEFORE_DATE = os.environ.get("BEFORE", "").strip()
 
 
 def main() -> int:
-    since = time.strftime("%d-%b-%Y", time.gmtime(time.time() - DAYS * 86400))
-    print(f"Copying '{FOLDER}' messages SINCE {since}  ({SRC[1]} -> {DST[1]})  DRY={DRY}")
+    since = SINCE_DATE or time.strftime("%d-%b-%Y", time.gmtime(time.time() - DAYS * 86400))
+    crit = f"(SINCE {since}" + (f" BEFORE {BEFORE_DATE}" if BEFORE_DATE else "") + ")"
+    span = f"SINCE {since}" + (f" BEFORE {BEFORE_DATE}" if BEFORE_DATE else f" ({DAYS}d)")
+    print(f"Copying '{FOLDER}' messages {span}  ({SRC[1]} -> {DST[1]})  DRY={DRY}")
 
     try:
         src = imaplib.IMAP4_SSL(SRC[0], 993); src.login(SRC[1], SRC[2])
@@ -46,9 +52,9 @@ def main() -> int:
         print(f"! cannot open source folder {FOLDER}", file=sys.stderr); return 1
     dst.select(f'"{FOLDER}"')  # ensure it exists on dest (INBOX always does)
 
-    typ, data = src.search(None, f'(SINCE {since})')
+    typ, data = src.search(None, crit)
     ids = data[0].split() if (typ == "OK" and data and data[0]) else []
-    print(f"found {len(ids)} message(s) in the last {DAYS} day(s)")
+    print(f"found {len(ids)} message(s) matching {crit}")
 
     copied = 0
     for i in ids:
