@@ -443,7 +443,7 @@ async function openMessage(uid){
     }
     $("mReply").addEventListener("click",()=>compose(replyDraft(m,false)));
     $("mReplyAll").addEventListener("click",()=>compose(replyDraft(m,true)));
-    $("mFwd").addEventListener("click",()=>compose(forwardDraft(m)));
+    $("mFwd").addEventListener("click",()=>compose(forwardDraft(m, uid, STATE.mailbox)));
     $("mUnread").addEventListener("click",async()=>{ await api("/mail/flags",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid),seen:false}}); const it=STATE.messages.find(x=>String(x.uid)===String(uid)); if(it) it.seen=false; renderList(); });
     const move=async(dest)=>{ try{ await api("/mail/move",{method:"POST",body:{mailbox:STATE.mailbox,uid:Number(uid),dest}}); await afterMsgAction(); }catch(e){ alert("Couldn't move: "+e.message); } };
     if($("mArchive")) $("mArchive").addEventListener("click",()=>move(arch));
@@ -482,8 +482,10 @@ function replyDraft(m, all){
   return { to, cc, subject:/^re:/i.test(m.subject||"")?m.subject:("Re: "+(m.subject||"")), bodyHtml:quoteHtml(m),
     inReplyTo:m.messageId, references:m.messageId };
 }
-function forwardDraft(m){
-  return { to:"", subject:/^fwd:/i.test(m.subject||"")?m.subject:("Fwd: "+(m.subject||"")), bodyHtml:quoteHtml(m) };
+function forwardDraft(m, uid, mailbox){
+  const atts=(m.attachments||[]).map(a=>({index:a.index, filename:a.filename, content_type:a.contentType||a.content_type||"application/octet-stream"}));
+  return { to:"", subject:/^fwd:/i.test(m.subject||"")?m.subject:("Fwd: "+(m.subject||"")), bodyHtml:quoteHtml(m),
+    fwdAtt:atts, fwdUid:uid, fwdMailbox:mailbox };
 }
 function compose(seed){
   seed=seed||{};
@@ -513,6 +515,7 @@ function compose(seed){
     </div>
     <div id="coBody" contenteditable="true" class="in" style="width:100%;min-height:200px;max-height:45vh;overflow:auto;background:#fff"></div>
     <div id="coSigPrev" style="margin-top:4px"></div>
+    <div id="coQuoteWrap"></div>
     <div class="row" style="gap:8px;margin-top:6px"><button class="btn sm" id="coAttach">📎 Attach</button><input type="file" id="coFile" multiple style="display:none"><span id="coFiles" class="muted" style="font-size:12px"></span></div>
     <div id="coErr" class="err" style="min-height:18px"></div>
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:6px"><button class="btn sm" id="coCancel">Cancel</button><button class="btn green" id="coSend">Send</button></div>
@@ -520,10 +523,15 @@ function compose(seed){
   document.body.appendChild(wrap);
   const close=()=>wrap.remove();
   const ed=$("coBody");
-  // For replies/forwards, give an empty line ABOVE the quoted chain to type into,
-  // so the caret starts there and the signature lands after your text, before the quote.
-  ed.innerHTML = seed.bodyHtml ? ('<div><br></div>'+seed.bodyHtml) : (seed.body? esc(seed.body).replace(/\n/g,"<br>") : "");
-  if(seed.bodyHtml){ setTimeout(()=>{ try{ ed.focus(); const r=document.createRange(); r.setStart(ed,0); r.collapse(true); const sl=window.getSelection(); sl.removeAllRanges(); sl.addRange(r); }catch(e){} }, 0); }
+  // The editable box holds ONLY your message. The quoted chain (reply/forward) is
+  // kept OUT of it and shown read-only below, then re-attached at send. This makes
+  // the order deterministic: [your text] -> [signature] -> [quoted message].
+  ed.innerHTML = seed.body ? esc(seed.body).replace(/\n/g,"<br>") : "";
+  if(seed.bodyHtml){
+    $("coQuoteWrap").innerHTML='<div class="muted" style="font-size:11px;margin-top:8px">Quoted message (kept below your reply):</div>'
+      +'<div style="border-left:2px solid var(--line);padding-left:8px;max-height:200px;overflow:auto;font-size:13px;opacity:.85">'+seed.bodyHtml+'</div>';
+  }
+  setTimeout(()=>{ try{ ed.focus(); }catch(e){} }, 0);
   // rich-text toolbar
   wrap.querySelectorAll("[data-cmd]").forEach(b=>b.addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); document.execCommand(b.getAttribute("data-cmd"),false,null); }));
   $("coLink").addEventListener("mousedown",e=>{ e.preventDefault(); ed.focus(); const u=prompt("Link URL (https://…)"); if(u) document.execCommand("createLink",false,u); });
@@ -535,25 +543,34 @@ function compose(seed){
   renderSigPrev();
   wrap.addEventListener("click",e=>{ if(e.target===wrap) close(); });
   $("coCancel").addEventListener("click",close);
+  function filesLabel(){
+    const parts=[];
+    if(seed.fwdAtt&&seed.fwdAtt.length) parts.push("Forwarding: "+seed.fwdAtt.map(a=>a.filename).join(", "));
+    if(pending.length) parts.push("Attached: "+pending.map(f=>f.name).join(", "));
+    $("coFiles").textContent=parts.join("   ·   ");
+  }
+  filesLabel();
   $("coAttach").addEventListener("click",()=>$("coFile").click());
-  $("coFile").addEventListener("change",()=>{ pending.push(...$("coFile").files); $("coFile").value="";
-    $("coFiles").textContent=pending.map(f=>f.name).join(", "); });
+  $("coFile").addEventListener("change",()=>{ pending.push(...$("coFile").files); $("coFile").value=""; filesLabel(); });
   $("coSend").addEventListener("click",async()=>{
     const err=$("coErr"); err.textContent="";
     const to=$("coTo").value.trim(); if(!to){ err.textContent="Add at least one recipient."; return; }
     $("coSend").disabled=true; $("coSend").textContent="Sending…";
     try{
       const attachments=[];
+      // carry the ORIGINAL attachments when forwarding
+      if(seed.fwdAtt && seed.fwdAtt.length && seed.fwdUid!=null){
+        for(const a of seed.fwdAtt){
+          const content_base64=await fetchAttB64(seed.fwdMailbox, seed.fwdUid, a.index);
+          attachments.push({ filename:a.filename, content_type:a.content_type||"application/octet-stream", content_base64 });
+        }
+      }
       for(const f of pending){ attachments.push({ filename:f.name, content_type:f.type||"application/octet-stream", content_base64:await toB64(f) }); }
       const s=curSig();
-      // insert the signature AFTER the typed body but BEFORE the quoted chain
-      const clone=$("coBody").cloneNode(true);
-      if(s){
-        const sigNode=document.createElement("div"); sigNode.innerHTML="<br>-- <br>"+sigToHtml(s);
-        const q=clone.querySelector(".dcb-quoted");
-        if(q) q.parentNode.insertBefore(sigNode,q); else clone.appendChild(sigNode);
-      }
-      const bodyHtml=sanitizeHtml(clone.innerHTML);
+      // deterministic order: your text -> signature -> quoted chain
+      const bodyHtml=sanitizeHtml($("coBody").innerHTML)
+        + (s ? ("<br>-- <br>"+sigToHtml(s)) : "")
+        + (seed.bodyHtml || "");
       const payload={ to, cc:$("coCc").value.trim()||undefined, subject:$("coSub").value.trim(),
         html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">${bodyHtml}</div>`,
         text: htmlToText(bodyHtml),
@@ -564,6 +581,12 @@ function compose(seed){
   });
 }
 function toB64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]||""); r.onerror=rej; r.readAsDataURL(file); }); }
+async function fetchAttB64(mailbox, uid, index){
+  const res=await api(`/mail/attachment?mailbox=${encodeURIComponent(mailbox)}&uid=${encodeURIComponent(uid)}&index=${index}`,{raw:true});
+  if(!res.ok) throw new Error("Couldn't read attachment "+index+" (HTTP "+res.status+")");
+  const blob=await res.blob();
+  return await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(String(r.result).split(",")[1]||""); r.onerror=reject; r.readAsDataURL(blob); });
+}
 
 window.OPS.routes.mail = route;
 })();
