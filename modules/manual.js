@@ -136,6 +136,18 @@ const FAQ_VENDORPILOT = [
   {q:"Who do I contact for help?", a:"Your DroCon coordinator, or email info@droconbharat.com / call the numbers in the footer.", kw:"help contact email phone support"},
 ];
 
+/* Client portal FAQs (live acre view + queries) */
+const FAQ_CLIENT = [
+  {q:"What does the Acre Dashboard show?", a:"A live view of the acres sprayed on your assigned locations. It has your total/farmer/client value tiles, a 'this week' grid of acres by location and pilot, and an expandable acre report you can drill down By Location, By Date or By Pilot.", kw:"dashboard acres live weekly location pilot report drill"},
+  {q:"When does new data appear?", a:"As soon as the DroCon Bharat team approves a day's work in our system, it shows here — replacing the periodic Excel sheets with a live view.", kw:"live update approve daily fresh when appear"},
+  {q:"What's in the Entries page?", a:"Every approved spray line for your locations: date, location, farmer, phone, village, crop, medicine, pilot, acres, and the billing split — Farmer rate/amount, Client rate/amount and the Total. Filter by date range, location or search a farmer/village.", kw:"entries columns farmer phone rate crop medicine filter search"},
+  {q:"Farmer rate vs Client rate — what's the difference?", a:"The Farmer rate is what the farmer pays per acre; the Client rate is your (client/sponsor) component per acre. Each amount = acres × the matching rate, and Total = Farmer + Client.", kw:"farmer client rate split amount total billing"},
+  {q:"Can I download the data to Excel?", a:"Downloads are enabled for your account only after an NDA is signed. Once enabled, an ⬇ Excel button appears on the Entries page. Contact DroCon Bharat if you need it.", kw:"download excel export nda enable restricted"},
+  {q:"Something looks wrong on an entry — how do I flag it?", a:"On the Entries page, click 'Raise query' on that line. Add a subject and details. The DroCon team discusses and resolves it; you can add notes and close the query yourself once you're satisfied. Track it under My Queries.", kw:"raise query issue dispute escalate flag wrong close resolve"},
+  {q:"Is my data private?", a:"Yes — your login sees only the locations assigned to you, and only approved data. You never see DroCon's internal records or any other client's data. This is enforced by the database, not just the screen.", kw:"privacy data safe security assigned locations only"},
+  {q:"Who do I contact for help?", a:"Email info@droconbharat.com or call the numbers in the footer.", kw:"help contact email phone support"},
+];
+
 function renderFAQ(host, list, title){
   host.innerHTML=`<div class="row" style="margin:6px 0"><input id="faqQ" placeholder="Search ${esc(title)} by keyword…" style="max-width:340px"></div>
     <div id="faqList"></div>`;
@@ -159,7 +171,24 @@ window.OPS.routes.faqs = internalFAQs;
 function partnerHelp(){
   const m=$("main");
   const party=(window.OPS.profile&&window.OPS.profile.party_type)||"";
+  const isClient = party==="client";
   const isVP = party==="vendor" || party==="pilot";
+  if(isClient){
+    m.innerHTML=`<div class="eyebrow">Client Portal</div><h1>Help &amp; FAQs</h1>
+      <div class="callout"><b>Portal URL:</b> <a href="${esc(appURL())}" target="_blank" rel="noopener">${esc(appURL())}</a> — bookmark it or install the app from your browser menu.</div>
+      <div class="card"><h3>How your portal works</h3>
+        <ul style="font-size:13px;line-height:1.7">
+          <li><b>Acre Dashboard</b> — live totals for your assigned locations, a this-week grid by location &amp; pilot, and an expandable acre report (By Location / Date / Pilot) with the farmer/client value split.</li>
+          <li><b>Entries</b> — every approved spray line with farmer, phone, crop, medicine, acres and the Farmer/Client rate split. Filter by date, location or search. Download to Excel once enabled.</li>
+          <li><b>My Queries</b> — raise a query on any entry; DroCon reviews and resolves; you can add notes and close it.</li>
+          <li><b>Data &amp; Privacy</b> (🛡 top-right) — you see only your assigned locations' approved data.</li>
+        </ul>
+        <p class="muted">Data appears here once DroCon Bharat approves each day's work.</p>
+      </div>
+      <h3 style="margin-top:16px">FAQs</h3><div id="faqHost"></div>`;
+    renderFAQ($("faqHost"), FAQ_CLIENT, "client FAQs");
+    return;
+  }
   const guide = isVP ? `<div class="card"><div class="eyebrow">Guides &amp; training</div>
       <table><thead><tr><th>Title</th><th>Open</th></tr></thead><tbody>
         <tr><td><b>Vendor &amp; Pilot Portal — Training Guide</b><br><span class="muted">Step-by-step: logins, reporting acres, review, field issues and invoicing.</span></td>

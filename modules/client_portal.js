@@ -24,26 +24,27 @@ async function feed(from,to){
 function sortChildKeys(c, mode){ const ks=Object.keys(c);
   if(mode==="keyDesc") return ks.sort().reverse();
   if(mode==="acres")   return ks.sort((x,y)=>c[y].a-c[x].a);
-  return ks.sort((x,y)=>c[y].r-c[x].r); // 'rev' default
+  return ks.sort((x,y)=>(c[y].f+c[y].c)-(c[x].f+c[x].c)); // 'rev' → by total value
 }
 function drillTable(rows, defs, prefix, header){
-  const root={a:0,r:0,c:{}};
-  (rows||[]).forEach(row=>{ const a=num(row.acres), rv=num(row.revenue); let node=root; node.a+=a; node.r+=rv;
-    defs.forEach(d=>{ const k=d.get(row)||"—"; node.c[k]=node.c[k]||{a:0,r:0,c:{}}; node=node.c[k]; node.a+=a; node.r+=rv; }); });
-  if(!Object.keys(root.c).length) return '<div class="muted">No data.</div>';
+  const root={a:0,f:0,c:0,ch:{}};
+  (rows||[]).forEach(row=>{ const a=num(row.acres), fa=num(row.farmer), cl=num(row.client); let node=root; node.a+=a; node.f+=fa; node.c+=cl;
+    defs.forEach(d=>{ const k=d.get(row)||"—"; node.ch[k]=node.ch[k]||{a:0,f:0,c:0,ch:{}}; node=node.ch[k]; node.a+=a; node.f+=fa; node.c+=cl; }); });
+  if(!Object.keys(root.ch).length) return '<div class="muted">No data.</div>';
   const out=[]; const idRef={n:0};
   (function walk(node, depth, parentId){
-    sortChildKeys(node.c, defs[depth].sort).forEach(k=>{ const child=node.c[k]; const id=prefix+(idRef.n++);
+    sortChildKeys(node.ch, defs[depth].sort).forEach(k=>{ const child=node.ch[k]; const id=prefix+(idRef.n++);
       const leaf=depth===defs.length-1; const d=defs[depth];
       const lbl=d.label?d.label(k):k; const txt=d.bold?`<b>${esc(lbl)}</b>`:esc(lbl);
       const caret=leaf?'':'<span class="dcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> ';
+      const b=(v)=>d.bold?'<b>'+money(v)+'</b>':money(v);
       out.push(`<tr class="drow ${leaf?'dleaf':'dgrp'}" data-id="${id}" data-parent="${parentId||''}" style="display:${depth===0?'':'none'};${leaf?'':'cursor:pointer'};${depth===1?'background:#f7f8f6':''}">`
         +`<td style="padding-left:${4+depth*24}px"${leaf?' class="muted"':''}>${caret}${leaf?esc(lbl):txt}</td>`
-        +`<td class="num">${child.a.toFixed(1)}</td><td class="num">${d.bold?'<b>'+money(child.r)+'</b>':money(child.r)}</td></tr>`);
+        +`<td class="num">${child.a.toFixed(1)}</td><td class="num">${b(child.f)}</td><td class="num">${b(child.c)}</td><td class="num">${b(child.f+child.c)}</td></tr>`);
       if(!leaf) walk(child, depth+1, id);
     });
   })(root,0,"");
-  return `<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>${esc(header)}</th><th class="num">Acres</th><th class="num">Value</th></tr></thead><tbody>${out.join("")}</tbody></table></div>`;
+  return `<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>${esc(header)}</th><th class="num">Acres</th><th class="num">Farmer</th><th class="num">Client</th><th class="num">Total</th></tr></thead><tbody>${out.join("")}</tbody></table></div>`;
 }
 function wireDrills(host){
   if(!host) return;
@@ -81,11 +82,14 @@ async function clientDashboard(){
   const dayList=[...dSet].sort();
   const grand=dayList.reduce((s,d)=>s+(dayTot[d]||0),0);
   // ---- rows for the expandable report ----
-  const drows=rows.map(r=>({location:r.location_name||"(none)", pilot:(r.pilot||"").trim()||"(unassigned)", entry_date:r.entry_date, acres:num(r.acres), revenue:num(r.amount)}));
+  const drows=rows.map(r=>({location:r.location_name||"(none)", pilot:(r.pilot||"").trim()||"(unassigned)", entry_date:r.entry_date, acres:num(r.acres), farmer:num(r.farmer_amount), client:num(r.client_amount)}));
+  const farmerTot=rows.reduce((s,r)=>s+num(r.farmer_amount),0), clientTot=rows.reduce((s,r)=>s+num(r.client_amount),0);
   $("cdBody").innerHTML=`
     <div class="statrow">
       <div class="stat"><div class="n">${acresOf(rows).toFixed(1)}</div><div class="l">Total acres</div></div>
-      <div class="stat"><div class="n">${money(amtOf(rows))}</div><div class="l">Total value</div></div>
+      <div class="stat"><div class="n">${money(farmerTot)}</div><div class="l">Farmer value</div></div>
+      <div class="stat"><div class="n">${money(clientTot)}</div><div class="l">Client value</div></div>
+      <div class="stat"><div class="n">${money(farmerTot+clientTot)}</div><div class="l">Total value</div></div>
       <div class="stat"><div class="n">${locs.length}</div><div class="l">Locations</div></div>
       <div class="stat"><div class="n">${farmers}</div><div class="l">Farmers served</div></div>
     </div>

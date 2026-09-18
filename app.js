@@ -675,5 +675,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "177";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "178";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
