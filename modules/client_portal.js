@@ -149,12 +149,12 @@ async function clientEntries(){
   function render(){
     const fr=filtered();
     $("ceList").innerHTML=`<div class="card"><div class="row" style="margin-bottom:6px"><b>${fr.length} entr${fr.length===1?'y':'ies'}</b><span class="muted" style="margin-left:8px">${acresOf(fr).toFixed(1)} acres · ${money(amtOf(fr))}</span></div>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Farmer</th><th>Village</th><th>Crop</th><th>Medicine</th><th>Pilot</th><th class="num">Acres</th><th class="num">Value</th><th></th></tr></thead>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Farmer</th><th>Phone</th><th>Village</th><th>Crop</th><th>Medicine</th><th>Pilot</th><th class="num">Acres</th><th class="num">Rate</th><th class="num">Value</th><th></th></tr></thead>
       <tbody>${fr.map(r=>`<tr>
-        <td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.farmer_name||"")}</td>
+        <td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.farmer_name||"")}</td><td>${esc(r.farmer_phone||"")}</td>
         <td>${esc(r.village||"")}</td><td>${esc(r.crop||"")}</td><td>${esc(r.medicine||"")}</td><td>${esc(r.pilot||"")}</td>
-        <td class="num">${num(r.acres).toFixed(1)}</td><td class="num">${money(r.amount)}</td>
-        <td>${r.open_issue?'<span class="chip warn">query</span>':`<button class="btn sm ghost" data-raise="${r.spray_id}">Raise query</button>`}</td></tr>`).join("")||'<tr><td colspan="10" class="muted">No approved entries for this filter.</td></tr>'}</tbody></table></div></div>`;
+        <td class="num">${num(r.acres).toFixed(1)}</td><td class="num">${r.rate!=null?money(r.rate):''}</td><td class="num">${money(r.amount)}</td>
+        <td>${r.open_issue?'<span class="chip warn">query</span>':`<button class="btn sm ghost" data-raise="${r.spray_id}">Raise query</button>`}</td></tr>`).join("")||'<tr><td colspan="12" class="muted">No approved entries for this filter.</td></tr>'}</tbody></table></div></div>`;
     $("ceList").querySelectorAll("[data-raise]").forEach(b=>b.addEventListener("click",()=>{
       const r=rows.find(x=>String(x.spray_id)===b.getAttribute("data-raise")); if(r) raiseModal(r, run);
     }));
@@ -166,8 +166,8 @@ async function clientEntries(){
     try{
       const { data, error }=await sb().rpc("client_export_rows",{ p_from:$("ceFrom").value||null, p_to:$("ceTo").value||null });
       if(error) throw error;
-      const headers=["Date","Location","Farmer","Village","Crop","Medicine","Pilot","Acres","Value"];
-      const out=(data||[]).map(r=>[r.entry_date, r.location_name, r.farmer_name, r.village, r.crop, r.medicine, r.pilot, num(r.acres), num(r.amount)]);
+      const headers=["Date","Location","Farmer","Phone","Village","Crop","Medicine","Pilot","Acres","Rate","Value"];
+      const out=(data||[]).map(r=>[r.entry_date, r.location_name, r.farmer_name, r.farmer_phone, r.village, r.crop, r.medicine, r.pilot, num(r.acres), num(r.rate), num(r.amount)]);
       window.OPS.xlsx.download("drocon-acres-"+todayISO()+".xlsx", headers, out);
     }catch(e){ alert("Export failed: "+e.message); }
   });
