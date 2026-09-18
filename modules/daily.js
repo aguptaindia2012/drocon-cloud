@@ -12,7 +12,8 @@ const sb = ()=>window.OPS.sb;
 
 let drows=[], clients=[], editingId=null;
 let locs=[], locPilots=[], curLoc=null, cropsList=[], curRates=[];
-function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", crop_id:"", chemical:"", acres:"", crate:"", frate:"", gps:false }; }
+function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", crop_id:"", chemical:"", acres:"", crate:"", frate:"", gps:false, short_reason:"" }; }
+const SHORT_AC=12;   // a pilot-day under this many acres needs a reason
 // resolve the rate in force for a crop on the entry date (crop-specific > all-crops
 // default > the location's base rate; latest effective_from on/before the date).
 function resolveRate(cropId, date){
@@ -53,7 +54,7 @@ async function view(editSub){
       <h3>Sprays</h3>
       <div style="overflow:auto"><table class="linetable" id="dRows"><thead><tr>
         <th style="min-width:120px">Pilot</th><th style="min-width:120px">Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th>
-        <th class="num">Acres</th><th class="num" title="Rate paid by client">Client ₹</th><th class="num" title="Rate paid by farmer">Farmer ₹</th><th class="num">Amount</th><th>GPS</th><th></th>
+        <th class="num">Acres</th><th class="num" title="Rate paid by client">Client ₹</th><th class="num" title="Rate paid by farmer">Farmer ₹</th><th class="num">Amount</th><th>GPS</th><th title="Required when a pilot sprays under 12 acres">Short-day reason</th><th></th>
       </tr></thead><tbody></tbody></table></div>
       <button class="btn sm" id="dAdd">+ Add spray</button>
       <div id="dSum" class="muted" style="margin-top:6px"></div>
@@ -147,11 +148,14 @@ function renderRows(){
     <td><input data-i="${i}" data-k="frate" type="number" step="any" value="${esc(r.frate)}" style="width:64px;text-align:right"></td>
     <td class="num">${money(amt)}</td>
     <td style="text-align:center"><input data-i="${i}" data-k="gps" type="checkbox" style="width:auto" ${r.gps?'checked':''}></td>
+    <td><input data-i="${i}" data-k="short_reason" value="${esc(r.short_reason||'')}" placeholder="why < ${SHORT_AC} ac?" style="width:140px${(num(r.acres)>0&&num(r.acres)<SHORT_AC)?';border-color:#e0a800;background:#fff8e6':''}"></td>
     <td class="x" data-del="${i}">✕</td></tr>`; }).join("");
   tb.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
     const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
     drows[i][k]= k==="gps"?inp.checked:inp.value;
-    if(["acres","crate","frate"].includes(k)){ const tr=inp.closest("tr"); tr.children[9].textContent=money(num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate))); sumRow(); }
+    if(["acres","crate","frate"].includes(k)){ const tr=inp.closest("tr"); tr.children[9].textContent=money(num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate))); sumRow();
+      if(k==="acres"){ const rin=tr.children[11].querySelector("input"), short=num(drows[i].acres)>0&&num(drows[i].acres)<SHORT_AC; if(rin){ rin.style.borderColor=short?'#e0a800':''; rin.style.background=short?'#fff8e6':''; } }
+    }
   }));
   // crop picker: set the crop, then resolve the effective rate for that crop/date
   tb.querySelectorAll("select[data-k='crop_id']").forEach(sel=>sel.addEventListener("change",()=>{
@@ -189,6 +193,11 @@ async function save(){
   if(!valid.length){ $("dErr").textContent="Add at least one spray (acres or farmer name)."; return; }
   if(locPilots.length && valid.some(r=>!r.pilot_id)){ $("dErr").textContent="Select a pilot on every row with acres."; return; }
   let a=0,amt=0; valid.forEach(r=>{ a+=num(r.acres); amt+=num(r.acres)*(num(r.crate)+num(r.frate)); });
+  // Short-day reasons: aggregate acres by pilot; under 12 ac needs a reason.
+  const byPilot={};
+  valid.forEach(r=>{ const nm=(r.pilot||"").trim()||"(unassigned)"; byPilot[nm]=byPilot[nm]||{acres:0,reason:""}; byPilot[nm].acres+=num(r.acres); if(!byPilot[nm].reason && (r.short_reason||"").trim()) byPilot[nm].reason=(r.short_reason||"").trim(); });
+  const shortMissing=Object.entries(byPilot).filter(([n,p])=>p.acres>0&&p.acres<SHORT_AC&&!p.reason).map(([n])=>n);
+  if(shortMissing.length){ $("dErr").textContent="Add a short-day reason for: "+shortMissing.join(", ")+" (under "+SHORT_AC+" acres)."; return; }
 
   const rec={ entry_date:date, client_id:clientId||null, client_name:clientName||null,
     location_id:locId, location_name:locName, state:state||null, district:district||null,
@@ -202,6 +211,10 @@ async function save(){
   else { rec.created_by=window.OPS.me.id; ({ error:err }=await sb().from("daily_submissions").insert(rec)); }
   $("dSave").disabled=false;
   if(err){ $("dErr").textContent=err.message; return; }
+  // persist short-day reasons (pilot-day total < 12 ac)
+  try{ for(const [nm,p] of Object.entries(byPilot)){ if(p.acres>0 && p.acres<SHORT_AC && p.reason){
+    await sb().rpc("set_short_day_reason",{ p_date:date, p_location:locId, p_pilot_name:nm, p_acres:p.acres, p_reason:p.reason }); } }
+  }catch(e){ console.warn("short-day reason save:", e.message); }
   window.OPS.audit(editingId?"daily_resubmitted":"daily_submitted","daily_submissions",editingId||locName,locName+" · "+valid.length+" spray(s)");
   window.OPS.refreshNotifs && window.OPS.refreshNotifs();
   window.OPS.refreshReviewCount && window.OPS.refreshReviewCount();
