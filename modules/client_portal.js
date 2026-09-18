@@ -14,6 +14,8 @@ const chip  = (s)=>({open:"warn",in_review:"issued",resolved:"ok",closed:"muted"
 const label = (s)=>({open:"Open",in_review:"With DroCon",resolved:"Resolved",closed:"Closed"}[s]||s);
 const acresOf = (rows)=>rows.reduce((s,r)=>s+num(r.acres),0);
 const amtOf   = (rows)=>rows.reduce((s,r)=>s+num(r.amount),0);
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const ymLabel=(ym)=>{ if(!ym||ym==='?') return '?'; const p=String(ym).split('-'); return (MONTHS[(+p[1])-1]||p[1])+" "+p[0]; };
 
 async function feed(from,to){
   const { data, error } = await sb().rpc("client_spray_rows",{ p_from:from||null, p_to:to||null, p_client:null });
@@ -118,17 +120,20 @@ async function clientDashboard(){
         }).join("")}</tbody></table></div></div>
     <div class="card"><h3>Acre report</h3>
       <p class="muted" style="margin-top:-4px">Expand any row to drill down.</p>
-      <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-drill="loc">By Location</button><button class="btn sm" data-drill="date">By Date</button><button class="btn sm" data-drill="pilot">By Pilot</button></div>
+      <p class="muted" style="margin-top:-8px;font-size:12px">Grouped by month — open the <b>Entries</b> tab for day-by-day detail.</p>
+      <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-drill="month">By Month</button><button class="btn sm" data-drill="loc">By Location</button><button class="btn sm" data-drill="pilot">By Pilot</button></div>
       <div id="cdDrill"></div></div>`;
-  const dLoc={get:r=>r.location,sort:"rev",bold:true}, dPil={get:r=>r.pilot,sort:"acres"}, dPilB={get:r=>r.pilot,sort:"acres",bold:true},
-        dLocN={get:r=>r.location,sort:"rev"}, dDate={get:r=>r.entry_date,label:d=>fmtDate(d),sort:"keyDesc"}, dDateB={get:r=>r.entry_date,label:d=>fmtDate(d),sort:"keyDesc",bold:true};
-  const VIEWS={ loc:[[dLoc,dPil,dDate],"Location / Pilot / Date"], date:[[dDateB,dLocN,dPil],"Date / Location / Pilot"], pilot:[[dPilB,dLocN,dDate],"Pilot / Location / Date"] };
-  function drill(kind){ const [defs,hdr]=VIEWS[kind]||VIEWS.loc;
+  const ym=r=>r.entry_date?r.entry_date.slice(0,7):'?';
+  const dMonthB={get:ym,label:ymLabel,sort:"keyDesc",bold:true}, dMonth={get:ym,label:ymLabel,sort:"keyDesc"},
+        dLoc={get:r=>r.location,sort:"rev",bold:true}, dLocN={get:r=>r.location,sort:"rev"},
+        dPil={get:r=>r.pilot,sort:"acres"}, dPilB={get:r=>r.pilot,sort:"acres",bold:true};
+  const VIEWS={ month:[[dMonthB,dLocN,dPil],"Month / Location / Pilot"], loc:[[dLoc,dMonth,dPil],"Location / Month / Pilot"], pilot:[[dPilB,dLocN,dMonth],"Pilot / Location / Month"] };
+  function drill(kind){ const [defs,hdr]=VIEWS[kind]||VIEWS.month;
     $("cdDrill").innerHTML=drillTable(drows, defs, "d"+kind, hdr); wireDrills($("cdDrill"));
     document.querySelectorAll("[data-drill]").forEach(b=>b.style.fontWeight=(b.getAttribute("data-drill")===kind)?"700":"");
   }
   document.querySelectorAll("[data-drill]").forEach(b=>b.addEventListener("click",()=>drill(b.getAttribute("data-drill"))));
-  drill("loc");
+  drill("month");
 }
 
 /* --------------------------------------------------------------- ENTRIES --- */
