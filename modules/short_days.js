@@ -19,27 +19,34 @@ async function render(scope){
     <div class="callout">Pilot-days under <b>12 acres</b> (last 45 days).${editable
       ? " Record why the day fell short — this is shared with the client and helps decide when to close a location or deactivate a pilot/vendor."
       : " Reasons recorded by the DroCon team or vendor for days below the minimum on your locations."}</div>
+    <label style="display:inline-flex;gap:6px;align-items:center;margin-bottom:6px;font-size:13px"><input type="checkbox" id="sdActive" checked style="width:auto"> Active locations only</label>
     <div id="sdList" class="muted">Loading…</div>`;
   let rows;
   try{ const { data, error }=await sb().rpc("short_days",{ p_scope:scope, p_from:null, p_to:null }); if(error) throw error; rows=data||[]; }
   catch(e){ $("sdList").innerHTML=`<div class="err">${esc(e.message)}</div>`; return; }
-  if(!rows.length){ $("sdList").innerHTML='<div class="card muted">No pilot-days under 12 acres in the last 45 days. 👍</div>'; return; }
-  $("sdList").innerHTML=`<div class="card"><div class="row" style="margin-bottom:6px"><b>${rows.length}</b><span class="muted" style="margin-left:6px">short day${rows.length===1?'':'s'} · ${rows.filter(r=>!r.reason).length} without a reason</span></div>
-    <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th style="min-width:260px">Reason</th>${editable?'<th></th>':''}</tr></thead>
-    <tbody>${rows.map((r,i)=>`<tr>
-      <td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.pilot_name||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td>
-      <td>${editable?`<input class="in sdr" data-i="${i}" value="${esc(r.reason||"")}" placeholder="Reason for the short day" style="width:100%">`:(r.reason?esc(r.reason):'<span class="muted">—</span>')}</td>
-      ${editable?`<td><button class="btn sm" data-save="${i}">Save</button></td>`:''}</tr>`).join("")}</tbody></table></div></div>`;
-  if(editable){
-    $("sdList").querySelectorAll("[data-save]").forEach(b=>b.addEventListener("click",async()=>{
-      const i=+b.getAttribute("data-save"), r=rows[i];
-      const reason=$("sdList").querySelector(`.sdr[data-i="${i}"]`).value.trim();
-      b.disabled=true; b.textContent="…";
-      const { error }=await sb().rpc("set_short_day_reason",{ p_date:r.entry_date, p_location:r.location_id, p_pilot_name:r.pilot_name, p_acres:r.acres, p_reason:reason||null });
-      b.disabled=false; b.textContent="Save";
-      if(error){ alert(error.message); return; } r.reason=reason; window.OPS.flashTop("Saved ✓");
-    }));
+  function draw(){
+    const activeOnly=$("sdActive").checked;
+    const list=activeOnly?rows.filter(r=>r.active):rows;
+    if(!list.length){ $("sdList").innerHTML=`<div class="card muted">No ${activeOnly?'active ':''}pilot-days under 12 acres in the last 45 days. 👍</div>`; return; }
+    $("sdList").innerHTML=`<div class="card"><div class="row" style="margin-bottom:6px"><b>${list.length}</b><span class="muted" style="margin-left:6px">short day${list.length===1?'':'s'} · ${list.filter(r=>!r.reason).length} without a reason</span></div>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th style="min-width:260px">Reason</th>${editable?'<th></th>':''}</tr></thead>
+      <tbody>${list.map((r)=>{ const i=rows.indexOf(r); return `<tr>
+        <td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}${r.active?'':' <span class="chip muted" style="font-size:10px">closed</span>'}</td><td>${esc(r.pilot_name||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td>
+        <td>${editable?`<input class="in sdr" data-i="${i}" value="${esc(r.reason||"")}" placeholder="Reason for the short day" style="width:100%">`:(r.reason?esc(r.reason):'<span class="muted">—</span>')}</td>
+        ${editable?`<td><button class="btn sm" data-save="${i}">Save</button></td>`:''}</tr>`; }).join("")}</tbody></table></div></div>`;
+    if(editable){
+      $("sdList").querySelectorAll("[data-save]").forEach(b=>b.addEventListener("click",async()=>{
+        const i=+b.getAttribute("data-save"), r=rows[i];
+        const reason=$("sdList").querySelector(`.sdr[data-i="${i}"]`).value.trim();
+        b.disabled=true; b.textContent="…";
+        const { error }=await sb().rpc("set_short_day_reason",{ p_date:r.entry_date, p_location:r.location_id, p_pilot_name:r.pilot_name, p_acres:r.acres, p_reason:reason||null });
+        b.disabled=false; b.textContent="Save";
+        if(error){ alert(error.message); return; } r.reason=reason; window.OPS.flashTop("Saved ✓");
+      }));
+    }
   }
+  $("sdActive").addEventListener("change",draw);
+  draw();
 }
 
 window.OPS.routes.short_days        = ()=>render("internal");

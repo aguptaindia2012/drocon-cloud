@@ -64,23 +64,35 @@ async function clientDashboard(){
   m.innerHTML=`<div class="eyebrow">Client Portal</div><h1>Acre Dashboard</h1>
     <div class="callout">Live view of the acres sprayed for your locations. Figures update as DroCon Bharat approves each day's work.</div>
     <div id="cdBody" class="muted">Loading…</div>`;
-  let rows, locs;
-  try{ [rows, locs] = await Promise.all([feed(), sb().rpc("my_client_locations").then(r=>r.data||[])]); }
+  let rows, locs, acts, shorts;
+  try{ [rows, locs, acts, shorts] = await Promise.all([
+    feed(),
+    sb().rpc("my_client_locations").then(r=>r.data||[]),
+    sb().rpc("client_active_assignments").then(r=>r.data||[]),
+    sb().rpc("short_days",{p_scope:"client",p_from:null,p_to:null}).then(r=>r.data||[])
+  ]); }
   catch(e){ $("cdBody").innerHTML=`<div class="err">${esc(e.message)}</div>`; return; }
   if(!locs.length){ $("cdBody").innerHTML='<div class="card muted">No locations have been assigned to your account yet. Please contact DroCon Bharat.</div>'; return; }
+  // reason lookup for hover tooltips: location_id | pilot | date -> reason
+  const reasonMap={}; (shorts||[]).forEach(s=>{ if(s.reason) reasonMap[`${s.location_id}|${s.pilot_name}|${s.entry_date}`]=s.reason; });
   const farmers=new Set(rows.map(r=>(r.farmer_name||"").trim().toLowerCase()).filter(Boolean)).size;
   // ---- this week (last 7 days): acres by location & pilot ----
-  const since=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
-  const last7=rows.filter(r=>r.entry_date>=since);
-  const wLoc={}, dSet=new Set(), dayTot={};
-  last7.forEach(r=>{ const d=r.entry_date; dSet.add(d); const k=r.location_name||"(none)"; const p=(r.pilot||"").trim()||"(unassigned)";
+  // Fixed 7-day axis so zero days show as dots.
+  const dayList=[]; for(let i=6;i>=0;i--){ dayList.push(new Date(Date.now()-i*86400000).toISOString().slice(0,10)); }
+  const inWeek=new Set(dayList);
+  const wLoc={}, dayTot={};   // wLoc keyed by location_id -> {name, days, pilots}
+  // seed every ASSIGNED location so it shows even with no sprays this week
+  locs.forEach(l=>{ wLoc[l.id]={name:l.name, days:{}, pilots:{}}; });
+  // seed ACTIVE pilots at each location so they show even with zero
+  (acts||[]).forEach(a=>{ const w=wLoc[a.location_id]||(wLoc[a.location_id]={name:a.location_name,days:{},pilots:{}}); const p=(a.pilot_name||"").trim()||"(unassigned)"; w.pilots[p]=w.pilots[p]||{}; });
+  rows.filter(r=>inWeek.has(r.entry_date)).forEach(r=>{ const d=r.entry_date, lid=r.location_id, p=(r.pilot||"").trim()||"(unassigned)";
     dayTot[d]=(dayTot[d]||0)+num(r.acres);
-    wLoc[k]=wLoc[k]||{days:{},pilots:{}};
-    wLoc[k].days[d]=(wLoc[k].days[d]||0)+num(r.acres);
-    wLoc[k].pilots[p]=wLoc[k].pilots[p]||{}; wLoc[k].pilots[p][d]=(wLoc[k].pilots[p][d]||0)+num(r.acres);
+    const w=wLoc[lid]||(wLoc[lid]={name:r.location_name||"(none)",days:{},pilots:{}});
+    w.days[d]=(w.days[d]||0)+num(r.acres);
+    w.pilots[p]=w.pilots[p]||{}; w.pilots[p][d]=(w.pilots[p][d]||0)+num(r.acres);
   });
-  const dayList=[...dSet].sort();
   const grand=dayList.reduce((s,d)=>s+(dayTot[d]||0),0);
+  const cell=(lid,p,d,v)=>{ const reason=reasonMap[`${lid}|${p}|${d}`]; const t=reason?` title="${esc(reason)}" style="cursor:help;text-decoration:underline dotted"`:''; return `<span${t}>${v!=null?v.toFixed(1):'·'}</span>`; };
   // ---- rows for the expandable report ----
   const drows=rows.map(r=>({location:r.location_name||"(none)", pilot:(r.pilot||"").trim()||"(unassigned)", entry_date:r.entry_date, acres:num(r.acres), farmer:num(r.farmer_amount), client:num(r.client_amount)}));
   const farmerTot=rows.reduce((s,r)=>s+num(r.farmer_amount),0), clientTot=rows.reduce((s,r)=>s+num(r.client_amount),0);
@@ -94,16 +106,16 @@ async function clientDashboard(){
       <div class="stat"><div class="n">${farmers}</div><div class="l">Farmers served</div></div>
     </div>
     <div class="card"><h3>This week — acres by location &amp; pilot</h3>
-      <p class="muted" style="margin-top:-4px">Last 7 days. Each location lists its pilots below it. A dot (·) means no spray that day.</p>
-      ${dayList.length?`<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
+      <p class="muted" style="margin-top:-4px">Last 7 days, all your active locations &amp; pilots. A dot (·) = no spray that day. Underlined numbers have a short-day reason — hover to read it.</p>
+      <div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
       <tbody>
         <tr style="background:var(--charcoal);color:#fff"><td><b>ALL LOCATIONS — daily total</b></td>${dayList.map(d=>`<td class="num"><b>${dayTot[d]?dayTot[d].toFixed(1):'·'}</b></td>`).join("")}<td class="num"><b>${grand.toFixed(1)}</b></td></tr>
-        ${Object.keys(wLoc).sort().map(k=>{ const L=wLoc[k]; const tot=dayList.reduce((s,d)=>s+(L.days[d]||0),0);
-          const locRow=`<tr style="background:var(--grey)"><td><b>${esc(k)}</b></td>${dayList.map(d=>`<td class="num">${L.days[d]?L.days[d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`;
+        ${Object.keys(wLoc).sort((a,b)=>(wLoc[a].name||"").localeCompare(wLoc[b].name||"")).map(lid=>{ const L=wLoc[lid]; const tot=dayList.reduce((s,d)=>s+(L.days[d]||0),0);
+          const locRow=`<tr style="background:var(--grey)"><td><b>${esc(L.name)}</b></td>${dayList.map(d=>`<td class="num">${L.days[d]?L.days[d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`;
           const pr=Object.keys(L.pilots).sort().map(p=>{ const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
-            return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${P[d]!=null?P[d].toFixed(1):'·'}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
+            return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${cell(lid,p,d,P[d]!=null?P[d]:null)}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
           return locRow+pr;
-        }).join("")}</tbody></table></div>`:'<div class="muted">No sprays in the last 7 days.</div>'}</div>
+        }).join("")}</tbody></table></div></div>
     <div class="card"><h3>Acre report</h3>
       <p class="muted" style="margin-top:-4px">Expand any row to drill down.</p>
       <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-drill="loc">By Location</button><button class="btn sm" data-drill="date">By Date</button><button class="btn sm" data-drill="pilot">By Pilot</button></div>
