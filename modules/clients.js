@@ -19,7 +19,43 @@ async function clientPortalExtras(rec, host){
       <label style="display:block;margin-top:6px">NDA reference / note</label>
       <input id="cpExpNote" class="in" style="max-width:420px" placeholder="e.g. NDA signed 2026-09-18">
       <div style="margin-top:8px"><button class="btn sm" id="cpExpSave">Save download setting</button> <span id="cpExpOut" class="muted" style="font-size:12px"></span></div>
-    </div></div>`;
+    </div></div>
+    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Portal logins (POCs)</h3>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">Authorise one or more people from the client to access this portal. Each email gets its own login and sees this client's assigned locations.</div>
+      <div id="cpPoc" class="muted">Loading…</div>
+      <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+        <input id="cpPocName" class="in" placeholder="Contact name" style="max-width:180px">
+        <input id="cpPocEmail" class="in" type="email" placeholder="email@company.com" style="max-width:240px">
+        <button class="btn green sm" id="cpPocAdd">Add &amp; create login</button>
+      </div>
+      <div id="cpPocOut" style="margin-top:8px"></div></div>`;
+  // ---- POC logins (multiple emails per client) ----
+  async function loadPocs(){
+    const { data }=await sb.from("client_pocs").select("*").eq("client_id",rec.id).order("created_at");
+    const pocs=data||[];
+    $("cpPoc").innerHTML = pocs.length ? `<div style="border:1px solid var(--line);border-radius:8px;padding:6px">${pocs.map(p=>`<div class="row" style="justify-content:space-between;padding:2px 0"><span>${esc(p.name||"")} <span class="muted">${esc(p.email)}</span></span><button class="btn sm ghost" data-poc="${esc(p.email)}">Remove</button></div>`).join("")}</div>` : '<div class="muted">No POC logins yet.</div>';
+    $("cpPoc").querySelectorAll("[data-poc]").forEach(b=>b.addEventListener("click",async()=>{
+      const email=b.getAttribute("data-poc");
+      if(!confirm("Remove "+email+" from this client's POC list? (Their login is not deleted — reset or disable it separately if needed.)")) return;
+      const { error }=await sb.from("client_pocs").delete().eq("client_id",rec.id).eq("email",email);
+      if(error){ alert(error.message); return; } loadPocs();
+    }));
+  }
+  loadPocs();
+  $("cpPocAdd").addEventListener("click",async()=>{
+    const email=($("cpPocEmail").value||"").trim().toLowerCase(), name=($("cpPocName").value||"").trim(), out=$("cpPocOut");
+    if(!email){ out.innerHTML='<span class="err">Enter an email.</span>'; return; }
+    $("cpPocAdd").disabled=true;
+    try{
+      const { error }=await sb.from("client_pocs").upsert({client_id:rec.id, email, name:name||null}); if(error) throw error;
+      const r=await window.OPS.accountAccess.adminCall({ action:"create", email, full_name:name||"", access:"client", party_id:rec.id });
+      out.innerHTML = r.temp_password
+        ? `<div class="card" style="background:#fbfdf8"><b>Login created ✓</b><div style="font-size:13px;margin-top:4px">Email: <code>${esc(email)}</code><br>Temporary password: <code style="font-size:15px">${esc(r.temp_password)}</code></div><div class="muted" style="font-size:12px;margin-top:6px">Share securely (not via the messenger). They sign in and change it.</div></div>`
+        : '<div class="card" style="background:#fbfdf8">An account already existed for this email — it is now linked as a client POC.</div>';
+      $("cpPocEmail").value=""; $("cpPocName").value=""; loadPocs();
+    }catch(e){ out.innerHTML='<span class="err">'+esc(e.message)+'</span>'; }
+    $("cpPocAdd").disabled=false;
+  });
   $("cpExp").checked = !!rec.portal_export_allowed;
   $("cpExpNote").value = rec.portal_export_note||"";
   $("cpExpSave").addEventListener("click",async()=>{
