@@ -20,6 +20,43 @@ async function feed(from,to){
   if(error) throw error; return data||[];
 }
 
+/* ---- expandable drill-down (ported from the internal Acre Tracker) ---------- */
+function sortChildKeys(c, mode){ const ks=Object.keys(c);
+  if(mode==="keyDesc") return ks.sort().reverse();
+  if(mode==="acres")   return ks.sort((x,y)=>c[y].a-c[x].a);
+  return ks.sort((x,y)=>c[y].r-c[x].r); // 'rev' default
+}
+function drillTable(rows, defs, prefix, header){
+  const root={a:0,r:0,c:{}};
+  (rows||[]).forEach(row=>{ const a=num(row.acres), rv=num(row.revenue); let node=root; node.a+=a; node.r+=rv;
+    defs.forEach(d=>{ const k=d.get(row)||"—"; node.c[k]=node.c[k]||{a:0,r:0,c:{}}; node=node.c[k]; node.a+=a; node.r+=rv; }); });
+  if(!Object.keys(root.c).length) return '<div class="muted">No data.</div>';
+  const out=[]; const idRef={n:0};
+  (function walk(node, depth, parentId){
+    sortChildKeys(node.c, defs[depth].sort).forEach(k=>{ const child=node.c[k]; const id=prefix+(idRef.n++);
+      const leaf=depth===defs.length-1; const d=defs[depth];
+      const lbl=d.label?d.label(k):k; const txt=d.bold?`<b>${esc(lbl)}</b>`:esc(lbl);
+      const caret=leaf?'':'<span class="dcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> ';
+      out.push(`<tr class="drow ${leaf?'dleaf':'dgrp'}" data-id="${id}" data-parent="${parentId||''}" style="display:${depth===0?'':'none'};${leaf?'':'cursor:pointer'};${depth===1?'background:#f7f8f6':''}">`
+        +`<td style="padding-left:${4+depth*24}px"${leaf?' class="muted"':''}>${caret}${leaf?esc(lbl):txt}</td>`
+        +`<td class="num">${child.a.toFixed(1)}</td><td class="num">${d.bold?'<b>'+money(child.r)+'</b>':money(child.r)}</td></tr>`);
+      if(!leaf) walk(child, depth+1, id);
+    });
+  })(root,0,"");
+  return `<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>${esc(header)}</th><th class="num">Acres</th><th class="num">Value</th></tr></thead><tbody>${out.join("")}</tbody></table></div>`;
+}
+function wireDrills(host){
+  if(!host) return;
+  const hideDesc=(id)=>{ host.querySelectorAll('.drow[data-parent="'+id+'"]').forEach(r=>{ r.style.display="none"; const c=r.querySelector(".dcar"); if(c)c.textContent="▸"; hideDesc(r.getAttribute("data-id")); }); };
+  host.querySelectorAll(".dgrp").forEach(tr=>tr.addEventListener("click",()=>{
+    const id=tr.getAttribute("data-id");
+    const kids=host.querySelectorAll('.drow[data-parent="'+id+'"]');
+    const show = kids.length && kids[0].style.display==="none";
+    if(show) kids.forEach(k=>k.style.display=""); else hideDesc(id);
+    const car=tr.querySelector(".dcar"); if(car) car.textContent=show?"▾":"▸";
+  }));
+}
+
 /* ------------------------------------------------------------- DASHBOARD --- */
 async function clientDashboard(){
   const m=$("main");
@@ -30,11 +67,21 @@ async function clientDashboard(){
   try{ [rows, locs] = await Promise.all([feed(), sb().rpc("my_client_locations").then(r=>r.data||[])]); }
   catch(e){ $("cdBody").innerHTML=`<div class="err">${esc(e.message)}</div>`; return; }
   if(!locs.length){ $("cdBody").innerHTML='<div class="card muted">No locations have been assigned to your account yet. Please contact DroCon Bharat.</div>'; return; }
-  const byLoc={}; rows.forEach(r=>{ const k=r.location_name||"(none)"; (byLoc[k]=byLoc[k]||{acres:0,amount:0,last:null}); byLoc[k].acres+=num(r.acres); byLoc[k].amount+=num(r.amount); if(!byLoc[k].last||r.entry_date>byLoc[k].last) byLoc[k].last=r.entry_date; });
   const farmers=new Set(rows.map(r=>(r.farmer_name||"").trim().toLowerCase()).filter(Boolean)).size;
-  // recent 14 days
-  const byDay={}; rows.forEach(r=>{ byDay[r.entry_date]=(byDay[r.entry_date]||0)+num(r.acres); });
-  const days=Object.keys(byDay).sort().reverse().slice(0,14);
+  // ---- this week (last 7 days): acres by location & pilot ----
+  const since=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const last7=rows.filter(r=>r.entry_date>=since);
+  const wLoc={}, dSet=new Set(), dayTot={};
+  last7.forEach(r=>{ const d=r.entry_date; dSet.add(d); const k=r.location_name||"(none)"; const p=(r.pilot||"").trim()||"(unassigned)";
+    dayTot[d]=(dayTot[d]||0)+num(r.acres);
+    wLoc[k]=wLoc[k]||{days:{},pilots:{}};
+    wLoc[k].days[d]=(wLoc[k].days[d]||0)+num(r.acres);
+    wLoc[k].pilots[p]=wLoc[k].pilots[p]||{}; wLoc[k].pilots[p][d]=(wLoc[k].pilots[p][d]||0)+num(r.acres);
+  });
+  const dayList=[...dSet].sort();
+  const grand=dayList.reduce((s,d)=>s+(dayTot[d]||0),0);
+  // ---- rows for the expandable report ----
+  const drows=rows.map(r=>({location:r.location_name||"(none)", pilot:(r.pilot||"").trim()||"(unassigned)", entry_date:r.entry_date, acres:num(r.acres), revenue:num(r.amount)}));
   $("cdBody").innerHTML=`
     <div class="statrow">
       <div class="stat"><div class="n">${acresOf(rows).toFixed(1)}</div><div class="l">Total acres</div></div>
@@ -42,10 +89,30 @@ async function clientDashboard(){
       <div class="stat"><div class="n">${locs.length}</div><div class="l">Locations</div></div>
       <div class="stat"><div class="n">${farmers}</div><div class="l">Farmers served</div></div>
     </div>
-    <div class="card"><h3>By location</h3><div style="overflow:auto"><table><thead><tr><th>Location</th><th class="num">Acres</th><th class="num">Value</th><th>Last spray</th></tr></thead>
-      <tbody>${Object.entries(byLoc).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v.acres.toFixed(1)}</td><td class="num">${money(v.amount)}</td><td>${v.last?fmtDate(v.last):''}</td></tr>`).join("")||'<tr><td colspan="4" class="muted">No approved data yet.</td></tr>'}</tbody></table></div></div>
-    <div class="card"><h3>Recent days</h3><div style="overflow:auto"><table><thead><tr><th>Date</th><th class="num">Acres</th></tr></thead>
-      <tbody>${days.map(d=>`<tr><td>${fmtDate(d)}</td><td class="num">${byDay[d].toFixed(1)}</td></tr>`).join("")||'<tr><td colspan="2" class="muted">No approved data yet.</td></tr>'}</tbody></table></div></div>`;
+    <div class="card"><h3>This week — acres by location &amp; pilot</h3>
+      <p class="muted" style="margin-top:-4px">Last 7 days. Each location lists its pilots below it. A dot (·) means no spray that day.</p>
+      ${dayList.length?`<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
+      <tbody>
+        <tr style="background:var(--charcoal);color:#fff"><td><b>ALL LOCATIONS — daily total</b></td>${dayList.map(d=>`<td class="num"><b>${dayTot[d]?dayTot[d].toFixed(1):'·'}</b></td>`).join("")}<td class="num"><b>${grand.toFixed(1)}</b></td></tr>
+        ${Object.keys(wLoc).sort().map(k=>{ const L=wLoc[k]; const tot=dayList.reduce((s,d)=>s+(L.days[d]||0),0);
+          const locRow=`<tr style="background:var(--grey)"><td><b>${esc(k)}</b></td>${dayList.map(d=>`<td class="num">${L.days[d]?L.days[d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`;
+          const pr=Object.keys(L.pilots).sort().map(p=>{ const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
+            return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${P[d]!=null?P[d].toFixed(1):'·'}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
+          return locRow+pr;
+        }).join("")}</tbody></table></div>`:'<div class="muted">No sprays in the last 7 days.</div>'}</div>
+    <div class="card"><h3>Acre report</h3>
+      <p class="muted" style="margin-top:-4px">Expand any row to drill down.</p>
+      <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-drill="loc">By Location</button><button class="btn sm" data-drill="date">By Date</button><button class="btn sm" data-drill="pilot">By Pilot</button></div>
+      <div id="cdDrill"></div></div>`;
+  const dLoc={get:r=>r.location,sort:"rev",bold:true}, dPil={get:r=>r.pilot,sort:"acres"}, dPilB={get:r=>r.pilot,sort:"acres",bold:true},
+        dLocN={get:r=>r.location,sort:"rev"}, dDate={get:r=>r.entry_date,label:d=>fmtDate(d),sort:"keyDesc"}, dDateB={get:r=>r.entry_date,label:d=>fmtDate(d),sort:"keyDesc",bold:true};
+  const VIEWS={ loc:[[dLoc,dPil,dDate],"Location / Pilot / Date"], date:[[dDateB,dLocN,dPil],"Date / Location / Pilot"], pilot:[[dPilB,dLocN,dDate],"Pilot / Location / Date"] };
+  function drill(kind){ const [defs,hdr]=VIEWS[kind]||VIEWS.loc;
+    $("cdDrill").innerHTML=drillTable(drows, defs, "d"+kind, hdr); wireDrills($("cdDrill"));
+    document.querySelectorAll("[data-drill]").forEach(b=>b.style.fontWeight=(b.getAttribute("data-drill")===kind)?"700":"");
+  }
+  document.querySelectorAll("[data-drill]").forEach(b=>b.addEventListener("click",()=>drill(b.getAttribute("data-drill"))));
+  drill("loc");
 }
 
 /* --------------------------------------------------------------- ENTRIES --- */

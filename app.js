@@ -341,6 +341,14 @@ window.OPS.canSee = canSee;
 function visibleSections(){
   return SECTIONS.filter(s => TOOLS.some(t=>t.section===s.key && canSee(t)));
 }
+// The shared "portal" section reads correctly for each external party type.
+function secLabel(s){
+  if(s.key==="portal" && profile && profile.is_external){
+    return ({client:"Client Portal", vendor:"Vendor Portal", pilot:"Pilot Portal",
+             authorized_partner:"Partner Portal", consultant:"Partner Portal"})[profile.party_type] || s.label;
+  }
+  return s.label;
+}
 function renderNav(){
   // top section bar — Home is the first tab
   const secs = visibleSections();
@@ -348,7 +356,7 @@ function renderNav(){
   $("sectionBar").innerHTML = homeBtn + secs.map(s=>{
     let badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
     if(s.key==="messenger" && window.OPS.chatUnread) badge = ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">💬 ${window.OPS.chatUnread}</span>`;
-    return `<button data-sec="${s.key}" class="${(window.OPS.currentTool!=='home' && s.key===window.OPS.currentSection)?'active':''}">${esc(s.label)}${badge}</button>`;
+    return `<button data-sec="${s.key}" class="${(window.OPS.currentTool!=='home' && s.key===window.OPS.currentSection)?'active':''}">${esc(secLabel(s))}${badge}</button>`;
   }).join("");
   $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{
     const k=b.getAttribute("data-sec"); if(k==="__home") goHome(); else openSection(k); }));
@@ -667,5 +675,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "174";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "175";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
