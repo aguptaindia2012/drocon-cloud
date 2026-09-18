@@ -4,7 +4,51 @@
    Note; Authorized Partners feed the location-based search (Phase 3 search UI).
    ============================================================================ */
 (function(){
-const { esc, money } = window.OPS.helpers;
+const { $, esc, money } = window.OPS.helpers;
+
+/* Client Portal admin: assign which locations a client login can see, and the
+   NDA-gated Excel download toggle. Rendered under the Clients edit form. */
+async function clientPortalExtras(rec, host){
+  if(!(window.OPS.isAdmin && window.OPS.isAdmin())){ return; }
+  const sb=window.OPS.sb;
+  host.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Client portal</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Create the client's login in <b>Account access</b> above (access type <b>Client portal</b>), then pick the locations they may see. The live view is always allowed; <b>downloads stay off until you enable them after an NDA</b>.</div>
+    <div id="cpLocs" class="muted">Loading locations…</div>
+    <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+      <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="cpExp" style="width:auto"> Allow Excel downloads (only after NDA is signed)</label>
+      <label style="display:block;margin-top:6px">NDA reference / note</label>
+      <input id="cpExpNote" class="in" style="max-width:420px" placeholder="e.g. NDA signed 2026-09-18">
+      <div style="margin-top:8px"><button class="btn sm" id="cpExpSave">Save download setting</button> <span id="cpExpOut" class="muted" style="font-size:12px"></span></div>
+    </div></div>`;
+  $("cpExp").checked = !!rec.portal_export_allowed;
+  $("cpExpNote").value = rec.portal_export_note||"";
+  $("cpExpSave").addEventListener("click",async()=>{
+    $("cpExpSave").disabled=true;
+    const { error }=await sb.from("clients").update({ portal_export_allowed:$("cpExp").checked, portal_export_note:$("cpExpNote").value||null }).eq("id",rec.id);
+    $("cpExpSave").disabled=false;
+    $("cpExpOut").textContent = error ? ("Error: "+error.message) : "Saved ✓";
+  });
+  const [allLocs, assigned] = await Promise.all([
+    sb.from("spray_locations").select("id,name,district,state").order("name").then(r=>r.data||[]),
+    sb.from("client_locations").select("location_id").eq("client_id",rec.id).then(r=>(r.data||[]).map(x=>x.location_id))
+  ]);
+  const set=new Set(assigned), locsHost=$("cpLocs");
+  if(!allLocs.length){ locsHost.innerHTML='<div class="muted">No locations exist yet — add them in Trackers → Locations first.</div>'; return; }
+  locsHost.innerHTML=`<div style="max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">
+    ${allLocs.map(l=>`<label style="display:flex;gap:8px;align-items:center;padding:2px 0"><input type="checkbox" class="cpL" value="${l.id}" ${set.has(l.id)?'checked':''} style="width:auto"><span>${esc(l.name)}${l.district?` <span class="muted">· ${esc(l.district)}</span>`:''}</span></label>`).join("")}</div>
+    <div style="margin-top:8px"><button class="btn sm green" id="cpLocSave">Save assigned locations</button> <span id="cpLocOut" class="muted" style="font-size:12px"></span></div>`;
+  $("cpLocSave").addEventListener("click",async()=>{
+    const now=new Set(Array.from(document.querySelectorAll(".cpL:checked")).map(e=>e.value));
+    const toAdd=[...now].filter(id=>!set.has(id)), toDel=[...set].filter(id=>!now.has(id));
+    $("cpLocSave").disabled=true;
+    try{
+      if(toAdd.length){ const { error }=await sb.from("client_locations").insert(toAdd.map(location_id=>({client_id:rec.id,location_id}))); if(error) throw error; }
+      if(toDel.length){ const { error }=await sb.from("client_locations").delete().eq("client_id",rec.id).in("location_id",toDel); if(error) throw error; }
+      set.clear(); now.forEach(id=>set.add(id)); $("cpLocOut").textContent="Saved ✓";
+    }catch(e){ $("cpLocOut").textContent="Error: "+e.message; }
+    $("cpLocSave").disabled=false;
+  });
+}
 
 const MSA_RESPONSIBILITIES = [
 "Authorized Partner responsibilities (as per the Master Service Agreement):",
@@ -21,6 +65,12 @@ window.OPS.routes.clients = window.OPS.makeRegistry({
   tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true, logView:true,
   orderBy:"firm_name",
   autoNumber:{ field:"client_ref", rpc:"next_client_code" },
+  formExtra:(rec,host)=>{
+    const a=document.createElement("div"), b=document.createElement("div");
+    host.appendChild(a); host.appendChild(b);
+    window.OPS.accountAccess.panel({mode:"client"})(rec,a);
+    clientPortalExtras(rec,b);
+  },
   convertTo:{ tool:"vendors", label:"→ Also add as Vendor",
     map:r=>({ firm_name:r.firm_name||r.name, name:r.name, mobile:r.mobile, email:r.email, gstin:r.gstin,
       address:r.address, city:r.city||r.district, state:r.state, pincode:r.pincode, notes:r.notes,

@@ -10,7 +10,7 @@
 //   reset   { employee_id? | email | user_id }        -> reset to a new temp pw
 //
 // access: "internal" (My Space + internal tabs) | "vendor" | "authorized_partner"
-//         | "consultant" | "pilot"  (the last four are external portal logins).
+//         | "consultant" | "pilot" | "client"  (all but internal are external portals).
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -28,7 +28,7 @@ const CORS = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-const EXTERNAL = new Set(["vendor", "authorized_partner", "consultant", "pilot"]);
+const EXTERNAL = new Set(["vendor", "authorized_partner", "consultant", "pilot", "client"]);
 
 // Report which role the configured key maps to (for diagnostics) without leaking it.
 function keyRole(k: string): string {

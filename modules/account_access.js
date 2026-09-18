@@ -29,6 +29,7 @@ const ALL_OPTS=[
   {v:"authorized_partner", label:"Authorized Partner portal (external)"},
   {v:"consultant",         label:"Consultant portal (external)"},
   {v:"pilot",              label:"Pilot portal (external)"},
+  {v:"client",             label:"Client portal (external)"},
 ];
 const LABEL=Object.fromEntries(ALL_OPTS.map(o=>[o.v,o.label]));
 

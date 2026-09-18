@@ -130,6 +130,7 @@ const TOOLS = [
   { key:"pilot_acre_approvals", section:"reviews", label:"Pilot Acres",  gate:"perm" },
   { key:"field_issues",         section:"reviews", label:"Field Issues", gate:"perm" },
   { key:"vendor_invoice_approvals", section:"reviews", label:"Vendor Invoices", gate:"perm" },
+  { key:"client_issue_queue",   section:"reviews", label:"Client Queries", gate:"perm" },
   // Partner Portal — visible ONLY to external (invite-only) partner logins.
   // `party` scopes a tool to specific external party types.
   { key:"portal_submit",       section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
@@ -143,6 +144,10 @@ const TOOLS = [
   { key:"vendor_invoice_new",  section:"portal", label:"Invoice DroCon", gate:"external", party:["vendor"] },
   { key:"vendor_invoices_mine",section:"portal", label:"My DroCon Invoices", gate:"external", party:["vendor"] },
   { key:"vendor_report",       section:"portal", label:"Vendor Report",  gate:"external", party:["vendor"] },
+  // Client Portal — external client logins (live acre view, replaces Excel sheets)
+  { key:"client_dashboard",    section:"portal", label:"Acre Dashboard", gate:"external", party:["client"] },
+  { key:"client_entries",      section:"portal", label:"Entries",        gate:"external", party:["client"] },
+  { key:"client_issues",       section:"portal", label:"My Queries",     gate:"external", party:["client"] },
   { key:"portal_help",         section:"portal", label:"Help & FAQs",    gate:"external" },
 ];
 window.OPS.TOOLS = TOOLS; window.OPS.SECTIONS = SECTIONS;
@@ -662,5 +667,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "173";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "174";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
