@@ -66,12 +66,13 @@ async function clientDashboard(){
   m.innerHTML=`<div class="eyebrow">Client Portal</div><h1>Acre Dashboard</h1>
     <div class="callout">Live view of the acres sprayed for your locations. Figures update as DroCon Bharat approves each day's work.</div>
     <div id="cdBody" class="muted">Loading…</div>`;
-  let rows, locs, acts, shorts;
-  try{ [rows, locs, acts, shorts] = await Promise.all([
+  let rows, locs, acts, shorts, summ;
+  try{ [rows, locs, acts, shorts, summ] = await Promise.all([
     feed(),
     sb().rpc("my_client_locations").then(r=>r.data||[]),
     sb().rpc("client_active_assignments").then(r=>r.data||[]),
-    sb().rpc("short_days",{p_scope:"client",p_from:null,p_to:null}).then(r=>r.data||[])
+    sb().rpc("short_days",{p_scope:"client",p_from:null,p_to:null}).then(r=>r.data||[]),
+    sb().rpc("client_location_summary",{p_client:null}).then(r=>r.data||[])
   ]); }
   catch(e){ $("cdBody").innerHTML=`<div class="err">${esc(e.message)}</div>`; return; }
   if(!locs.length){ $("cdBody").innerHTML='<div class="card muted">No locations have been assigned to your account yet. Please contact DroCon Bharat.</div>'; return; }
@@ -118,6 +119,16 @@ async function clientDashboard(){
             return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${cell(lid,p,d,P[d]!=null?P[d]:null)}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
           return locRow+pr;
         }).join("")}</tbody></table></div></div>
+    <div class="card"><h3>Location summary</h3>
+      <p class="muted" style="margin-top:-4px">Per location: when spraying started, whether it's still active, days deployed (first spray → deactivation or today), total acres and the average acres per deployed day.</p>
+      <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Started</th><th>Status</th><th class="num">Days deployed</th><th class="num">Acres</th><th class="num">Avg/day</th></tr></thead>
+      <tbody>${(summ||[]).map(s=>`<tr>
+        <td>${esc(s.location_name||"")}</td>
+        <td>${s.start_date?fmtDate(s.start_date):'<span class="muted">—</span>'}</td>
+        <td>${s.active?'<span class="chip ok">Active</span>':(s.deactivated_on?('Deactivated '+fmtDate(s.deactivated_on)):'<span class="muted">Inactive</span>')}</td>
+        <td class="num">${s.days_deployed!=null?s.days_deployed:'—'}</td>
+        <td class="num">${num(s.acres).toFixed(1)}</td>
+        <td class="num">${s.avg_daily!=null?num(s.avg_daily).toFixed(1):'—'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No locations assigned.</td></tr>'}</tbody></table></div></div>
     <div class="card"><h3>Acre report</h3>
       <p class="muted" style="margin-top:-4px">Expand any row to drill down.</p>
       <p class="muted" style="margin-top:-8px;font-size:12px">Grouped by month — open the <b>Entries</b> tab for day-by-day detail.</p>
