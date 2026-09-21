@@ -111,6 +111,7 @@ function form(rec){
         <div class="field"><label>Active</label><select id="p_active">
           <option value="true" ${e.is_active!==false?'selected':''}>Yes</option>
           <option value="false" ${e.is_active===false?'selected':''}>No</option></select></div>
+        <div class="field"><label>Inactive from <span class="muted">(backdate ok)</span></label><input id="p_inactive_from" type="date" value="${e.inactive_from?esc(e.inactive_from):''}"></div>
       </div>
       <div class="row wrap"><button class="btn green" id="plSave">${rec?"Save changes":"Create pilot"}</button>
         <button class="btn" id="plCancel">Cancel</button>
@@ -147,7 +148,8 @@ function form(rec){
     const out={ vendor_id:$("p_vendor").value||null, name:$("p_name").value.trim(),
       phone:$("p_phone").value.trim()||null, email:$("p_email").value.trim()||null, rpc_no:$("p_rpc").value.trim()||null,
       drone_uin:$("p_uin").value.trim()||null, pan_no:$("p_pan").value.trim()||null,
-      aadhaar_no:$("p_aadhaar").value.trim()||null, is_active:$("p_active").value==="true" };
+      aadhaar_no:$("p_aadhaar").value.trim()||null, is_active:$("p_active").value==="true",
+      inactive_from: $("p_active").value==="true" ? null : ($("p_inactive_from").value || todayISO()) };
     if(!out.vendor_id){ $("plErr").textContent="Select the vendor who employs this pilot."; return; }
     if(!out.name){ $("plErr").textContent="Pilot name is required."; return; }
     $("plSave").disabled=true;
@@ -178,8 +180,9 @@ function renderAssign(p){
   host.innerHTML=`<h3>Location assignment</h3>
     ${active?`<div class="callout"><b>Currently at ${esc((active.loc&&active.loc.name)||'')}</b>
         since ${fmtDate(active.start_date)}.
-        <div class="row wrap" style="margin-top:8px">
+        <div class="row wrap" style="margin-top:8px;gap:8px;align-items:flex-end">
           <button class="btn sm" data-pause="${active.id}">⏸ Pause (to switch or correct history)</button>
+          <div class="field" style="margin:0"><label>Close effective date <span class="muted">(backdate ok)</span></label><input type="date" id="clEnd" value="${todayISO()}"></div>
           <button class="btn sm" data-close="${active.id}" style="color:#a3322a;border-color:#e4b4b4">🔒 Close location</button>
         </div></div>`
       :`<div class="callout warn">This pilot has <b>no active location</b>. Assign one so acre data can be entered for them.
@@ -209,7 +212,7 @@ function renderAssign(p){
   host.querySelectorAll("[data-react]").forEach(b=>b.addEventListener("click",()=>rpc("reactivate_pilot_assignment",{p_id:b.getAttribute("data-react")},p)));
   host.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>{
     if(!confirm("Close this location for the pilot? No further acre data can be entered for it.")) return;
-    rpc("close_pilot_assignment",{p_id:b.getAttribute("data-close"),p_note:null},p); }));
+    rpc("close_pilot_assignment",{p_id:b.getAttribute("data-close"),p_note:null,p_end_date:($("clEnd")&&$("clEnd").value)||null},p); }));
   if($("asGo")) $("asGo").addEventListener("click",async()=>{
     const loc=$("asLoc").value; if(!loc){ alert("Choose a location."); return; }
     rpc("assign_pilot_location",{p_pilot:p.id,p_location:loc,p_start:$("asStart").value||todayISO()},p);
