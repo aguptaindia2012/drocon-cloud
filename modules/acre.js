@@ -174,35 +174,46 @@ async function dashboard(){
         return locRow+pilotRows;
       }).join("")}</tbody></table></div>`
         :'<div class="muted">No sprays in the last 7 days.</div>'}</div>
-    ${below.length?`<div class="card"><h3>⚠ Pilot-days below ${MIN_ACRES} acres (last 7 days)</h3>
-      <p class="muted" style="margin-top:-4px">Use this when raising under-supply with the client.</p>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Short by</th><th>Band</th><th>Reason</th></tr></thead>
-      <tbody>${below.sort((a,b)=>a.day<b.day?1:-1).map(x=>`<tr><td>${fmtDate(x.day)}</td><td>${esc(x.loc)}</td><td>${esc(x.pilot)}</td>
-        <td class="num" style="color:${x.band.color};font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td>
-        <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td>
-        <td class="muted" style="font-size:12px">${esc(sdReason[`${x.day}|${x.loc}|${x.pilot}`]||"")}</td></tr>`).join("")}</tbody></table></div></div>`:''}
-    <div class="card"><h3>⚠ Active pilots idle &gt; 3 days</h3>
-      <p class="muted" style="margin-top:-4px">Active in the registers but with no approved spray for over 3 days — review and update their status in <b>Registers → Pilots</b> (or close the assignment).</p>
-      ${idle.length?`<div style="overflow:auto"><table><thead><tr><th>Pilot</th><th>Vendor</th><th>Location</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>
-      <tbody>${idle.map(r=>`<tr><td>${esc(r.pilot_name||"")}</td><td>${esc(r.vendor_name||"")}</td><td>${esc(r.location_name||"")}</td>
-        <td>${r.last_spray?fmtDate(r.last_spray):'<span style="color:#a3322a;font-weight:700">Never</span>'}</td>
-        <td class="num" style="font-weight:700;color:#a3322a">${r.idle_days}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">All active pilots sprayed within the last 3 days. 👍</div>'}</div>
-    <div class="card"><h3>⚠ Active locations idle &gt; 3 days</h3>
-      <p class="muted" style="margin-top:-4px">Locations with active pilots but no approved spray for over 3 days — chase for work or close the location in <b>Registers → Locations</b>.</p>
-      ${idleLoc.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District</th><th class="num">Active pilots</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>
-      <tbody>${idleLoc.map(r=>`<tr><td>${esc(r.location_name||"")}</td><td>${esc(r.client_name||"")}</td><td>${esc(r.district||"")}</td>
-        <td class="num">${r.active_pilots}</td>
-        <td>${r.last_spray?fmtDate(r.last_spray):'<span style="color:#a3322a;font-weight:700">Never</span>'}</td>
-        <td class="num" style="font-weight:700;color:#a3322a">${r.idle_days}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">All active locations had work within the last 3 days. 👍</div>'}</div>
-    <div class="card"><h3>Monthly work</h3>
-      <p class="muted" style="margin-top:-4px">Click a <b>month</b> to see the locations worked; click a <b>location</b> to see the per-pilot split.</p>
-      ${drillTable(lmpData, [D_MONTH, D_LOC, D_PILOT], "mw", "Month / Location / Pilot")}</div>
-    <div class="card"><h3>Location-wise totals</h3>
-      <p class="muted" style="margin-top:-4px">Click a <b>location</b> to see its months; click a <b>month</b> to see the per-pilot split.</p>
-      ${drillTable(lmpData, [D_LOC, D_MONTH, D_PILOT], "lc", "Location / Month / Pilot")}
-      <p class="muted">Invoiced & balance are tracked globally in <b>Invoices &amp; Receivables</b>.</p></div>`;
+    <div class="card"><h3>Acre report &amp; alerts</h3>
+      <p class="muted" style="margin-top:-4px">Pick a view; click any row to drill down where available. Invoiced &amp; balance are tracked in <b>Invoices &amp; Receivables</b>.</p>
+      <div class="row wrap" style="gap:6px;margin-bottom:8px">
+        <button class="btn sm" data-ar="month">By Month</button><button class="btn sm" data-ar="loc">By Location</button><button class="btn sm" data-ar="pilot">By Pilot</button>
+        <button class="btn sm" data-ar="below">⚠ Below ${MIN_ACRES}ac${below.length?' ('+below.length+')':''}</button>
+        <button class="btn sm" data-ar="idlep">⚠ Idle pilots${idle.length?' ('+idle.length+')':''}</button>
+        <button class="btn sm" data-ar="idlel">⚠ Idle locations${idleLoc.length?' ('+idleLoc.length+')':''}</button>
+      </div>
+      <div id="arDrill"></div></div>`;
   const cm=months.slice().reverse();
-  wireDrills();
+  const D_PILOTB={get:r=>r.pilot||"(unassigned)", sort:"acres", bold:true};
+  const AR_VIEWS={ month:[[D_MONTH,D_LOC,D_PILOT],"Month / Location / Pilot"],
+                   loc:[[D_LOC,D_MONTH,D_PILOT],"Location / Month / Pilot"],
+                   pilot:[[D_PILOTB,D_MONTH,D_LOC],"Pilot / Month / Location"] };
+  function belowHTML(){ return below.length?`<p class="muted" style="margin-top:-4px">Pilot-days under ${MIN_ACRES} acres (last 7 days) — use when raising under-supply with the client.</p>
+    <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Short by</th><th>Band</th><th>Reason</th></tr></thead>
+    <tbody>${below.slice().sort((a,b)=>a.day<b.day?1:-1).map(x=>`<tr><td>${fmtDate(x.day)}</td><td>${esc(x.loc)}</td><td>${esc(x.pilot)}</td>
+      <td class="num" style="color:${x.band.color};font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td>
+      <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td>
+      <td class="muted" style="font-size:12px">${esc(sdReason[`${x.day}|${x.loc}|${x.pilot}`]||"")}</td></tr>`).join("")}</tbody></table></div>`
+    :'<div class="muted">All pilot-days met the '+MIN_ACRES+'-acre minimum in the last 7 days. 👍</div>'; }
+  function idlePHTML(){ return `<p class="muted" style="margin-top:-4px">Active in the registers but no approved spray for over 3 days — update status in <b>Registers → Pilots</b>.</p>
+    ${idle.length?`<div style="overflow:auto"><table><thead><tr><th>Pilot</th><th>Vendor</th><th>Location</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>
+    <tbody>${idle.map(r=>`<tr><td>${esc(r.pilot_name||"")}</td><td>${esc(r.vendor_name||"")}</td><td>${esc(r.location_name||"")}</td>
+      <td>${r.last_spray?fmtDate(r.last_spray):'<span style="color:#a3322a;font-weight:700">Never</span>'}</td>
+      <td class="num" style="font-weight:700;color:#a3322a">${r.idle_days}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">All active pilots sprayed within the last 3 days. 👍</div>'}`; }
+  function idleLHTML(){ return `<p class="muted" style="margin-top:-4px">Locations with active pilots but no approved spray for over 3 days — chase or close in <b>Registers → Locations</b>.</p>
+    ${idleLoc.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District</th><th class="num">Active pilots</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>
+    <tbody>${idleLoc.map(r=>`<tr><td>${esc(r.location_name||"")}</td><td>${esc(r.client_name||"")}</td><td>${esc(r.district||"")}</td>
+      <td class="num">${r.active_pilots}</td>
+      <td>${r.last_spray?fmtDate(r.last_spray):'<span style="color:#a3322a;font-weight:700">Never</span>'}</td>
+      <td class="num" style="font-weight:700;color:#a3322a">${r.idle_days}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">All active locations had work within the last 3 days. 👍</div>'}`; }
+  function arRender(kind){ const host=$("arDrill");
+    if(kind==='below') host.innerHTML=belowHTML();
+    else if(kind==='idlep') host.innerHTML=idlePHTML();
+    else if(kind==='idlel') host.innerHTML=idleLHTML();
+    else { const [defs,hdr]=AR_VIEWS[kind]||AR_VIEWS.month; host.innerHTML=drillTable(lmpData, defs, "ar"+kind, hdr); wireDrills(); }
+    document.querySelectorAll("[data-ar]").forEach(b=>b.style.fontWeight=(b.getAttribute("data-ar")===kind)?"700":""); }
+  document.querySelectorAll("[data-ar]").forEach(b=>b.addEventListener("click",()=>arRender(b.getAttribute("data-ar"))));
+  arRender("month");
   loadUnbilled();
   window.OPS.report.line("acMonthly", cm, cm.map(k=>byM[k].a), "Acres / month", "#599533");
   const topL=locs.slice(0,10);
