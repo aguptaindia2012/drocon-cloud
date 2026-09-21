@@ -203,7 +203,7 @@ async function vendorReport(){
 async function vendorInvoiceApprovals(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Review / Approvals</div><h1>Vendor Invoices</h1>
-    <div class="callout">Vendor invoices for approved acres, at the DroCon-set rates. <b>Approve</b> to create a Payable (pay via Accounting → Payables), or <b>Reject</b> to release the acres.</div>
+    <div class="callout">Vendor invoices for approved acres, at the <b>vendor's own rates</b> (check them against the agreement — you can adjust a vendor's rate card under <b>Finance → Vendor Rates</b>). <b>Approve</b> to create a Payable (net of any advance), or <b>Reject</b> to release the acres.</div>
     <div id="viaList" class="muted">Loading…</div>`;
   load();
   async function load(){

@@ -138,7 +138,7 @@ const TOOLS = [
   { key:"portal_mine",         section:"portal", label:"My Invoices",    gate:"external", party:["authorized_partner","consultant"] },
   { key:"vendor_dashboard",    section:"portal", label:"Acre Dashboard", gate:"external", party:["vendor"] },
   { key:"vendor_pilots",       section:"portal", label:"My Pilots",      gate:"external", party:["vendor"] },
-  { key:"vendor_acre_review",  section:"portal", label:"Acre Review",    gate:"external", party:["vendor"] },
+  { key:"vendor_acre_review",  section:"portal", label:"Pilot Reports",  gate:"external", party:["vendor"] },
   { key:"pilot_report",        section:"portal", label:"Report Acres",   gate:"external", party:["pilot"] },
   { key:"pilot_reports",       section:"portal", label:"My Reports",     gate:"external", party:["pilot"] },
   { key:"issue_report",        section:"portal", label:"Field Issues",   gate:"external", party:["pilot"] },
@@ -414,8 +414,18 @@ function secLabel(s){
 }
 function renderNav(){
   // top section bar — Home is the first tab
-  const secs = visibleSections();
   const homeBtn = `<button data-sec="__home" class="${window.OPS.currentTool==='home'?'active':''}">🏠 Home</button>`;
+  // External portal logins get a single FLAT tab bar — their portal tools become
+  // the top-level tabs (no redundant "Vendor/Client Portal" wrapper level).
+  if(isExternal()){
+    const ptools = TOOLS.filter(t=>t.section==="portal" && canSee(t));
+    $("sectionBar").innerHTML = homeBtn + ptools.map(t=>`<button data-tab="${t.key}" class="${(window.OPS.currentTool!=='home' && t.key===window.OPS.currentTool)?'active':''}">${esc(t.label)}</button>`).join("");
+    $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{ if(b.getAttribute("data-sec")==="__home") goHome(); }));
+    $("sectionBar").querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-tab"))));
+    $("nav").innerHTML="";
+    return;
+  }
+  const secs = visibleSections();
   $("sectionBar").innerHTML = homeBtn + secs.map(s=>{
     let badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
     if(s.key==="messenger" && window.OPS.chatUnread) badge = ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">💬 ${window.OPS.chatUnread}</span>`;
@@ -738,5 +748,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "196";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "199";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

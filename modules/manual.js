@@ -107,7 +107,7 @@ const FAQ_INTERNAL = [
   {q:"How do I set up a new project / location?", a:"In Registers, add the Client → Vendor → Pilots → Crops, then create the Location (Registers → Locations) with its Farmer rate + bill-to and Client rate + bill-to. See Resources → Guides & training for the step-by-step deck.", kw:"new project location setup client vendor pilot crop register order"},
   {q:"Farmer rate vs Client rate — when to use which?", a:"Farmer rate = what the farmer pays → 0% GST Bill of Supply. Client rate = a client/sponsor subsidy → 18% GST Tax Invoice. Set the Client rate to 0 when there is no client-side component.", kw:"farmer client rate gst bill of supply tax invoice subsidy 0"},
   {q:"A rate changed mid-season — how do I update it?", a:"On the Location → Crop-specific rates, add a NEW row with a later Effective-from date. Older entries keep the old rate; don't edit old rows or clone the location.", kw:"rate change effective date crop specific new row history"},
-  {q:"How do vendors and pilots report their own acres?", a:"Vendors add pilots and request logins (approve them under Review / Approvals → Pilot Logins). Pilots report acres; the vendor reviews; you approve under Review / Approvals → Pilot Acres, which posts them to the tracker at the DroCon rate.", kw:"vendor pilot portal report acres approve pilot logins acres self service"},
+  {q:"How do vendors and pilots report their own acres?", a:"Vendors add pilots and request logins (approve them under Review / Approvals → Pilot Logins). Pilots report acres, which go directly to DroCon — you verify and approve under Review / Approvals → Pilot Acres, posting them to the tracker. The vendor sees the status read-only (Awaiting approval → Approved).", kw:"vendor pilot portal report acres approve pilot logins acres self service verify"},
   {q:"Where do I set what we pay a vendor?", a:"Finance → Vendor Rates, per Vendor + Location + Crop, effective-dated. Vendors invoice their approved acres at these rates; approve under Review / Approvals → Vendor Invoices, which creates a Payable (pay via Accounting → Payables).", kw:"vendor rate payout finance vendor invoice payable approve"},
   {q:"How do pilots get the locations they can report on?", a:"A pilot can only report for locations they're assigned to (pilot ↔ location assignment). Assign them so their location appears in Report Acres.", kw:"pilot assign location report cannot see assignment"},
   {q:"Where are the step-by-step guides?", a:"Registers → Resources → Guides & training holds the internal Workflow Guide and the Vendor & Pilot Portal training deck to share with vendors.", kw:"guide training resources workflow deck ppt document"},
@@ -126,9 +126,11 @@ const FAQ_VENDORPILOT = [
   {q:"(Vendor) How do I add a pilot and give them a login?", a:"My Pilots → add the pilot (name, mobile, RPC, UIN) → click Request login and enter the pilot's email. DroCon approves it, then the pilot opens the app, chooses Create account and signs up with that exact email.", kw:"vendor add pilot login request approve invite create account"},
   {q:"(Pilot) How do I report the acres I sprayed?", a:"Report Acres → pick the date and your location (only locations DroCon assigned to you appear) → add a row per farmer (name, contact, village, crop, medicine, acres, GPS) → Submit. It goes to your vendor for review.", kw:"pilot report acres daily submit farmer village crop"},
   {q:"(Pilot) A location is not in my list — why?", a:"You can only report for locations DroCon has assigned to you. Ask the DroCon team to assign you to that location.", kw:"location missing assigned cannot see report"},
-  {q:"(Vendor) How do I review my pilots' acres?", a:"Acre Review shows every report your pilots submit. Correct the acres if needed, then Pass to DroCon — or Send back to the pilot with a reason.", kw:"vendor acre review correct pass send back approve"},
-  {q:"Who sets the rates?", a:"DroCon does. Rates are applied automatically when a report is approved and when you invoice — pilots and vendors never enter rates.", kw:"rate rates who sets automatic drocon"},
-  {q:"(Vendor) How do I invoice DroCon?", a:"Invoice DroCon → pick a period → your approved, not-yet-invoiced acres appear at the DroCon rate → tick the rows → Generate. Then Print (plain, un-branded — paste on your letterhead) or export to Excel.", kw:"vendor invoice generate print excel unbranded letterhead"},
+  {q:"(Vendor) Do I review my pilots' acres?", a:"No — a pilot's report now goes directly to DroCon for verification and approval. Under Pilot Reports you see the status (Awaiting DroCon approval → Approved). Once approved, the acres show on your Acre Dashboard and can be invoiced.", kw:"vendor acre review pilot reports status awaiting approved verification"},
+  {q:"(Vendor) How do I set up my pilots?", a:"My Pilots → add each pilot (name, mobile, RPC, UIN) → Request login and enter their email. DroCon approves the login, then the pilot signs up with that exact email. DroCon assigns each pilot to a location — you can't self-assign locations; that keeps the data clean.", kw:"vendor setup pilot add request login rpc uin assign location"},
+  {q:"(Vendor) How do I set my rates?", a:"My Rates → choose a location (and optionally a crop), enter your ₹/acre and an effective-from date → Add rate. Your invoices bill at the rate in force on each spray's date. To change a rate mid-season, add a NEW row with a later effective date — don't edit or delete old rows, or past sprays lose their rate. DroCon can view and, per your agreement, adjust these.", kw:"vendor rate rates set my rates per acre location crop effective"},
+  {q:"(Vendor) How do I invoice DroCon?", a:"Invoice DroCon → pick a period → your approved, not-yet-invoiced acres appear at YOUR rates → tick the rows → optionally adjust part against an open advance → Generate. It goes to DroCon for approval; once approved it becomes a Supplier Invoice (payable). Track payment under My Invoices.", kw:"vendor invoice generate advance adjust approve payable payment"},
+  {q:"(Vendor) What should I NOT do?", a:"Don't enter acres yourself — pilots report them and DroCon approves; that approved data flows to you. Don't try to assign pilots to locations (DroCon does that). Don't edit/delete an old rate row to change a price — add a new effective-dated row instead. Don't invoice the same acres twice — billed acres drop off the invoice list automatically. Don't share your login password in the messenger.", kw:"vendor what not to do rules mistakes acres assign rate password"},
   {q:"(Vendor) When do I get paid?", a:"Once DroCon approves your invoice it becomes a payable and is paid per your terms. Track it in My DroCon Invoices and the Vendor Report.", kw:"payment paid vendor invoice payable status track"},
   {q:"Why isn't my acre invoiceable yet?", a:"An acre becomes invoiceable only after DroCon approves the report (following your review). Check the status under My Reports / Acre Review.", kw:"acre not invoiceable pending approve status"},
   {q:"How do I report a field problem?", a:"Field Issues → Raise an issue (category, severity, details). You, your vendor and DroCon can discuss it on the thread until it's resolved.", kw:"field issue problem raise drone chemical access thread resolve"},
@@ -189,21 +191,51 @@ function partnerHelp(){
     renderFAQ($("faqHost"), FAQ_CLIENT, "client FAQs");
     return;
   }
-  const guide = isVP ? `<div class="card"><div class="eyebrow">Guides &amp; training</div>
-      <table><thead><tr><th>Title</th><th>Open</th></tr></thead><tbody>
-        <tr><td><b>Vendor &amp; Pilot Portal — Training Guide</b><br><span class="muted">Step-by-step: logins, reporting acres, review, field issues and invoicing.</span></td>
-          <td><a class="btn sm" href="./docs/DroCon_Vendor_Pilot_Portal_Training.pptx" target="_blank" rel="noopener">Open / Download</a></td></tr>
-      </tbody></table></div>` : "";
+  const guide = isVP ? `<details open class="card"><summary style="cursor:pointer;font-weight:700;font-size:16px">📘 Vendor &amp; Pilot Portal — Training Guide <span class="muted" style="font-weight:400;font-size:12px">(living guide — always up to date)</span></summary>
+    <div style="font-size:13px;line-height:1.7;margin-top:10px">
+      <h3 style="margin:6px 0">Three roles, one flow</h3>
+      <ul><li><b>DroCon</b> — creates your login, approves pilot logins, <b>assigns pilots to locations</b>, approves acres &amp; invoices, and pays. Can view/adjust your rates per the agreement.</li>
+        <li><b>Vendor (you)</b> — add pilots &amp; request logins, <b>set your rates</b>, review the acres your pilots report, and invoice DroCon.</li>
+        <li><b>Pilot</b> — log in and report the acres sprayed each day; raise any field issue.</li></ul>
+      <h3 style="margin:12px 0 6px">From login to payment</h3>
+      <ol><li><b>Get logins</b> — DroCon invites you; you add pilots &amp; request logins; DroCon approves; pilots sign up with that exact email.</li>
+        <li><b>DroCon assigns</b> pilots to locations (you can't self-assign — it keeps data clean).</li>
+        <li><b>You set your rates</b> — My Rates → ₹/acre per location/crop, effective-dated.</li>
+        <li><b>Pilots report acres</b> — date, location, farmer, village, crop, medicine, acres, GPS.</li>
+        <li><b>DroCon verifies &amp; approves</b> — the pilot's report goes straight to DroCon; they check and approve (or send back). Approved acres post to the tracker and become billable. You see the status go from <b>Awaiting approval</b> to <b>Approved</b> under Pilot Reports.</li>
+        <li><b>You invoice</b> — approved acres bill at your rates (optionally net against an advance) → DroCon approves → Supplier Invoice (payable) → payment.</li></ol>
+      <h3 style="margin:12px 0 6px">Set up each pilot (once)</h3>
+      <ol><li>My Pilots → add the pilot (name, mobile, RPC, UIN).</li><li>Request login → enter their email.</li><li>DroCon approves the login.</li><li>Pilot opens the app → Create account with that exact email.</li><li>DroCon assigns them to a location.</li></ol>
+      <h3 style="margin:12px 0 6px">Every working day (pilot)</h3>
+      <ol><li>Report Acres → pick date &amp; location (only assigned locations show).</li><li>Add a row per farmer: name, contact, village, crop, medicine, acres, GPS.</li><li>If the day totals under 15 acres, add a short-day reason.</li><li>Submit → it goes to the vendor for review.</li></ol>
+      <h3 style="margin:12px 0 6px">Review &amp; approval</h3>
+      <p>The pilot's report goes <b>straight to DroCon</b> (Pilot Acres) for verification — they check and approve, or send it back to the pilot to fix. Under <b>Pilot Reports</b> you see the status move from <b>Awaiting DroCon approval</b> to <b>Approved</b>. Approved acres are the acreage of record and become billable.</p>
+      <h3 style="margin:12px 0 6px">Your rates (My Rates)</h3>
+      <p>Set ₹/acre per location (optionally per crop), with an effective-from date. Invoices bill at the rate in force on each spray's date. To change a rate mid-season, add a <b>new</b> effective-dated row — never edit/delete an old one. DroCon can view and adjust per the agreement.</p>
+      <h3 style="margin:12px 0 6px">Invoicing DroCon</h3>
+      <ol><li>Invoice DroCon → pick a period; your approved, un-invoiced acres appear at your rates.</li><li>Tick rows; optionally net part against an open advance (acres still count as billed).</li><li>Generate → Print/PDF or Excel (unbranded — use your letterhead).</li><li>DroCon approves → it becomes a Supplier Invoice (payable); track Paid status in My Invoices.</li></ol>
+      <h3 style="margin:12px 0 6px">Acre Dashboard</h3>
+      <p>Your live position: this-week grid by location &amp; pilot, location summary, month-wise, plus tiles for unbilled acres, pending payment from DroCon, and amount due to DroCon.</p>
+      <h3 style="margin:12px 0 6px">Field issues</h3>
+      <p>Pilots raise issues (drone, chemical, access, farmer, weather, payment, other) with severity &amp; details. You and DroCon discuss on a shared thread: Open → In review → Resolved → Closed.</p>
+      <h3 style="margin:12px 0 6px">Where DroCon steps in</h3>
+      <ul><li>Create your vendor login</li><li>Approve each pilot login</li><li>Assign pilots to locations</li><li>Approve pilot acre reports (makes acres billable)</li><li>Approve your invoices (triggers payment)</li></ul>
+      <h3 style="margin:12px 0 6px">What NOT to do</h3>
+      <ul><li>Don't enter acres yourself — pilots report, DroCon approves.</li><li>Don't try to assign pilots to locations — DroCon does that.</li><li>Don't edit/delete an old rate row — add a new effective-dated one.</li><li>Don't double-invoice — billed acres drop off the list automatically.</li><li>Don't share your password in the messenger.</li></ul>
+      <p class="muted" style="margin-top:10px"><b>Golden rule:</b> report daily, review promptly, keep your rates current — approvals and payment follow.</p>
+    </div></details>` : "";
   const how = isVP ? `<div class="card"><h3>How the portal works</h3>
       <ul style="font-size:13px;line-height:1.7">
-        <li><b>Vendors — My Pilots</b>: add pilots and request their logins (DroCon approves).</li>
+        <li><b>Vendors — Acre Dashboard</b>: your pilots' approved acres (weekly by location &amp; pilot, month-wise), plus your billing position — unbilled acres, pending payment from DroCon, and amount due to DroCon.</li>
+        <li><b>Vendors — My Pilots</b>: add pilots and request their logins (DroCon approves &amp; assigns them to locations).</li>
+        <li><b>Vendors — My Rates</b>: set your own ₹/acre per location/crop, effective-dated. DroCon can view/adjust per the agreement.</li>
         <li><b>Pilots — Report Acres</b>: log each day's acres for your assigned location; your vendor reviews and DroCon approves.</li>
-        <li><b>Vendors — Acre Review</b>: check/correct your pilots' acres and pass them to DroCon.</li>
-        <li><b>Vendors — Invoice DroCon &amp; My DroCon Invoices</b>: invoice approved acres at the DroCon rate; a plain invoice you can print or export.</li>
-        <li><b>Field Issues</b>: raise and track field problems with DroCon.</li>
+        <li><b>Vendors — Pilot Reports</b>: see your pilots' reported acres and their status (Awaiting DroCon approval → Approved). Verification is DroCon's step.</li>
+        <li><b>Vendors — Invoice DroCon &amp; My Invoices</b>: invoice approved acres at YOUR rates (optionally net against an advance); track approval &amp; payment status.</li>
+        <li><b>Field Issues / Short-day Reasons</b>: raise field problems and record reasons for low-acre days.</li>
         <li><b>Data &amp; Privacy</b> (🛡 top-right) — how your data is protected.</li>
       </ul>
-      <p class="muted">Rates are set by DroCon; approvals and payment come from the DroCon team.</p>
+      <p class="muted">You set your rates (My Rates); DroCon approves acres &amp; invoices, then pays.</p>
     </div>` : `<div class="card">
       <h3>How the portal works</h3>
       <ul style="font-size:13px;line-height:1.7">
