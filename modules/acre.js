@@ -79,15 +79,18 @@ const D_PILOT = {get:r=>r.pilot||"(unassigned)", sort:"acres"};
 async function dashboard(){
   const host=$("aBody");
   // Aggregated server-side (sql/76) so growing row volume can never truncate totals.
-  const [{ data:mData },{ data:lData },{ data:pData },{ data:lmpData },{ data:idleData },{ data:idleLocData }]=await Promise.all([
+  const [{ data:mData },{ data:lData },{ data:pData },{ data:lmpData },{ data:idleData },{ data:idleLocData },{ data:sdData }]=await Promise.all([
     sb().from("v_acre_monthly").select("*"),
     sb().from("v_acre_by_location").select("*"),
     sb().from("v_acre_pilot_recent").select("*"),
     sb().from("v_acre_loc_month_pilot").select("*").limit(20000),
     sb().from("v_idle_active_pilots").select("*"),
-    sb().from("v_idle_active_locations").select("*")
+    sb().from("v_idle_active_locations").select("*"),
+    sb().from("short_day_logs").select("entry_date,location_name,pilot_name,reason").gte("entry_date", new Date(Date.now()-45*86400000).toISOString().slice(0,10))
   ]);
   const idle=(idleData||[]).filter(r=>r.idle_days!=null && r.idle_days>3).sort((a,b)=>b.idle_days-a.idle_days);
+  // short-day reason lookup: date | location name | pilot -> reason
+  const sdReason={}; (sdData||[]).forEach(r=>{ if(r.reason) sdReason[`${r.entry_date}|${r.location_name}|${r.pilot_name}`]=r.reason; });
   const idleLoc=(idleLocData||[]).filter(r=>r.idle_days!=null && r.idle_days>3).sort((a,b)=>b.idle_days-a.idle_days);
   const mRows=mData||[];
   if(!mRows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
@@ -163,8 +166,8 @@ async function dashboard(){
           const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
           const cells=dayList.map(d=>{ const v=P[d];
             if(v==null) return '<td class="num muted">·</td>';
-            const b=band(v);
-            return `<td class="num" style="font-weight:700;color:${b.color};background:${b.bg}">${v.toFixed(1)}</td>`;
+            const b=band(v); const rsn=sdReason[`${d}|${k}|${p}`];
+            return `<td class="num" style="font-weight:700;color:${b.color};background:${b.bg}${rsn?';text-decoration:underline dotted;cursor:help':''}"${rsn?` title="${esc(rsn)}"`:''}>${v.toFixed(1)}</td>`;
           }).join("");
           return `<tr><td style="padding-left:26px">${esc(p)}</td>${cells}<td class="num">${pt.toFixed(1)}</td></tr>`;
         }).join("");
@@ -173,10 +176,11 @@ async function dashboard(){
         :'<div class="muted">No sprays in the last 7 days.</div>'}</div>
     ${below.length?`<div class="card"><h3>⚠ Pilot-days below ${MIN_ACRES} acres (last 7 days)</h3>
       <p class="muted" style="margin-top:-4px">Use this when raising under-supply with the client.</p>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Short by</th><th>Band</th></tr></thead>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Short by</th><th>Band</th><th>Reason</th></tr></thead>
       <tbody>${below.sort((a,b)=>a.day<b.day?1:-1).map(x=>`<tr><td>${fmtDate(x.day)}</td><td>${esc(x.loc)}</td><td>${esc(x.pilot)}</td>
         <td class="num" style="color:${x.band.color};font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td>
-        <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td></tr>`).join("")}</tbody></table></div></div>`:''}
+        <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td>
+        <td class="muted" style="font-size:12px">${esc(sdReason[`${x.day}|${x.loc}|${x.pilot}`]||"")}</td></tr>`).join("")}</tbody></table></div></div>`:''}
     <div class="card"><h3>⚠ Active pilots idle &gt; 3 days</h3>
       <p class="muted" style="margin-top:-4px">Active in the registers but with no approved spray for over 3 days — review and update their status in <b>Registers → Pilots</b> (or close the assignment).</p>
       ${idle.length?`<div style="overflow:auto"><table><thead><tr><th>Pilot</th><th>Vendor</th><th>Location</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>

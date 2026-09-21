@@ -13,6 +13,7 @@ const chip = (s)=>({submitted:"warn",vendor_ok:"issued",approved:"ok",rejected:"
 const label = (s)=>({submitted:"With vendor",vendor_ok:"With DroCon",approved:"Approved & posted",rejected:"Sent back"}[s]||s);
 
 let crops=[], locs=[], drows=[], editingId=null;
+const SHORT_PILOT=15;   // a pilot-day under this many acres needs a reason (pilot side)
 const blank = ()=>({farmer:"",phone:"",village:"",crop:"",crop_id:"",chemical:"",acres:"",gps:false});
 
 /* --------------------------------------------------------------- PILOT --- */
@@ -38,6 +39,11 @@ async function pilotReport(prefill){
         <tbody id="prBody"></tbody></table></div>
       <div class="row" style="margin-top:8px"><button class="btn sm" id="prAdd">+ Add row</button>
         <div class="spacer"></div><button class="btn green" id="prSave">${editingId?"Update &amp; resubmit":"Submit"}</button></div>
+      <div class="row" style="margin-top:8px;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="muted">Day total: <b id="prTotal">0.0</b> acres</span>
+        <span id="prShortWrap" style="display:none;align-items:center;gap:6px"><select id="prShort" style="width:300px;border-color:#e0a800;background:#fff8e6"><option value="">— short-day reason (day under ${SHORT_PILOT} ac) —</option>${(window.OPS.SHORT_REASONS||[]).map(x=>`<option>${esc(x)}</option>`).join("")}</select></span>
+        <span id="prMet" class="chip ok" style="display:none;font-size:11px">met minimum</span>
+      </div>
       <div class="field" style="margin-top:8px"><label>Note (optional)</label><input id="prNote" value="${esc((prefill&&prefill.note)||"")}"></div>
       <div class="err" id="prErr"></div>
     </div>`;
@@ -61,8 +67,17 @@ function renderRows(){
     let v = el.type==="checkbox" ? el.checked : el.value;
     drows[i][k]=v;
     if(k==="crop_id"){ const c=crops.find(x=>String(x.id)===String(v)); drows[i].crop=c?c.name:""; }
+    if(k==="acres") updateTotal();
   }));
   tb.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ drows.splice(+b.getAttribute("data-del"),1); renderRows(); }));
+  updateTotal();
+}
+function updateTotal(){
+  const t=drows.reduce((s,r)=>s+num(r.acres),0);
+  if($("prTotal")) $("prTotal").textContent=t.toFixed(1);
+  const short=t>0 && t<SHORT_PILOT;
+  if($("prShortWrap")) $("prShortWrap").style.display=short?"inline-flex":"none";
+  if($("prMet")) $("prMet").style.display=(t>0&&!short)?"inline-flex":"none";
 }
 async function save(){
   const loc=$("prLoc").value, date=$("prDate").value;
@@ -70,10 +85,16 @@ async function save(){
   if(!date){ $("prErr").textContent="Pick a date."; return; }
   const rows=drows.filter(r=>num(r.acres)>0 || (r.farmer||"").trim());
   if(!rows.length){ $("prErr").textContent="Add at least one row with acres."; return; }
+  const total=rows.reduce((s,r)=>s+num(r.acres),0);
+  const reason=($("prShort")?$("prShort").value:"").trim();
+  if(total>0 && total<SHORT_PILOT && !reason){ $("prErr").textContent="Add a short-day reason — the day total is under "+SHORT_PILOT+" acres."; return; }
   $("prSave").disabled=true;
   const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId });
   $("prSave").disabled=false;
   if(error){ $("prErr").textContent=error.message; return; }
+  if(total>0 && total<SHORT_PILOT && reason){
+    try{ await sb().rpc("pilot_report_short_reason",{ p_date:date, p_location:loc, p_acres:total, p_reason:reason }); }catch(e){ console.warn("pilot short-day reason:", e.message); }
+  }
   window.OPS.flashTop("Report submitted ✓"); editingId=null; pilotReports();
 }
 
@@ -83,7 +104,10 @@ async function pilotReports(){
     <div class="row" style="margin:6px 0"><button class="btn green sm" id="prNew">+ Report acres</button></div>
     <div id="mrList" class="muted">Loading…</div>`;
   $("prNew").addEventListener("click",()=>pilotReport());
-  const { data }=await sb().from("pilot_acre_reports").select("*").order("entry_date",{ascending:false}).order("created_at",{ascending:false});
+  const myPid=await sb().rpc("my_pilot_id").then(r=>r.data).catch(()=>null);
+  let q=sb().from("pilot_acre_reports").select("*").order("entry_date",{ascending:false}).order("created_at",{ascending:false});
+  if(myPid) q=q.eq("pilot_id",myPid);   // internal-linked pilots are is_internal (would otherwise see all)
+  const { data }=await q;
   const rows=data||[];
   const acresOf=r=>(r.rows||[]).reduce((s,x)=>s+num(x.acres),0);
   $("mrList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th class="num">Acres</th><th>Status</th><th></th></tr></thead>
@@ -120,7 +144,7 @@ async function vendorAcreReview(){
   function acresOf(r){ return (r.rows||[]).reduce((s,x)=>s+num(x.acres),0); }
   function cardHTML(r){
     return `<div class="card" style="background:#fafbf8" data-rid="${r.id}">
-      <div class="row wrap"><b>${esc(r.pilot&&r.pilot.name||"Pilot")}</b><span class="muted">${fmtDate(r.entry_date)} · ${esc(r.location_name||"")}</span></div>
+      <div class="row wrap"><b>${esc(r.pilot&&r.pilot.name||"Pilot")}</b><span class="muted">${fmtDate(r.entry_date)} · ${esc(r.location_name||"")}</span><div class="spacer"></div><b>${acresOf(r).toFixed(1)} ac</b>${acresOf(r)>0&&acresOf(r)<SHORT_PILOT?' <span class="chip warn" style="font-size:11px">short day &lt;'+SHORT_PILOT+'ac</span>':''}</div>
       <div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Farmer</th><th>Village</th><th>Crop</th><th style="width:90px">Acres</th></tr></thead>
         <tbody>${(r.rows||[]).map((x,i)=>`<tr><td>${esc(x.farmer||"")}</td><td>${esc(x.village||"")}</td><td>${esc(x.crop||"")}</td>
           <td><input data-rid="${r.id}" data-i="${i}" type="number" step="any" value="${esc(x.acres||"")}" style="width:80px"></td></tr>`).join("")}</tbody></table></div>

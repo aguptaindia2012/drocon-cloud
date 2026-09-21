@@ -163,6 +163,16 @@ const CAPABILITIES = [
   { key:"can_delete",    label:"Delete records" },
 ];
 window.OPS.CAPABILITIES = CAPABILITIES;
+// Standard short-day reasons — one source of truth for internal + external forms.
+window.OPS.SHORT_REASONS = [
+  "Unfavourable Weather Condition",
+  "Unfavourable Operating Conditions",
+  "Less Work Available",
+  "No Work Available",
+  "Drone Not Airworthy",
+  "Pilot on Leave",
+  "Battery Not Adequate",
+];
 
 // ---------- boot ----------
 (function boot(){
@@ -332,7 +342,8 @@ function canSee(tool){
   if(!tool) return false;
   // External (invite-only) partner logins are sandboxed to the Partner Portal only.
   if(isExternal()) return tool.gate==="external" && (!tool.party || tool.party.indexOf(profile.party_type)>=0);
-  if(tool.gate==="external") return false;
+  // internal staff linked to a pilot record may use the pilot-only portal tools
+  if(tool.gate==="external") return !!(profile && profile.pilot_id && tool.party && tool.party.indexOf("pilot")>=0);
   if(tool.gate==="admin")    return isAdmin();
   if(tool.gate==="approver") return isApprover();
   if(tool.gate==="perm")     return isAdmin() || window.OPS.perms.has(tool.key);
@@ -350,6 +361,7 @@ function secLabel(s){
     return ({client:"Client Portal", vendor:"Vendor Portal", pilot:"Pilot Portal",
              authorized_partner:"Partner Portal", consultant:"Partner Portal"})[profile.party_type] || s.label;
   }
+  if(s.key==="portal" && profile && !profile.is_external && profile.pilot_id) return "Pilot Portal";
   return s.label;
 }
 function renderNav(){
@@ -678,5 +690,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "187";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "190";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

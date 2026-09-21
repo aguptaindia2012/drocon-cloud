@@ -112,8 +112,8 @@ function renderFarmer(rows){
     openEntry(row,"farmer"); }));
 }
 function renderAcre(rows){
-  $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th><th>Medicine</th><th>Billing</th><th>Status</th></tr></thead>
-    <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical||'')}</td><td>${payChip(r._pay)}</td><td>${r.approval_status==="submitted"?'<span class="chip in_review">Edit in review</span>':'<span class="muted">OK</span>'}</td></tr>`).join("")}</tbody></table></div>`
+  $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th class="num">Amount</th><th>Crop</th><th>Medicine</th><th>Short-day reason</th><th>Billing</th><th>Status</th></tr></thead>
+    <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.entry_date)}</td><td>${esc(r.loc&&r.loc.name||'')}</td><td>${esc(r.pilot_name||'')}</td><td class="num">${num(r.acres)}</td><td class="num">${r.client_rate!=null?money(r.client_rate):'—'}</td><td class="num">${r.farmer_rate!=null?money(r.farmer_rate):'—'}</td><td class="num">${money(r.amount)}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical||'')}</td><td class="muted" style="font-size:12px">${esc(r._reason||'')}</td><td>${payChip(r._pay)}</td><td>${r.approval_status==="submitted"?'<span class="chip in_review">Edit in review</span>':'<span class="muted">OK</span>'}</td></tr>`).join("")}</tbody></table></div>`
     :'<div class="card muted">No matching rows.</div>';
   // ids are bigint (numbers) but data-id is a string — compare as strings
   $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>{
@@ -297,6 +297,15 @@ async function loadAcre(){
         .select("acre_id,farmer_status,client_status,farmer_doc_no,client_doc_no").in("acre_id",ids);
       const byId={}; (pay||[]).forEach(p=>byId[p.acre_id]=p);
       allRows.forEach(r=>{ r._pay=byId[r.id]||null; });
+    }
+  }catch(e){}
+  // short-day reasons (per date/location/pilot)
+  try{
+    if(allRows.length){
+      const minD=allRows.reduce((a,r)=>r.entry_date<a?r.entry_date:a, allRows[0].entry_date);
+      const { data:sd }=await sb().from("short_day_logs").select("entry_date,location_name,pilot_name,reason").gte("entry_date",minD);
+      const m={}; (sd||[]).forEach(x=>{ if(x.reason) m[`${x.entry_date}|${x.location_name}|${x.pilot_name}`]=x.reason; });
+      allRows.forEach(r=>{ r._reason=m[`${r.entry_date}|${(r.loc&&r.loc.name)||''}|${r.pilot_name||''}`]||""; });
     }
   }catch(e){}
   renderList();

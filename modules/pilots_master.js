@@ -119,8 +119,28 @@ function form(rec){
       <div class="err" id="plErr"></div>
     </div>
     ${rec?`<div class="card" id="plAssign"><h3>Location assignment</h3><div class="muted">Loading…</div></div>`:''}
-    ${rec?`<div id="plAccount"></div>`:''}`;
+    ${rec?`<div id="plAccount"></div>`:''}
+    ${rec?`<div class="card" id="plStaff"><h3>Pilot Portal for internal staff</h3>
+      <div class="muted" style="font-size:12px;margin-bottom:6px">If this pilot is a DroCon employee, link their existing internal login so they can use the Pilot Portal (Report Acres) with their regular sign-in — no separate external login needed.</div>
+      <div id="plStaffBody" class="muted">Loading…</div></div>`:''}`;
   if(rec && window.OPS.accountAccess){ try{ window.OPS.accountAccess.panel({mode:"pilot"})(rec, $("plAccount")); }catch(e){ console.error(e); } }
+  if(rec && window.OPS.isAdmin && window.OPS.isAdmin()){ (async()=>{
+    const cur=await sb().rpc("pilot_linked_login",{p_pilot:rec.id}).then(r=>r.data).catch(()=>null);
+    const b=$("plStaffBody"); if(!b) return;
+    b.innerHTML=`${cur?`<div style="margin-bottom:6px">Linked to <b>${esc(cur)}</b></div>`:'<div class="muted" style="margin-bottom:6px">Not linked to any internal login.</div>'}
+      <div class="row" style="gap:6px;flex-wrap:wrap"><input id="plStaffEmail" class="in" placeholder="employee@droconbharat.com" value="${esc(cur||'')}" style="max-width:280px">
+        <button class="btn green sm" id="plStaffLink">Link login</button>${cur?'<button class="btn sm" id="plStaffUnlink">Unlink</button>':''}</div>
+      <div id="plStaffOut" class="muted" style="font-size:12px;margin-top:6px"></div>`;
+    $("plStaffLink").addEventListener("click",async()=>{
+      const email=($("plStaffEmail").value||"").trim(); if(!email){ $("plStaffOut").textContent="Enter the employee's email."; return; }
+      const { error }=await sb().rpc("admin_link_pilot_login",{p_email:email,p_pilot:rec.id});
+      $("plStaffOut").textContent=error?("Error: "+error.message):"Linked ✓ — they can open the Pilot Portal after signing out and back in.";
+    });
+    if($("plStaffUnlink")) $("plStaffUnlink").addEventListener("click",async()=>{
+      const { error }=await sb().rpc("admin_link_pilot_login",{p_email:cur,p_pilot:null});
+      $("plStaffOut").textContent=error?("Error: "+error.message):"Unlinked ✓"; if(!error) form(rec);
+    });
+  })(); }
   $("plBack").addEventListener("click",view); $("plCancel").addEventListener("click",view);
   if($("pNewVendor")) $("pNewVendor").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("vendors"); });
   $("plSave").addEventListener("click",async()=>{
