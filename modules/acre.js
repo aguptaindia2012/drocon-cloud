@@ -79,12 +79,16 @@ const D_PILOT = {get:r=>r.pilot||"(unassigned)", sort:"acres"};
 async function dashboard(){
   const host=$("aBody");
   // Aggregated server-side (sql/76) so growing row volume can never truncate totals.
-  const [{ data:mData },{ data:lData },{ data:pData },{ data:lmpData }]=await Promise.all([
+  const [{ data:mData },{ data:lData },{ data:pData },{ data:lmpData },{ data:idleData },{ data:idleLocData }]=await Promise.all([
     sb().from("v_acre_monthly").select("*"),
     sb().from("v_acre_by_location").select("*"),
     sb().from("v_acre_pilot_recent").select("*"),
-    sb().from("v_acre_loc_month_pilot").select("*").limit(20000)
+    sb().from("v_acre_loc_month_pilot").select("*").limit(20000),
+    sb().from("v_idle_active_pilots").select("*"),
+    sb().from("v_idle_active_locations").select("*")
   ]);
+  const idle=(idleData||[]).filter(r=>r.idle_days!=null && r.idle_days>3).sort((a,b)=>b.idle_days-a.idle_days);
+  const idleLoc=(idleLocData||[]).filter(r=>r.idle_days!=null && r.idle_days>3).sort((a,b)=>b.idle_days-a.idle_days);
   const mRows=mData||[];
   if(!mRows.length){ host.innerHTML='<div class="card muted">No acre data yet. Use <b>Daily Spray Entry</b> to start, or import history.</div>'; return; }
   const totA=mRows.reduce((s,r)=>s+num(r.acres),0), totR=mRows.reduce((s,r)=>s+num(r.revenue),0);
@@ -173,6 +177,19 @@ async function dashboard(){
       <tbody>${below.sort((a,b)=>a.day<b.day?1:-1).map(x=>`<tr><td>${fmtDate(x.day)}</td><td>${esc(x.loc)}</td><td>${esc(x.pilot)}</td>
         <td class="num" style="color:${x.band.color};font-weight:700">${x.acres.toFixed(1)}</td><td class="num">${(MIN_ACRES-x.acres).toFixed(1)}</td>
         <td><span style="color:${x.band.color};background:${x.band.bg};font-weight:700;padding:1px 7px;border-radius:999px;font-size:11px">${x.band.label}</span></td></tr>`).join("")}</tbody></table></div></div>`:''}
+    <div class="card"><h3>⚠ Active pilots idle &gt; 3 days</h3>
+      <p class="muted" style="margin-top:-4px">Active in the registers but with no approved spray for over 3 days — review and update their status in <b>Registers → Pilots</b> (or close the assignment).</p>
+      ${idle.length?`<div style="overflow:auto"><table><thead><tr><th>Pilot</th><th>Vendor</th><th>Location</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>
+      <tbody>${idle.map(r=>`<tr><td>${esc(r.pilot_name||"")}</td><td>${esc(r.vendor_name||"")}</td><td>${esc(r.location_name||"")}</td>
+        <td>${r.last_spray?fmtDate(r.last_spray):'<span style="color:#a3322a;font-weight:700">Never</span>'}</td>
+        <td class="num" style="font-weight:700;color:#a3322a">${r.idle_days}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">All active pilots sprayed within the last 3 days. 👍</div>'}</div>
+    <div class="card"><h3>⚠ Active locations idle &gt; 3 days</h3>
+      <p class="muted" style="margin-top:-4px">Locations with active pilots but no approved spray for over 3 days — chase for work or close the location in <b>Registers → Locations</b>.</p>
+      ${idleLoc.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District</th><th class="num">Active pilots</th><th>Last spray</th><th class="num">Idle (days)</th></tr></thead>
+      <tbody>${idleLoc.map(r=>`<tr><td>${esc(r.location_name||"")}</td><td>${esc(r.client_name||"")}</td><td>${esc(r.district||"")}</td>
+        <td class="num">${r.active_pilots}</td>
+        <td>${r.last_spray?fmtDate(r.last_spray):'<span style="color:#a3322a;font-weight:700">Never</span>'}</td>
+        <td class="num" style="font-weight:700;color:#a3322a">${r.idle_days}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">All active locations had work within the last 3 days. 👍</div>'}</div>
     <div class="card"><h3>Monthly work</h3>
       <p class="muted" style="margin-top:-4px">Click a <b>month</b> to see the locations worked; click a <b>location</b> to see the per-pilot split.</p>
       ${drillTable(lmpData, [D_MONTH, D_LOC, D_PILOT], "mw", "Month / Location / Pilot")}</div>
