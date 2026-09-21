@@ -434,9 +434,10 @@ async function openMessage(uid){
     const bw=$("mBodyWrap");
     if(m.html){
       const ifr=document.createElement("iframe");
-      ifr.setAttribute("sandbox",""); // no scripts, no same-origin
+      // no scripts / no same-origin, but allow links to open in the real browser
+      ifr.setAttribute("sandbox","allow-popups allow-popups-to-escape-sandbox");
       ifr.style.cssText="width:100%;min-height:420px;border:0";
-      ifr.srcdoc=`<base target="_blank"><div style="font-family:system-ui,Arial;font-size:14px;color:#222">${m.html}</div>`;
+      ifr.srcdoc=`<base target="_blank"><meta name="referrer" content="no-referrer"><div style="font-family:system-ui,Arial;font-size:14px;color:#222">${m.html}</div>`;
       bw.appendChild(ifr);
     }else{
       const pre=document.createElement("div"); pre.style.cssText="white-space:pre-wrap;font-size:14px"; pre.textContent=m.text||"(no content)"; bw.appendChild(pre);
