@@ -143,6 +143,7 @@ const TOOLS = [
   { key:"pilot_reports",       section:"portal", label:"My Reports",     gate:"external", party:["pilot"] },
   { key:"issue_report",        section:"portal", label:"Field Issues",   gate:"external", party:["pilot"] },
   { key:"vendor_issues",       section:"portal", label:"Field Issues",   gate:"external", party:["vendor"] },
+  { key:"vendor_my_rates",     section:"portal", label:"My Rates",       gate:"external", party:["vendor"] },
   { key:"vendor_invoice_new",  section:"portal", label:"Invoice DroCon", gate:"external", party:["vendor"] },
   { key:"vendor_invoices_mine",section:"portal", label:"My DroCon Invoices", gate:"external", party:["vendor"] },
   { key:"vendor_report",       section:"portal", label:"Vendor Report",  gate:"external", party:["vendor"] },
@@ -737,5 +738,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "194";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "195";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

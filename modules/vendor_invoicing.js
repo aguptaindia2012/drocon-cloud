@@ -218,6 +218,47 @@ async function vendorInvoiceApprovals(){
   }
 }
 
+/* ------------------------------------------------ VENDOR: my rate card ---- */
+async function vendorMyRates(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Vendor Portal</div><h1>My Rates</h1>
+    <div class="callout">Set the <b>₹/acre you bill DroCon Bharat</b>, per location (and optionally per crop), effective-dated. Your invoices use the rate in force on each spray's date. DroCon can view these and, per your agreement, adjust them.</div>
+    <div id="vrForm" class="card"></div>
+    <div id="vrList" class="muted">Loading…</div>`;
+  const [locs, crops, vid] = await Promise.all([
+    sb().rpc("my_vendor_locations").then(r=>r.data||[]),
+    sb().rpc("list_crops").then(r=>r.data||[]),
+    sb().rpc("my_vendor_id").then(r=>r.data)
+  ]);
+  if(!locs.length){ $("vrForm").innerHTML=''; $("vrList").innerHTML='<div class="card muted">No locations assigned to you yet. DroCon assigns your pilots to locations first.</div>'; return; }
+  $("vrForm").innerHTML=`<div class="fgrid">
+      <div class="field"><label>Location</label><select id="vrLoc"><option value="">— location —</option>${locs.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Crop <span class="muted">(blank = all crops)</span></label><select id="vrCrop"><option value="">All crops</option>${crops.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>₹ / acre</label><input id="vrRate" type="number" step="any"></div>
+      <div class="field"><label>Effective from</label><input id="vrFrom" type="date" value="${todayISO()}"></div>
+    </div>
+    <div class="row"><button class="btn green" id="vrAdd">Add rate</button> <span id="vrErr" class="err"></span></div>`;
+  const locName=id=>{ const l=locs.find(x=>x.id===id); return l?l.name:""; };
+  const cropName=id=>{ const c=crops.find(x=>x.id===id); return c?c.name:"All crops"; };
+  $("vrAdd").addEventListener("click",async()=>{
+    const location_id=$("vrLoc").value, rate=$("vrRate").value;
+    if(!location_id){ $("vrErr").textContent="Pick a location."; return; }
+    if(!(Number(rate)>0)){ $("vrErr").textContent="Enter a valid ₹/acre rate."; return; }
+    const { error }=await sb().from("vendor_location_crop_rates").insert({ vendor_id:vid, location_id, crop_id:$("vrCrop").value||null, rate:Number(rate), effective_from:$("vrFrom").value||todayISO() });
+    if(error){ $("vrErr").textContent=error.message; return; }
+    $("vrErr").textContent=""; $("vrRate").value=""; load();
+  });
+  async function load(){
+    const { data }=await sb().from("vendor_location_crop_rates").select("*").order("effective_from",{ascending:false});
+    const rows=data||[];
+    $("vrList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Location</th><th>Crop</th><th class="num">₹/acre</th><th>Effective from</th><th></th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${esc(locName(r.location_id))}</td><td>${esc(r.crop_id?cropName(r.crop_id):'All crops')}</td><td class="num">${money(r.rate)}</td><td>${fmtDate(r.effective_from)}</td><td><button class="btn sm ghost" data-del="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+      <p class="muted" style="font-size:12px">To change a rate mid-season, add a NEW row with a later effective date — older sprays keep the old rate.</p></div>` : '<div class="card muted">No rates yet. Add your first rate above.</div>';
+    $("vrList").querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{ if(!confirm("Delete this rate?")) return; const { error }=await sb().from("vendor_location_crop_rates").delete().eq("id",b.getAttribute("data-del")); if(error){ alert(error.message); return; } load(); }));
+  }
+  load();
+}
+window.OPS.routes.vendor_my_rates          = vendorMyRates;
 window.OPS.routes.vendor_rates             = vendorRates;
 window.OPS.routes.vendor_invoice_new       = vendorInvoiceNew;
 window.OPS.routes.vendor_invoices_mine     = ()=>vendorInvoicesMine();
