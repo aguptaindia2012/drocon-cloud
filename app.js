@@ -486,7 +486,7 @@ function renderHome(){
     ? `<button class="btn sm green" data-go="portal_help">💬 Help &amp; FAQs</button>`
     : `<button class="btn sm green" data-go="manual">📖 User Manual</button> <button class="btn sm" data-go="faqs">❓ FAQs</button>`;
   $("main").innerHTML=`
-    <div class="eyebrow">DroCon Bharat OS</div>
+    <div class="eyebrow">DroCon Bharat Operations Suite</div>
     <h1 style="margin-bottom:2px">Welcome${name?(", "+name):""}</h1>
     <p class="muted">Select a module from the directory below. Return here anytime with the 🏠 Home button in the header.</p>
     <div class="card" style="background:var(--soft-green);border:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b>Getting started:</b> ${helpBtns}</div>
@@ -687,7 +687,7 @@ function openPrivacy(){
   const who=`<p class="muted">You are signed in as <b>${esc((profile&&profile.email)||(me&&me.email)||"")}</b> · role <b>${esc(isExternal()?"Authorized Partner / Consultant":((profile&&profile.role)||""))}</b>.</p>`;
   if(isExternal()){
     // Partner-facing privacy notice — about THEIR data and any farmer data they enter
-    b.innerHTML=`<p class="muted">How DroCon Bharat OS protects your information and the farmer data you submit.</p>
+    b.innerHTML=`<p class="muted">How DroCon Bharat Operations Suite protects your information and the farmer data you submit.</p>
       <div class="callout"><b>Encryption:</b> all traffic is HTTPS in transit and data is stored encrypted at rest (AES-256, Supabase).</div>
       <ul style="font-size:13px;line-height:1.7">
         <li><b>Your portal is private to you.</b> Your login can see <b>only</b> your own invoices, your rate card and this portal — never DroCon's internal records or any other partner's data. This is enforced by the database (Row-Level Security), not just the screen.</li>
@@ -700,7 +700,7 @@ function openPrivacy(){
       </ul>
       <p class="muted">Questions about your data? Email <a href="mailto:info@droconbharat.com">info@droconbharat.com</a>.</p>${who}`;
   } else {
-    b.innerHTML=`<p class="muted">How DroCon Bharat OS protects your data.</p>
+    b.innerHTML=`<p class="muted">How DroCon Bharat Operations Suite protects your data.</p>
       <div class="callout"><b>Encryption:</b> HTTPS in transit, AES-256 at rest (Supabase).</div>
       <ul style="font-size:13px;line-height:1.7">
         <li><b>Access:</b> not signed in = no access. Sign-up is restricted to approved company domains (partners are invite-only).</li>
@@ -751,6 +751,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "200";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "201";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

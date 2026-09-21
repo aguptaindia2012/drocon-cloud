@@ -13,7 +13,7 @@ const SEEN_KEY = "dcb_tour_build";
 
 const TOURS = {
   internal: [
-    {title:"Welcome to DroCon Bharat OS", body:"A 1-minute tour of your operations suite. Switch areas from the top bar; each screen has a short intro at the top. Reopen this anytime from <b>🧭 Tour</b> (top-right)."},
+    {title:"Welcome to DroCon Bharat Operations Suite", body:"A 1-minute tour of your operations suite. Switch areas from the top bar; each screen has a short intro at the top. Reopen this anytime from <b>🧭 Tour</b> (top-right)."},
     {section:"trackers", title:"Daily Spray Entry", body:"Record each day's spraying — pick the date &amp; location, then each pilot's acres (grouped with subtotals). A pilot-day under 12 acres needs a short-day reason. Submit for approval."},
     {section:"reviews", title:"Review / Approvals", body:"Your action queue — approve daily entries, pilot acres, vendor invoices, client queries and more. The 🔔 badge shows what's pending."},
     {section:"trackers", title:"Acre Tracking", body:"The live dashboard: total / billed / unbilled acres, the 7-day grid by location &amp; pilot, idle pilots &amp; locations, and month / location drill-downs."},
