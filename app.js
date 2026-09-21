@@ -185,9 +185,36 @@ window.OPS.SHORT_REASONS = [
   // IMPORTANT: only (re)initialise the app when the *logged-in user* actually changes.
   // Supabase fires onAuthStateChange for TOKEN_REFRESHED / focus / etc.; re-running
   // afterLogin() on those would re-render the screen and wipe whatever you're typing.
-  sb.auth.onAuthStateChange((_e, session)=>{ handleSession(session); });
+  sb.auth.onAuthStateChange((_e, session)=>{ if(_e==="PASSWORD_RECOVERY"){ showSetPassword(); return; } handleSession(session); });
   sb.auth.getSession().then(({data})=>{ handleSession(data.session); });
 })();
+
+// Password recovery: shown when the user returns via a reset link (or from the
+// Forgot-password flow). Lets them set a new password with the recovery session.
+function showSetPassword(){
+  if(document.getElementById("spWrap")) return;
+  const wrap=document.createElement("div"); wrap.id="spWrap";
+  wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center";
+  wrap.innerHTML=`<div class="card" style="width:min(420px,92vw)"><h3 style="margin:0 0 8px">Set a new password</h3>
+    <div class="field"><label>New password</label><input id="spNew" type="password" placeholder="At least 8 characters"></div>
+    <div class="field"><label>Confirm password</label><input id="spNew2" type="password"></div>
+    <div class="err" id="spErr" style="min-height:16px"></div>
+    <button class="btn green" id="spGo" style="width:100%">Update password</button></div>`;
+  document.body.appendChild(wrap);
+  $("spGo").addEventListener("click", async ()=>{
+    const p=$("spNew").value, p2=$("spNew2").value;
+    if((p||"").length<8){ $("spErr").textContent="Use at least 8 characters."; return; }
+    if(p!==p2){ $("spErr").textContent="Passwords don't match."; return; }
+    $("spGo").disabled=true;
+    const { error }=await sb.auth.updateUser({ password:p });
+    if(error){ $("spErr").textContent=error.message; $("spGo").disabled=false; return; }
+    wrap.remove();
+    try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}
+    const { data:{ session } }=await sb.auth.getSession();
+    handleSession(session);
+    window.OPS.flashTop && window.OPS.flashTop("Password updated ✓");
+  });
+}
 
 let _authedUserId = null;
 function handleSession(session){
@@ -251,6 +278,18 @@ $("auToggle").addEventListener("click",e=>{ e.preventDefault(); signupMode=!sign
 // (HR → Employees → Account access). Hide the "Create an account" switch so the
 // login screen is sign-in only. (Also turn off signups in Supabase Auth settings.)
 (function(){ const t=$("auToggle"), tt=$("auToggleText"); if(t) t.style.display="none"; if(tt) tt.style.display="none"; })();
+// Forgot password — emails a reset link that returns to the app to set a new one.
+if($("auForgot")) $("auForgot").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const email=$("auEmail").value.trim();
+  if(!email){ $("auErr").textContent="Type your email above first, then click Forgot password."; return; }
+  $("auErr").textContent="";
+  try{
+    const { error }=await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin+location.pathname });
+    if(error) throw error;
+    $("auErr").innerHTML='<span class="ok">If an account exists for '+esc(email)+', a reset link has been emailed. Open it on this device to set a new password (check spam too).</span>';
+  }catch(err){ $("auErr").textContent = err.message||"Could not send the reset email."; }
+});
 $("auGo").addEventListener("click", async ()=>{
   const email=$("auEmail").value.trim(), pass=$("auPass").value;
   $("auErr").textContent=""; if(!email||!pass){ $("auErr").textContent="Enter email and password."; return; }
@@ -690,5 +729,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "190";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "191";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
