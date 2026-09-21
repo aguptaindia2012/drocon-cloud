@@ -178,7 +178,7 @@ function exportInvoice(inv){
 /* ---------------------------------------------------- VENDOR: report --- */
 async function vendorReport(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Vendor Portal</div><h1>Vendor Report</h1><div id="vrpBody" class="muted">Loading…</div>`;
+  m.innerHTML=`<div class="eyebrow">Vendor Portal</div><h1>Partner Report</h1><div id="vrpBody" class="muted">Loading…</div>`;
   const [{data:inv},{data:pend}]=await Promise.all([
     sb().from("vendor_invoices").select("*").order("created_at",{ascending:false}),
     sb().rpc("vendor_billable_acres",{ p_from:null, p_to:null }).then(r=>r).catch(()=>({data:[]}))
@@ -272,6 +272,7 @@ window.OPS.routes.vendor_my_rates          = vendorMyRates;
 window.OPS.routes.vendor_rates             = vendorRates;
 window.OPS.routes.vendor_invoice_new       = vendorInvoiceNew;
 window.OPS.routes.vendor_invoices_mine     = ()=>vendorInvoicesMine();
+window.OPS.routes.partner_report           = vendorReport;
 window.OPS.routes.vendor_report            = vendorReport;
 window.OPS.routes.vendor_invoice_approvals = vendorInvoiceApprovals;
 })();

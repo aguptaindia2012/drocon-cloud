@@ -186,7 +186,38 @@ async function pilotApprovals(){
   }
 }
 
+/* ------------------------------------------------------- VENDOR ENTRIES --- */
+async function vendorEntries(){
+  const m=$("main");
+  let locs=[]; try{ locs=await sb().rpc("my_vendor_locations").then(r=>r.data||[]); }catch(e){}
+  m.innerHTML=`<div class="eyebrow">Vendor Portal</div><h1>Entries</h1>
+    <div class="callout">Every approved acre row for your pilots, line by line — with its billing status.</div>
+    <div class="card"><div class="row wrap" style="gap:8px;align-items:flex-end">
+      <div class="field" style="margin:0"><label>From</label><input id="veFrom" type="date"></div>
+      <div class="field" style="margin:0"><label>To</label><input id="veTo" type="date"></div>
+      <div class="field" style="margin:0"><label>Location</label><select id="veLoc"><option value="">All</option>${locs.map(l=>`<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("")}</select></div>
+      <div class="field" style="margin:0"><label>Billing</label><select id="veBill"><option value="">All</option><option value="billed">Billed</option><option value="unbilled">Unbilled</option></select></div>
+      <button class="btn sm" id="veGo">Apply</button><button class="btn sm green" id="veXls">⬇ Excel</button></div></div>
+    <div id="veList" class="muted">Loading…</div>`;
+  let rows=[];
+  async function run(){ $("veList").innerHTML='<div class="muted">Loading…</div>';
+    try{ rows=await sb().rpc("vendor_acre_rows",{p_from:$("veFrom").value||null,p_to:$("veTo").value||null,p_vendor:null}).then(r=>r.data||[]); }
+    catch(e){ $("veList").innerHTML=`<div class="err">${esc(e.message)}</div>`; return; } render(); }
+  function filtered(){ const loc=$("veLoc").value, bill=$("veBill").value;
+    return rows.filter(r=>(!loc||r.location_name===loc)&&(!bill||(bill==='billed'?r.billed:!r.billed))); }
+  function render(){ const fr=filtered(); const tot=fr.reduce((s,r)=>s+num(r.acres),0);
+    $("veList").innerHTML=`<div class="card"><div class="row" style="margin-bottom:6px"><b>${fr.length} row${fr.length===1?'':'s'}</b><span class="muted" style="margin-left:8px">${tot.toFixed(1)} acres</span></div>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th>Crop</th><th class="num">Acres</th><th>Billing</th></tr></thead>
+      <tbody>${fr.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.pilot_name||"")}</td><td>${esc(r.crop||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td><td>${r.billed?'<span class="chip ok">Billed</span>':'<span class="chip warn">Unbilled</span>'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No approved entries for this filter.</td></tr>'}</tbody></table></div></div>`; }
+  $("veGo").addEventListener("click",run);
+  $("veLoc").addEventListener("change",()=>{ if(rows.length) render(); });
+  $("veBill").addEventListener("change",()=>{ if(rows.length) render(); });
+  $("veXls").addEventListener("click",()=>{ const fr=filtered(); if(window.OPS.xlsx) window.OPS.xlsx.download("vendor-entries.xlsx","Entries",["Date","Location","Pilot","Crop","Acres","Billing"], fr.map(r=>[r.entry_date,r.location_name,r.pilot_name,r.crop,num(r.acres),r.billed?"Billed":"Unbilled"])); });
+  run();
+}
+
 window.OPS.routes.vendor_dashboard = vendorDashboard;
+window.OPS.routes.vendor_entries  = vendorEntries;
 window.OPS.routes.vendor_pilots   = vendorPilots;
 window.OPS.routes.pilot_approvals = pilotApprovals;
 })();

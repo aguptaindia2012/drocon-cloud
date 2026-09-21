@@ -205,7 +205,7 @@ async function clientEntries(){
       if(error) throw error;
       const headers=["Date","Location","Farmer","Phone","Village","Crop","Medicine","Pilot","Acres","GPS","Farmer rate","Farmer amount","Client rate","Client amount","Total","Short-day reason"];
       const out=(data||[]).map(r=>[r.entry_date, r.location_name, r.farmer_name, r.farmer_phone, r.village, r.crop, r.medicine, r.pilot, num(r.acres), r.gps?"Yes":"No", num(r.farmer_rate), num(r.farmer_amount), num(r.client_rate), num(r.client_amount), num(r.amount), r.short_reason||""]);
-      window.OPS.xlsx.download("drocon-acres-"+todayISO()+".xlsx", headers, out);
+      window.OPS.xlsx.download("drocon-acres-"+todayISO()+".xlsx", "Acres", headers, out);
     }catch(e){ alert("Export failed: "+e.message); }
   });
   run();

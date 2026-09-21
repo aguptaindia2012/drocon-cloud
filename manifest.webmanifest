@@ -1,6 +1,6 @@
 {
-  "name": "DroCon Cloud — Operations Suite",
-  "short_name": "DroCon Cloud",
+  "name": "DroCon Bharat OS",
+  "short_name": "DCB OS",
   "description": "DroCon Bharat internal operations: agreements, billing, inventory and field trackers.",
   "start_url": "./",
   "scope": "./",

@@ -139,6 +139,7 @@ const TOOLS = [
   { key:"vendor_dashboard",    section:"portal", label:"Acre Dashboard", gate:"external", party:["vendor"] },
   { key:"vendor_pilots",       section:"portal", label:"My Pilots",      gate:"external", party:["vendor"] },
   { key:"vendor_acre_review",  section:"portal", label:"Pilot Reports",  gate:"external", party:["vendor"] },
+  { key:"vendor_entries",      section:"portal", label:"Entries",        gate:"external", party:["vendor"] },
   { key:"pilot_report",        section:"portal", label:"Report Acres",   gate:"external", party:["pilot"] },
   { key:"pilot_reports",       section:"portal", label:"My Reports",     gate:"external", party:["pilot"] },
   { key:"issue_report",        section:"portal", label:"Field Issues",   gate:"external", party:["pilot"] },
@@ -146,7 +147,7 @@ const TOOLS = [
   { key:"vendor_my_rates",     section:"portal", label:"My Rates",       gate:"external", party:["vendor"] },
   { key:"vendor_invoice_new",  section:"portal", label:"Invoice DroCon", gate:"external", party:["vendor"] },
   { key:"vendor_invoices_mine",section:"portal", label:"My DroCon Invoices", gate:"external", party:["vendor"] },
-  { key:"vendor_report",       section:"portal", label:"Vendor Report",  gate:"external", party:["vendor"] },
+  { key:"partner_report",      section:"portal", label:"Partner Report", gate:"external", party:["vendor"] },
   { key:"vendor_short_days",   section:"portal", label:"Short-day Reasons", gate:"external", party:["vendor"] },
   // Client Portal — external client logins (live acre view, replaces Excel sheets)
   { key:"client_dashboard",    section:"portal", label:"Acre Dashboard", gate:"external", party:["client"] },
@@ -267,6 +268,7 @@ function applyProfile(){
   goHome();
   refreshNotifs(); refreshReviewCount(); refreshChatBadge();
   if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); refreshChatBadge(); } }, 30000);
+  try{ window.OPS.tour && window.OPS.tour.maybeAuto(); }catch(e){}
 }
 async function refreshRole(){
   const data = await loadProfile();
@@ -371,6 +373,7 @@ function authErrorText(err, isSignup){
 }
 $("btnSignOut").addEventListener("click", async ()=>{ await sb.auth.signOut(); });
 if($("btnChangePw")) $("btnChangePw").addEventListener("click", ()=>showSetPassword());
+if($("btnTour")) $("btnTour").addEventListener("click", ()=>{ try{ window.OPS.tour && window.OPS.tour.run(); }catch(e){} });
 (function(){ const r=$("meRole"); if(r){ r.style.cursor="pointer"; r.title="Click to refresh your role & access"; r.addEventListener("click", ()=>{ if(me) refreshRole(); }); } })();
 
 // ---------- role + permission helpers ----------
@@ -483,7 +486,7 @@ function renderHome(){
     ? `<button class="btn sm green" data-go="portal_help">💬 Help &amp; FAQs</button>`
     : `<button class="btn sm green" data-go="manual">📖 User Manual</button> <button class="btn sm" data-go="faqs">❓ FAQs</button>`;
   $("main").innerHTML=`
-    <div class="eyebrow">DroCon Cloud · Operations Suite</div>
+    <div class="eyebrow">DroCon Bharat OS</div>
     <h1 style="margin-bottom:2px">Welcome${name?(", "+name):""}</h1>
     <p class="muted">Select a module from the directory below. Return here anytime with the 🏠 Home button in the header.</p>
     <div class="card" style="background:var(--soft-green);border:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b>Getting started:</b> ${helpBtns}</div>
@@ -684,7 +687,7 @@ function openPrivacy(){
   const who=`<p class="muted">You are signed in as <b>${esc((profile&&profile.email)||(me&&me.email)||"")}</b> · role <b>${esc(isExternal()?"Authorized Partner / Consultant":((profile&&profile.role)||""))}</b>.</p>`;
   if(isExternal()){
     // Partner-facing privacy notice — about THEIR data and any farmer data they enter
-    b.innerHTML=`<p class="muted">How DroCon Cloud protects your information and the farmer data you submit.</p>
+    b.innerHTML=`<p class="muted">How DroCon Bharat OS protects your information and the farmer data you submit.</p>
       <div class="callout"><b>Encryption:</b> all traffic is HTTPS in transit and data is stored encrypted at rest (AES-256, Supabase).</div>
       <ul style="font-size:13px;line-height:1.7">
         <li><b>Your portal is private to you.</b> Your login can see <b>only</b> your own invoices, your rate card and this portal — never DroCon's internal records or any other partner's data. This is enforced by the database (Row-Level Security), not just the screen.</li>
@@ -697,7 +700,7 @@ function openPrivacy(){
       </ul>
       <p class="muted">Questions about your data? Email <a href="mailto:info@droconbharat.com">info@droconbharat.com</a>.</p>${who}`;
   } else {
-    b.innerHTML=`<p class="muted">How DroCon Cloud protects your data.</p>
+    b.innerHTML=`<p class="muted">How DroCon Bharat OS protects your data.</p>
       <div class="callout"><b>Encryption:</b> HTTPS in transit, AES-256 at rest (Supabase).</div>
       <ul style="font-size:13px;line-height:1.7">
         <li><b>Access:</b> not signed in = no access. Sign-up is restricted to approved company domains (partners are invite-only).</li>
@@ -748,5 +751,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "199";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "200";   // bump with the service-worker VERSION on each deploy
+window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DroCon Cloud — Operations Suite</title>
+<title>DroCon Bharat OS</title>
 <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,700;0,900;1,400&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#599533">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="DroCon Cloud">
+<meta name="apple-mobile-web-app-title" content="DCB OS">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <style>
@@ -138,7 +138,7 @@ thead th[data-ttdir]{color:var(--green)}
   <div class="authwrap">
     <div class="row" style="gap:8px;margin-bottom:14px">
       <div class="accentsq" style="width:10px;height:10px;background:var(--orange);border-radius:2px"></div>
-      <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
+      <div class="brand"><b>DroCon BHARAT</b><span>Operations Suite</span></div>
     </div>
     <h1 id="authTitle">Sign in</h1>
     <p class="muted" id="authSub">Use your work email to access the shared DroCon workspace.</p>
@@ -163,7 +163,7 @@ thead th[data-ttdir]{color:var(--green)}
   <div class="appheader">
     <div class="topbar">
       <div class="accentsq"></div>
-      <div class="brand"><b>DroCon BHARAT</b><span>Cloud · Operations Suite</span></div>
+      <div class="brand"><b>DroCon BHARAT</b><span>Operations Suite</span></div>
       <span id="buildTag" style="font-style:italic;font-size:11px;color:var(--muted);align-self:flex-end;margin-bottom:2px" title="App version — mention this if something looks out of date"></span>
       <div class="spacer"></div>
       <button class="btn" id="btnRefresh" title="Refresh data on this screen (approvals, updates) without a full reload">🔄 Refresh Suite</button>
@@ -173,6 +173,7 @@ thead th[data-ttdir]{color:var(--green)}
       <div id="bell" style="position:relative;cursor:pointer;font-size:20px;user-select:none" title="Notifications">🔔<span id="bellCount" style="position:absolute;top:-6px;right:-8px;background:var(--orange);color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;display:none"></span></div>
       <span class="pill-role" id="meRole">—</span>
       <span class="muted" id="meEmail"></span>
+      <button class="btn sm" id="btnTour" title="Take a guided tour of the app">🧭 Tour</button>
       <button class="btn sm" id="btnChangePw" title="Change your password">Change password</button>
       <button class="btn sm" id="btnSignOut">Sign out</button>
     </div>
@@ -198,7 +199,7 @@ thead th[data-ttdir]{color:var(--green)}
         <span>📞 <a href="tel:+919084381822">+91 90843 81822</a> · <a href="tel:+919084427132">+91 90844 27132</a> · <a href="tel:+917302627122">+91 73026 27122</a></span>
       </div>
       <div class="footdisc">© <span id="footYear">2026</span> DroCon Bharat Private Limited · 315/7 Thapar Nagar, Meerut (U.P.) – 250001 · GSTIN 09AALCD9671N1ZO.<br>
-        <b>DroCon Cloud</b> is proprietary software of DroCon Bharat Private Limited. All rights reserved. Unauthorised access, use, reproduction or distribution is prohibited.</div>
+        <b>DroCon Bharat OS</b> is proprietary software of DroCon Bharat Private Limited. All rights reserved. Unauthorised access, use, reproduction or distribution is prohibited.</div>
     </div>
   </footer>
 <script>(function(){var y=document.getElementById('footYear'); if(y) y.textContent=new Date().getFullYear();})();</script>
@@ -278,5 +279,6 @@ thead th[data-ttdir]{color:var(--green)}
 <script src="modules/mail.js"></script>
 <script src="modules/client_portal.js"></script>
 <script src="modules/short_days.js"></script>
+<script src="modules/tour.js"></script>
 </body>
 </html>
