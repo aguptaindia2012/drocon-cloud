@@ -8,9 +8,89 @@
    Later phases add pilot acre reporting, field issues and vendor invoicing.
    ============================================================================ */
 (function(){
-const { $, esc, fmt } = window.OPS.helpers;
+const { $, esc, fmt, num, money, fmtDate } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const chip = (s)=>({approved:"ok",pending:"warn",rejected:"err"}[s]||"warn");
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const ymLabel=(ym)=>{ if(!ym||ym==='?') return '?'; const p=String(ym).split('-'); return (MONTHS[(+p[1])-1]||p[1])+" "+p[0]; };
+
+/* ---- expandable acre drill-down (acres only) ---- */
+function vdSort(c,mode){ const ks=Object.keys(c); if(mode==="keyDesc") return ks.sort().reverse(); return ks.sort((x,y)=>c[y].a-c[x].a); }
+function vdDrill(rows, defs, prefix, header){
+  const root={a:0,c:{}};
+  (rows||[]).forEach(row=>{ const a=num(row.acres); let node=root; node.a+=a; defs.forEach(d=>{ const k=d.get(row)||"—"; node.c[k]=node.c[k]||{a:0,c:{}}; node=node.c[k]; node.a+=a; }); });
+  if(!Object.keys(root.c).length) return '<div class="muted">No data.</div>';
+  const out=[]; const idRef={n:0};
+  (function walk(node,depth,parentId){ vdSort(node.c, defs[depth].sort).forEach(k=>{ const child=node.c[k]; const id=prefix+(idRef.n++);
+    const leaf=depth===defs.length-1, d=defs[depth]; const lbl=d.label?d.label(k):k;
+    const caret=leaf?'':'<span class="dcar" style="display:inline-block;width:12px;color:var(--muted)">▸</span> ';
+    out.push(`<tr class="drow ${leaf?'dleaf':'dgrp'}" data-id="${id}" data-parent="${parentId||''}" style="display:${depth===0?'':'none'};${leaf?'':'cursor:pointer'};${depth===1?'background:#f7f8f6':''}"><td style="padding-left:${4+depth*24}px"${leaf?' class="muted"':''}>${caret}${d.bold?'<b>'+esc(lbl)+'</b>':esc(lbl)}</td><td class="num">${child.a.toFixed(1)}</td></tr>`);
+    if(!leaf) walk(child,depth+1,id); }); })(root,0,"");
+  return `<div style="overflow:auto"><table class="tt-skip"><thead><tr><th>${esc(header)}</th><th class="num">Acres</th></tr></thead><tbody>${out.join("")}</tbody></table></div>`;
+}
+function vdWire(host){ if(!host) return;
+  const hide=(id)=>{ host.querySelectorAll('.drow[data-parent="'+id+'"]').forEach(r=>{ r.style.display="none"; const c=r.querySelector(".dcar"); if(c)c.textContent="▸"; hide(r.getAttribute("data-id")); }); };
+  host.querySelectorAll(".dgrp").forEach(tr=>tr.addEventListener("click",()=>{ const id=tr.getAttribute("data-id"); const kids=host.querySelectorAll('.drow[data-parent="'+id+'"]'); const show=kids.length&&kids[0].style.display==="none"; if(show) kids.forEach(k=>k.style.display=""); else hide(id); const car=tr.querySelector(".dcar"); if(car) car.textContent=show?"▾":"▸"; }));
+}
+
+/* ------------------------------------------------------ VENDOR DASHBOARD --- */
+async function vendorDashboard(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Vendor Portal</div><h1>Acre Dashboard</h1>
+    <div class="callout">Your pilots' approved acres, and your billing position with DroCon Bharat.</div>
+    <div id="vdBody" class="muted">Loading…</div>`;
+  let rows, locs, summ, bill;
+  try{ [rows, locs, summ, bill] = await Promise.all([
+    sb().rpc("vendor_acre_rows",{p_from:null,p_to:null,p_vendor:null}).then(r=>r.data||[]),
+    sb().rpc("my_vendor_locations").then(r=>r.data||[]),
+    sb().rpc("vendor_location_summary",{p_vendor:null}).then(r=>r.data||[]),
+    sb().rpc("my_vendor_billing",{p_vendor:null}).then(r=>(r.data&&r.data[0])||{})
+  ]); }catch(e){ $("vdBody").innerHTML=`<div class="err">${esc(e.message)}</div>`; return; }
+  const totAc=rows.reduce((s,r)=>s+num(r.acres),0);
+  // this-week grid
+  const dayList=[]; for(let i=6;i>=0;i--){ dayList.push(new Date(Date.now()-i*86400000).toISOString().slice(0,10)); }
+  const inWeek=new Set(dayList), wLoc={}, dayTot={};
+  locs.forEach(l=>{ wLoc[l.id]={name:l.name,days:{},pilots:{}}; });
+  rows.filter(r=>inWeek.has(r.entry_date)).forEach(r=>{ const d=r.entry_date,lid=r.location_id,p=(r.pilot_name||"").trim()||"(unassigned)";
+    dayTot[d]=(dayTot[d]||0)+num(r.acres); const w=wLoc[lid]||(wLoc[lid]={name:r.location_name||"(none)",days:{},pilots:{}});
+    w.days[d]=(w.days[d]||0)+num(r.acres); w.pilots[p]=w.pilots[p]||{}; w.pilots[p][d]=(w.pilots[p][d]||0)+num(r.acres); });
+  const grand=dayList.reduce((s,d)=>s+(dayTot[d]||0),0);
+  const drows=rows.map(r=>({location:r.location_name||"(none)", pilot:(r.pilot_name||"").trim()||"(unassigned)", ym:r.entry_date?r.entry_date.slice(0,7):'?', acres:num(r.acres)}));
+  $("vdBody").innerHTML=`
+    <div class="statrow">
+      <div class="stat"><div class="n">${totAc.toFixed(1)}</div><div class="l">Total acres</div></div>
+      <div class="stat" style="background:#fff0db"><div class="n" style="color:#9a5b00">${num(bill.unbilled_acres).toFixed(1)}</div><div class="l">Unbilled acres${num(bill.unbilled_amount)>0?` <span class="muted" style="font-size:11px">(${money(bill.unbilled_amount)})</span>`:''}</div></div>
+      <div class="stat"><div class="n" style="color:var(--green)">${money(bill.pending_payment)}</div><div class="l">Pending payment from DroCon</div></div>
+      <div class="stat" style="${num(bill.due_to_drocon)>0?'background:#fbe0de':''}"><div class="n" style="${num(bill.due_to_drocon)>0?'color:#a3322a':''}">${money(bill.due_to_drocon)}</div><div class="l">Amount due to DroCon (advances)</div></div>
+      <div class="stat"><div class="n">${locs.length}</div><div class="l">Locations</div></div>
+    </div>
+    <div class="card"><h3>This week — acres by location &amp; pilot</h3>
+      <p class="muted" style="margin-top:-4px">Last 7 days. A dot (·) means no spray that day.</p>
+      <div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
+      <tbody>
+        <tr style="background:var(--charcoal);color:#fff"><td><b>ALL LOCATIONS — daily total</b></td>${dayList.map(d=>`<td class="num"><b>${dayTot[d]?dayTot[d].toFixed(1):'·'}</b></td>`).join("")}<td class="num"><b>${grand.toFixed(1)}</b></td></tr>
+        ${Object.keys(wLoc).sort((a,b)=>(wLoc[a].name||"").localeCompare(wLoc[b].name||"")).map(lid=>{ const L=wLoc[lid]; const tot=dayList.reduce((s,d)=>s+(L.days[d]||0),0);
+          const locRow=`<tr style="background:var(--grey)"><td><b>${esc(L.name)}</b></td>${dayList.map(d=>`<td class="num">${L.days[d]?L.days[d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`;
+          const pr=Object.keys(L.pilots).sort().map(p=>{ const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
+            return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${P[d]!=null?P[d].toFixed(1):'·'}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
+          return locRow+pr; }).join("")}</tbody></table></div></div>
+    <div class="card"><h3>Location summary</h3>
+      <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Started</th><th>Status</th><th class="num">Days</th><th class="num">Acres</th><th class="num">Avg/day</th></tr></thead>
+      <tbody>${(summ||[]).map(s=>`<tr><td>${esc(s.location_name||"")}</td><td>${s.start_date?fmtDate(s.start_date):'<span class="muted">—</span>'}</td>
+        <td>${s.active?'<span class="chip ok">Active</span>':(s.deactivated_on?('Deactivated '+fmtDate(s.deactivated_on)):'<span class="muted">Inactive</span>')}</td>
+        <td class="num">${s.days_deployed!=null?s.days_deployed:'—'}</td><td class="num">${num(s.acres).toFixed(1)}</td><td class="num">${s.avg_daily!=null?num(s.avg_daily).toFixed(1):'—'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No locations.</td></tr>'}</tbody></table></div></div>
+    <div class="card"><h3>Acre report</h3>
+      <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-vd="month">By Month</button><button class="btn sm" data-vd="loc">By Location</button><button class="btn sm" data-vd="pilot">By Pilot</button></div>
+      <div id="vdDrill"></div></div>`;
+  const dMonthB={get:r=>r.ym,label:ymLabel,sort:"keyDesc",bold:true}, dMonth={get:r=>r.ym,label:ymLabel,sort:"keyDesc"},
+        dLoc={get:r=>r.location,sort:"acres",bold:true}, dLocN={get:r=>r.location,sort:"acres"},
+        dPil={get:r=>r.pilot,sort:"acres"}, dPilB={get:r=>r.pilot,sort:"acres",bold:true};
+  const VIEWS={ month:[[dMonthB,dLocN,dPil],"Month / Location / Pilot"], loc:[[dLoc,dMonth,dPil],"Location / Month / Pilot"], pilot:[[dPilB,dLocN,dMonth],"Pilot / Location / Month"] };
+  function drill(k){ const [defs,hdr]=VIEWS[k]||VIEWS.month; $("vdDrill").innerHTML=vdDrill(drows,defs,"vd"+k,hdr); vdWire($("vdDrill"));
+    document.querySelectorAll("[data-vd]").forEach(b=>b.style.fontWeight=(b.getAttribute("data-vd")===k)?"700":""); }
+  document.querySelectorAll("[data-vd]").forEach(b=>b.addEventListener("click",()=>drill(b.getAttribute("data-vd"))));
+  drill("month");
+}
 
 /* ---------------------------------------------------------------- VENDOR --- */
 async function vendorPilots(){
@@ -106,6 +186,7 @@ async function pilotApprovals(){
   }
 }
 
+window.OPS.routes.vendor_dashboard = vendorDashboard;
 window.OPS.routes.vendor_pilots   = vendorPilots;
 window.OPS.routes.pilot_approvals = pilotApprovals;
 })();

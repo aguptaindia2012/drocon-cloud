@@ -116,10 +116,14 @@ async function vendorInvoicesMine(openId){
   $("viNew").addEventListener("click",vendorInvoiceNew);
   const { data }=await sb().from("vendor_invoices").select("*").order("created_at",{ascending:false});
   const rows=data||[];
-  $("miList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Number</th><th>Period</th><th class="num">Acres</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+  const payMap={}; try{ const pm=await sb().rpc("my_vendor_invoices"); (pm.data||[]).forEach(x=>payMap[x.id]=x.pay_status); }catch(e){}
+  const payLabel={unpaid:"Unpaid",cheque_issued:"Cheque issued",part_paid:"Part paid",paid:"Paid"};
+  const payChip=s=>({paid:"ok",part_paid:"warn",cheque_issued:"warn",unpaid:"err"}[s]||"err");
+  $("miList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Number</th><th>Period</th><th class="num">Acres</th><th class="num">Amount</th><th>Status</th><th>Payment</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td><b>${esc(r.number||"")}</b></td><td>${r.period_from?fmtDate(r.period_from):""} – ${r.period_to?fmtDate(r.period_to):""}</td>
       <td class="num">${num(r.acres).toFixed(1)}</td><td class="num">${money(r.amount)}</td>
       <td><span class="chip ${invChip(r.status)}">${esc(r.status)}</span>${r.reject_reason?`<br><span class="small-note" style="color:#a3322a">${esc(r.reject_reason)}</span>`:''}</td>
+      <td>${r.status==="approved"?`<span class="chip ${payChip(payMap[r.id]||'unpaid')}">${esc(payLabel[payMap[r.id]||'unpaid'])}</span>`:'<span class="muted">—</span>'}</td>
       <td><button class="btn sm" data-print="${r.id}">Print</button> <button class="btn sm" data-xls="${r.id}">Excel</button></td></tr>`).join("")}</tbody></table></div></div>`
     : '<div class="card muted">No invoices yet.</div>';
   const by=id=>rows.find(x=>x.id===id);
