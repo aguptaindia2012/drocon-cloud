@@ -25,7 +25,7 @@ window.OPS = { sb:null, me:null, profile:null, perms:new Set(),
   routes:{}, currentSection:null, currentTool:"home",
   helpers:{ $, esc, fmt, fmtDate, todayISO, money, num, fyOf } };
 
-let sb=null, me=null, profile=null, signupMode=false;
+let sb=null, me=null, profile=null, signupMode=false, recovering=false;
 const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended",approved:"Approved",rejected:"Rejected",executed:"Executed",issued:"Issued",partial:"Part paid",paid:"Paid"};
 
 /* ---------- sections + tools registry ----------
@@ -180,13 +180,19 @@ window.OPS.SHORT_REASONS = [
     $("auConfigWarn").textContent="⚠ config.js is missing your Supabase URL/key. See SETUP_OPS.md.";
     $("auGo").disabled=true; return;
   }
-  sb = supabase.createClient(window.DCB_CONFIG.SUPABASE_URL, window.DCB_CONFIG.SUPABASE_ANON_KEY);
+  // Capture a recovery return BEFORE the client processes (and clears) the URL.
+  const hadRecovery = /type=recovery/.test(location.hash||"") || /type=recovery/.test(location.search||"");
+  // Implicit flow puts the token in the URL hash, so a reset link works even when
+  // opened in a different browser than the one that requested it (no PKCE verifier).
+  sb = supabase.createClient(window.DCB_CONFIG.SUPABASE_URL, window.DCB_CONFIG.SUPABASE_ANON_KEY,
+    { auth:{ flowType:"implicit", detectSessionInUrl:true, persistSession:true, autoRefreshToken:true } });
   window.OPS.sb = sb;
   // IMPORTANT: only (re)initialise the app when the *logged-in user* actually changes.
   // Supabase fires onAuthStateChange for TOKEN_REFRESHED / focus / etc.; re-running
   // afterLogin() on those would re-render the screen and wipe whatever you're typing.
-  sb.auth.onAuthStateChange((_e, session)=>{ if(_e==="PASSWORD_RECOVERY"){ showSetPassword(); return; } handleSession(session); });
-  sb.auth.getSession().then(({data})=>{ handleSession(data.session); });
+  sb.auth.onAuthStateChange((_e, session)=>{ if(_e==="PASSWORD_RECOVERY"){ recovering=true; showSetPassword(); return; } if(recovering) return; handleSession(session); });
+  sb.auth.getSession().then(({data})=>{ if(recovering) return; handleSession(data.session); });
+  if(hadRecovery){ recovering=true; showSetPassword(); }
 })();
 
 // Password recovery: shown when the user returns via a reset link (or from the
@@ -208,7 +214,7 @@ function showSetPassword(){
     $("spGo").disabled=true;
     const { error }=await sb.auth.updateUser({ password:p });
     if(error){ $("spErr").textContent=error.message; $("spGo").disabled=false; return; }
-    wrap.remove();
+    wrap.remove(); recovering=false;
     try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}
     const { data:{ session } }=await sb.auth.getSession();
     handleSession(session);
@@ -729,5 +735,5 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "191";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "192";   // bump with the service-worker VERSION on each deploy
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
