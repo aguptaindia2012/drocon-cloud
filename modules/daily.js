@@ -10,7 +10,9 @@
 const { $, esc, num, money, todayISO, fmt, fmtDate } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 
-let drows=[], clients=[], editingId=null;
+let drows=[], clients=[], editingId=null, pilotReason={};
+const pilotKeyOf=(r)=>String(r.pilot_id||"") || (r.pilot||"").trim().toLowerCase();
+const pilotNameOf=(r)=>(locPilots.find(p=>String(p.id)===String(r.pilot_id))||{}).name || (r.pilot||"").trim() || "(unassigned)";
 let locs=[], locPilots=[], curLoc=null, cropsList=[], curRates=[];
 function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", crop_id:"", chemical:"", acres:"", crate:"", frate:"", gps:false, short_reason:"" }; }
 const SHORT_AC=12;   // a pilot-day under this many acres needs a reason
@@ -67,6 +69,7 @@ async function view(editSub){
       <div class="err" id="dErr"></div>
     </div>`;
   drows = editSub && Array.isArray(editSub.rows) && editSub.rows.length ? editSub.rows.map(r=>Object.assign(blank(),r)) : [blank(),blank()];
+  pilotReason={}; drows.forEach(r=>{ if((r.short_reason||"").trim()) pilotReason[pilotKeyOf(r)]=r.short_reason; });   // seed from legacy per-row reasons on edit
   $("dClear").addEventListener("click",()=> editSub ? window.OPS.openTool("daily_approvals") : view());
   $("dAdd").addEventListener("click",()=>{ drows.push(blank()); renderRows(); });
   $("dSave").addEventListener("click",save);
@@ -111,7 +114,7 @@ async function pickLocation(locId, keepRows){
   if(note) note.innerHTML = `Rates from this location — farmer <b>${curLoc.farmer_rate!=null?money(curLoc.farmer_rate):'not set'}</b>/acre, client <b>${money(curLoc.client_rate||0)}</b>/acre. `+
     (locPilots.length ? `<b>${locPilots.length}</b> pilot(s) assigned here.`
       : `<span style="color:#a3322a">No pilots assigned to this location — assign them under <b>Pilots</b>.</span>`);
-  if(!keepRows){ drows = rowsForLocation(curLoc, locPilots); renderRows(); }
+  if(!keepRows){ drows = rowsForLocation(curLoc, locPilots); pilotReason={}; renderRows(); }
   loadRecent(curLoc.id);
 }
 
@@ -129,9 +132,7 @@ async function loadRecent(locId){
     <div style="overflow:auto;margin-top:6px"><table class="tt-skip"><thead><tr><th>Date</th><th>Pilot</th><th>Crop</th><th class="num">Acres</th><th>Source</th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.pilot_name||"")}</td><td>${esc(r.crop||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td><td>${stChip(r.state)}</td></tr>`).join("")}</tbody></table></div></details>`;
 }
-function renderRows(){
-  const tb=$("dRows").querySelector("tbody");
-  tb.innerHTML=drows.map((r,i)=>{ const amt=num(r.acres)*(num(r.crate)+num(r.frate)); return `<tr>
+function rowHtml(r,i){ const amt=num(r.acres)*(num(r.crate)+num(r.frate)); return `<tr>
     <td>${locPilots.length
       ? `<select data-i="${i}" data-k="pilot_id"><option value="">— select pilot —</option>${
           locPilots.map(p=>`<option value="${p.id}" ${String(r.pilot_id)===String(p.id)?'selected':''}>${esc(p.name)}</option>`).join("")}</select>`
@@ -148,15 +149,46 @@ function renderRows(){
     <td><input data-i="${i}" data-k="frate" type="number" step="any" value="${esc(r.frate)}" style="width:64px;text-align:right"></td>
     <td class="num">${money(amt)}</td>
     <td style="text-align:center"><input data-i="${i}" data-k="gps" type="checkbox" style="width:auto" ${r.gps?'checked':''}></td>
-    <td><input data-i="${i}" data-k="short_reason" value="${esc(r.short_reason||'')}" placeholder="why < ${SHORT_AC} ac?" style="width:140px${(num(r.acres)>0&&num(r.acres)<SHORT_AC)?';border-color:#e0a800;background:#fff8e6':''}"></td>
-    <td class="x" data-del="${i}">✕</td></tr>`; }).join("");
-  tb.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
+    <td></td>
+    <td class="x" data-del="${i}">✕</td></tr>`; }
+function renderRows(){
+  const tb=$("dRows").querySelector("tbody");
+  // group row indices by pilot (first-appearance order) so each pilot's farmers
+  // sit together with a subtotal; the short-day reason is per PILOT-DAY total.
+  const order=[], byKey={};
+  drows.forEach((r,i)=>{ const k=pilotKeyOf(r); if(!(k in byKey)){ byKey[k]=[]; order.push(k); } byKey[k].push(i); });
+  let html="";
+  order.forEach(k=>{ const idxs=byKey[k];
+    idxs.forEach(i=>{ html+=rowHtml(drows[i],i); });
+    if(k!==""){ // a real pilot → subtotal + short-day check on the day's total
+      const nm=pilotNameOf(drows[idxs[0]]);
+      const tot=idxs.reduce((s,i)=>s+num(drows[i].acres),0);
+      const totAmt=idxs.reduce((s,i)=>s+num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate)),0);
+      const short=tot>0 && tot<SHORT_AC;
+      html+=`<tr data-sub="${esc(k)}" style="background:#eef3ea">
+        <td style="font-weight:700">↳ ${esc(nm)} — subtotal</td>
+        <td colspan="5" class="muted" style="font-size:12px">${idxs.length} line(s)</td>
+        <td class="num" style="font-weight:700">${tot.toFixed(1)}</td>
+        <td colspan="2"></td>
+        <td class="num" style="font-weight:700">${money(totAmt)}</td>
+        <td></td>
+        <td>${short
+          ? `<input data-pk="${esc(k)}" class="sdr" value="${esc(pilotReason[k]||'')}" placeholder="reason (< ${SHORT_AC} ac/day)" style="width:160px;border-color:#e0a800;background:#fff8e6">`
+          : (tot>0?'<span class="chip ok" style="font-size:11px">met minimum</span>':'')}</td>
+        <td></td></tr>`;
+    }
+  });
+  tb.innerHTML=html;
+  // text/number/checkbox inputs
+  tb.querySelectorAll("input[data-i]").forEach(inp=>inp.addEventListener("input",()=>{
     const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
     drows[i][k]= k==="gps"?inp.checked:inp.value;
-    if(["acres","crate","frate"].includes(k)){ const tr=inp.closest("tr"); tr.children[9].textContent=money(num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate))); sumRow();
-      if(k==="acres"){ const rin=tr.children[11].querySelector("input"), short=num(drows[i].acres)>0&&num(drows[i].acres)<SHORT_AC; if(rin){ rin.style.borderColor=short?'#e0a800':''; rin.style.background=short?'#fff8e6':''; } }
-    }
+    if(["acres","crate","frate"].includes(k)){ const tr=inp.closest("tr"); tr.children[9].textContent=money(num(drows[i].acres)*(num(drows[i].crate)+num(drows[i].frate))); sumRow(); }
   }));
+  // when acres or the pilot name settle, regroup + refresh subtotals / short-day state
+  tb.querySelectorAll("input[data-k='acres'],input[data-k='pilot']").forEach(inp=>inp.addEventListener("change",renderRows));
+  // per-pilot short-day reason
+  tb.querySelectorAll(".sdr").forEach(inp=>inp.addEventListener("input",()=>{ pilotReason[inp.getAttribute("data-pk")]=inp.value; }));
   // crop picker: set the crop, then resolve the effective rate for that crop/date
   tb.querySelectorAll("select[data-k='crop_id']").forEach(sel=>sel.addEventListener("change",()=>{
     const i=+sel.getAttribute("data-i"); drows[i].crop_id=sel.value;
@@ -164,13 +196,13 @@ function renderRows(){
     const rt=resolveRate(sel.value, $("dDate").value); drows[i].crate=rt.crate; drows[i].frate=rt.frate;
     renderRows();
   }));
-  // pilot picker: keep the id AND the readable name in step
+  // pilot picker: keep the id AND the readable name in step, then regroup
   tb.querySelectorAll("select[data-k='pilot_id']").forEach(sel=>sel.addEventListener("change",()=>{
     const i=+sel.getAttribute("data-i");
     drows[i].pilot_id = sel.value;
     const p = locPilots.find(x=>String(x.id)===String(sel.value));
     drows[i].pilot = p ? p.name : "";
-    sumRow();
+    renderRows();
   }));
   tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ drows.splice(+x.getAttribute("data-del"),1); if(!drows.length) drows.push(blank()); renderRows(); }));
   sumRow();
@@ -193,11 +225,11 @@ async function save(){
   if(!valid.length){ $("dErr").textContent="Add at least one spray (acres or farmer name)."; return; }
   if(locPilots.length && valid.some(r=>!r.pilot_id)){ $("dErr").textContent="Select a pilot on every row with acres."; return; }
   let a=0,amt=0; valid.forEach(r=>{ a+=num(r.acres); amt+=num(r.acres)*(num(r.crate)+num(r.frate)); });
-  // Short-day reasons: aggregate acres by pilot; under 12 ac needs a reason.
+  // Short-day reasons: aggregate acres by PILOT-DAY total; under 12 ac needs a reason.
   const byPilot={};
-  valid.forEach(r=>{ const nm=(r.pilot||"").trim()||"(unassigned)"; byPilot[nm]=byPilot[nm]||{acres:0,reason:""}; byPilot[nm].acres+=num(r.acres); if(!byPilot[nm].reason && (r.short_reason||"").trim()) byPilot[nm].reason=(r.short_reason||"").trim(); });
-  const shortMissing=Object.entries(byPilot).filter(([n,p])=>p.acres>0&&p.acres<SHORT_AC&&!p.reason).map(([n])=>n);
-  if(shortMissing.length){ $("dErr").textContent="Add a short-day reason for: "+shortMissing.join(", ")+" (under "+SHORT_AC+" acres)."; return; }
+  valid.forEach(r=>{ const k=pilotKeyOf(r); byPilot[k]=byPilot[k]||{name:pilotNameOf(r),acres:0}; byPilot[k].acres+=num(r.acres); });
+  const shortMissing=Object.entries(byPilot).filter(([k,p])=>p.acres>0&&p.acres<SHORT_AC&&!(pilotReason[k]||"").trim()).map(([k,p])=>p.name);
+  if(shortMissing.length){ $("dErr").textContent="Add a short-day reason for: "+shortMissing.join(", ")+" (under "+SHORT_AC+" acres for the day)."; return; }
 
   const rec={ entry_date:date, client_id:clientId||null, client_name:clientName||null,
     location_id:locId, location_name:locName, state:state||null, district:district||null,
@@ -212,8 +244,8 @@ async function save(){
   $("dSave").disabled=false;
   if(err){ $("dErr").textContent=err.message; return; }
   // persist short-day reasons (pilot-day total < 12 ac)
-  try{ for(const [nm,p] of Object.entries(byPilot)){ if(p.acres>0 && p.acres<SHORT_AC && p.reason){
-    await sb().rpc("set_short_day_reason",{ p_date:date, p_location:locId, p_pilot_name:nm, p_acres:p.acres, p_reason:p.reason }); } }
+  try{ for(const [k,p] of Object.entries(byPilot)){ const reason=(pilotReason[k]||"").trim(); if(p.acres>0 && p.acres<SHORT_AC && reason){
+    await sb().rpc("set_short_day_reason",{ p_date:date, p_location:locId, p_pilot_name:p.name, p_acres:p.acres, p_reason:reason }); } }
   }catch(e){ console.warn("short-day reason save:", e.message); }
   window.OPS.audit(editingId?"daily_resubmitted":"daily_submitted","daily_submissions",editingId||locName,locName+" · "+valid.length+" spray(s)");
   window.OPS.refreshNotifs && window.OPS.refreshNotifs();
