@@ -67,12 +67,13 @@ async function vendorInvoiceNew(){
   const m=$("main");
   const to=todayISO(); const from=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
   m.innerHTML=`<div class="eyebrow">Vendor Portal</div><h1>Invoice DroCon</h1>
-    <div class="callout">Pick a period, review your approved acres at the DroCon-set rates, select the rows and generate an invoice. Only acres DroCon has approved and not yet invoiced appear.</div>
+    <div class="callout">Pick a period, review your approved acres at <b>your rates</b> (set under <b>My Rates</b>), select the rows and generate an invoice. Only acres DroCon has approved and not yet invoiced appear. You can also net part of the invoice against an open advance.</div>
     <div class="row wrap" style="margin:6px 0;gap:8px;align-items:flex-end">
       <div class="field" style="margin:0"><label>From</label><input id="viFrom" type="date" value="${from}"></div>
       <div class="field" style="margin:0"><label>To</label><input id="viTo" type="date" value="${to}"></div>
       <button class="btn sm" id="viLoad">Load acres</button></div>
     <div id="viBody" class="muted">Choose a period and click <b>Load acres</b>.</div>`;
+  let advances=[]; try{ advances=await sb().rpc("my_vendor_advances").then(r=>r.data||[]); }catch(e){}
   $("viLoad").addEventListener("click",load);
   load();
   async function load(){
@@ -86,6 +87,9 @@ async function vendorInvoiceNew(){
       <div class="card"><div style="overflow:auto"><table class="tt-skip"><thead><tr><th><input type="checkbox" id="viAll"></th><th>Date</th><th>Location</th><th>Crop</th><th class="num">Acres</th><th class="num">₹/acre</th><th class="num">Amount</th></tr></thead>
       <tbody>${billRows.map((r,i)=>`<tr><td><input type="checkbox" data-i="${i}" ${num(r.rate)?'':'disabled'}></td><td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.crop||"")}</td>
         <td class="num">${num(r.acres).toFixed(1)}</td><td class="num">${num(r.rate)?money(r.rate):'<span class="chip rejected">not set</span>'}</td><td class="num">${money(r.amount)}</td></tr>`).join("")}</tbody></table></div>
+      ${advances.length?`<div class="row wrap" style="margin-top:8px;gap:6px;align-items:center"><span class="muted">Adjust against advance:</span>
+        <select id="viAdv" style="max-width:260px"><option value="">— none —</option>${advances.map(a=>`<option value="${a.id}">${fmtDate(a.issued_on)} · outstanding ${money(a.outstanding)}${a.purpose?" · "+esc(a.purpose):""}</option>`).join("")}</select>
+        <input id="viAdj" type="number" step="any" placeholder="Adjust ₹" style="max-width:120px"><span class="muted" style="font-size:12px">acres still count as billed; net payable is reduced</span></div>`:''}
       <div class="row" style="margin-top:8px"><b id="viSum">Selected: 0 acres · ₹0</b><div class="spacer"></div>
         <input id="viNote" placeholder="Note (optional)" style="max-width:220px"><button class="btn green" id="viGen">Generate invoice</button></div>
       <div class="err" id="viErr"></div></div>`;
@@ -99,8 +103,14 @@ async function vendorInvoiceNew(){
   async function gen(){
     if(!selAcres.size){ $("viErr").textContent="Select at least one row."; return; }
     const ids=[...selAcres].map(i=>billRows[i].entry_id);
+    const advId=($("viAdv")&&$("viAdv").value)||null;
+    const adj=$("viAdj")?Number($("viAdj").value||0):0;
+    if(advId && adj>0){
+      let selAmt=0; selAcres.forEach(i=>{ selAmt+=num(billRows[i].amount); });
+      if(adj>selAmt){ $("viErr").textContent="Advance adjustment can't exceed the invoice amount ("+money(selAmt)+")."; return; }
+    }
     $("viGen").disabled=true;
-    const { data, error }=await sb().rpc("generate_vendor_invoice",{ p_from:$("viFrom").value||null, p_to:$("viTo").value||null, p_ids:ids, p_note:$("viNote").value||null });
+    const { data, error }=await sb().rpc("generate_vendor_invoice",{ p_from:$("viFrom").value||null, p_to:$("viTo").value||null, p_ids:ids, p_note:$("viNote").value||null, p_advance_id:advId, p_adjust:(advId?adj:0) });
     $("viGen").disabled=false;
     if(error){ $("viErr").textContent=error.message; return; }
     window.OPS.flashTop("Invoice generated ✓"); vendorInvoicesMine(data);
@@ -121,7 +131,7 @@ async function vendorInvoicesMine(openId){
   const payChip=s=>({paid:"ok",part_paid:"warn",cheque_issued:"warn",unpaid:"err"}[s]||"err");
   $("miList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Number</th><th>Period</th><th class="num">Acres</th><th class="num">Amount</th><th>Status</th><th>Payment</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td><b>${esc(r.number||"")}</b></td><td>${r.period_from?fmtDate(r.period_from):""} – ${r.period_to?fmtDate(r.period_to):""}</td>
-      <td class="num">${num(r.acres).toFixed(1)}</td><td class="num">${money(r.amount)}</td>
+      <td class="num">${num(r.acres).toFixed(1)}</td><td class="num">${money(r.amount)}${num(r.advance_adjust)>0?`<br><span class="muted" style="font-size:11px">− adv ${money(r.advance_adjust)} · net ${money(r.net_amount!=null?r.net_amount:num(r.amount)-num(r.advance_adjust))}</span>`:''}</td>
       <td><span class="chip ${invChip(r.status)}">${esc(r.status)}</span>${r.reject_reason?`<br><span class="small-note" style="color:#a3322a">${esc(r.reject_reason)}</span>`:''}</td>
       <td>${r.status==="approved"?`<span class="chip ${payChip(payMap[r.id]||'unpaid')}">${esc(payLabel[payMap[r.id]||'unpaid'])}</span>`:'<span class="muted">—</span>'}</td>
       <td><button class="btn sm" data-print="${r.id}">Print</button> <button class="btn sm" data-xls="${r.id}">Excel</button></td></tr>`).join("")}</tbody></table></div></div>`
