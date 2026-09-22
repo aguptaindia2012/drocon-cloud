@@ -12,7 +12,7 @@ const pad4 = n => String(n).padStart(4,"0");
 const HSN_LIST = ["88073020","88071000","85076000","88073000","9986","88022000","8806","88072000"];
 
 const CONFIG = {
-  quotation: { title:"Quotation", partyKind:"none", pickFrom:null, partyLabel:"Buyer Details",
+  quotation: { title:"Quotation", partyKind:"client", pickFrom:"clients", partyLabel:"Buyer Details",
     number:(fy,seq)=>`DCB/${fy}/${pad4(seq)}`,
     defTerms:{ paymentTerms:"50% - Booking Amount\n50% - Before Dispatch", deliveryTerms:"Upon 100% Payment. Dispatch within 7 days of payment." } },
   invoice: { title:"Tax/Cash Credit Invoice", partyKind:"client", pickFrom:"clients", partyLabel:"Buyer Details",
@@ -112,6 +112,10 @@ function computeTotals(){ return window.OPS.docgen.computeTotals(D.items); }
 const REV_CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
 function editor(){
   const cfg=CONFIG[TYPE]; const m=$("main"); const t=computeTotals();
+  // Invoices & Quotations: the client must come from the register — lock the
+  // party fields (they auto-fill from the picker) so nobody free-types a name.
+  const LOCK_PARTY = (TYPE==='invoice'||TYPE==='quotation');
+  const PLOCK = LOCK_PARTY ? ' readonly style="background:#f4f5f2"' : '';
   m.innerHTML=`<button class="btn sm" id="dBack">← Back</button>
     <div class="card" style="margin-top:12px">
       <div class="row wrap"><div class="eyebrow">Administration</div>
@@ -127,21 +131,23 @@ function editor(){
           ${REV_CATS.map(([k,l])=>`<option value="${k}"${(D.data&&D.data.rev_category)===k?' selected':''}>${l}</option>`).join("")}
         </select></div>`:''}
       </div>
-      ${cfg.pickFrom?`<div class="field"><label>Pull ${cfg.partyKind} from registry</label><select id="dParty"><option value="">— select ${cfg.partyKind} —</option></select></div>`:
-        `<div class="callout">Quotation party details are filled <b>afresh</b> here and are independent of the Clients registry.</div>`}
+      ${cfg.pickFrom?`<div class="field"><label>${cfg.partyKind==='client'?'Client — select from register':'Pull '+cfg.partyKind+' from registry'}</label>
+        <div class="row" style="gap:6px;align-items:stretch"><select id="dParty" style="flex:1"><option value="">— select ${cfg.partyKind} —</option></select>
+        ${cfg.pickFrom==='clients'?'<button class="btn sm" id="dNewClient" type="button">+ Create client</button>':''}</div></div>`:''}
       ${cfg.linkInvoice?`<div class="field"><label>Against Invoice</label><select id="dInv"><option value="">— select invoice —</option></select></div>`:''}
       <h3>${esc(cfg.partyLabel)}</h3>
+      ${LOCK_PARTY?`<div class="callout">The client is <b>always chosen from the register</b> — use the picker above (or <b>+ Create client</b> if they're not listed). These details fill in automatically and can't be typed here.</div>`:''}
       <div class="fgrid">
-        <div class="field full"><label>Firm / ${cfg.partyKind==='vendor'?'Vendor':'Buyer'} Name</label><input id="p_firmName" value="${esc(D.party.firmName||'')}"></div>
-        <div class="field"><label>Contact Person</label><input id="p_name" value="${esc(D.party.name||'')}"></div>
-        <div class="field"><label>Mobile / Phone</label><input id="p_mobile" value="${esc(D.party.mobile||'')}"></div>
-        <div class="field full"><label>Address</label><input id="p_address" value="${esc(D.party.address||'')}"></div>
-        <div class="field"><label>City</label><input id="p_city" value="${esc(D.party.city||'')}"></div>
-        <div class="field"><label>State</label><input id="p_state" value="${esc(D.party.state||'')}"></div>
-        <div class="field"><label>State Code</label><input id="p_stateCode" value="${esc(D.party.stateCode||'')}"></div>
-        <div class="field"><label>Pincode</label><input id="p_pincode" value="${esc(D.party.pincode||'')}"></div>
-        <div class="field"><label>GSTIN / UIN</label><input id="p_gstin" value="${esc(D.party.gstin||'')}"></div>
-        <div class="field"><label>Email</label><input id="p_email" value="${esc(D.party.email||'')}"></div>
+        <div class="field full"><label>Firm / ${cfg.partyKind==='vendor'?'Vendor':'Buyer'} Name</label><input id="p_firmName" value="${esc(D.party.firmName||'')}"${PLOCK}></div>
+        <div class="field"><label>Contact Person</label><input id="p_name" value="${esc(D.party.name||'')}"${PLOCK}></div>
+        <div class="field"><label>Mobile / Phone</label><input id="p_mobile" value="${esc(D.party.mobile||'')}"${PLOCK}></div>
+        <div class="field full"><label>Address</label><input id="p_address" value="${esc(D.party.address||'')}"${PLOCK}></div>
+        <div class="field"><label>City</label><input id="p_city" value="${esc(D.party.city||'')}"${PLOCK}></div>
+        <div class="field"><label>State</label><input id="p_state" value="${esc(D.party.state||'')}"${PLOCK}></div>
+        <div class="field"><label>State Code</label><input id="p_stateCode" value="${esc(D.party.stateCode||'')}"${PLOCK}></div>
+        <div class="field"><label>Pincode</label><input id="p_pincode" value="${esc(D.party.pincode||'')}"${PLOCK}></div>
+        <div class="field"><label>GSTIN / UIN</label><input id="p_gstin" value="${esc(D.party.gstin||'')}"${PLOCK}></div>
+        <div class="field"><label>Email</label><input id="p_email" value="${esc(D.party.email||'')}"${PLOCK}></div>
       </div>
 
       <h3>Line Items</h3>
@@ -298,13 +304,18 @@ async function loadPickers(cfg){
     const rows=data||[];
     $("dParty").innerHTML='<option value="">— select '+cfg.partyKind+' —</option>'+rows.map(r=>`<option value="${r.id}">${esc(r.firm_name||r.name)}</option>`).join("");
     if(D.party_id) $("dParty").value=D.party_id;
-    $("dParty").addEventListener("change",()=>{ const r=rows.find(x=>x.id===$("dParty").value); if(!r) return;
-      D.party_id=r.id;
+    const fillFrom=r=>{ if(!r) return; D.party_id=r.id;
       D.party={ firmName:r.firm_name||r.name||"", name:r.name||"", mobile:r.mobile||"", email:r.email||"",
         gstin:r.gstin||"", address:r.address||"", city:r.city||"", state:r.state||"", stateCode:r.state_code||"", pincode:r.pincode||"" };
       ["firmName","name","mobile","email","gstin","address","city","state","stateCode","pincode"].forEach(k=>{ if($("p_"+k)) $("p_"+k).value=D.party[k]||""; });
-      if(cfg.defTerms && r.default_terms && cfg.defTerms.poTerms){ /* vendor default terms */ const ta=$("t_poTerms"); if(ta) ta.value=r.default_terms; }
-    });
+      if(cfg.defTerms && r.default_terms && cfg.defTerms.poTerms){ const ta=$("t_poTerms"); if(ta) ta.value=r.default_terms; } };
+    $("dParty").addEventListener("change",()=>fillFrom(rows.find(x=>x.id===$("dParty").value)));
+    if($("dNewClient")) $("dNewClient").addEventListener("click",()=>quickCreateClient(ins=>{
+      rows.push(ins); rows.sort((a,b)=>String(a.firm_name||a.name||"").localeCompare(String(b.firm_name||b.name||"")));
+      $("dParty").innerHTML='<option value="">— select '+cfg.partyKind+' —</option>'+rows.map(r=>`<option value="${r.id}">${esc(r.firm_name||r.name)}</option>`).join("");
+      $("dParty").value=ins.id; fillFrom(ins);
+      window.OPS.flashTop("Client “"+esc(ins.firm_name||ins.name||"")+"” created & selected ✓");
+    }));
   }
   // credit note: link invoice
   if(cfg.linkInvoice){
@@ -316,6 +327,49 @@ async function loadPickers(cfg){
       if(r){ if(!D.party.firmName){ D.party=r.party_snapshot||D.party; ["firmName","name","mobile","email","gstin","address","city","state","stateCode","pincode"].forEach(k=>{ if($("p_"+k)) $("p_"+k).value=D.party[k]||""; }); }
         const note=$("t_notes"); if(note && r.number) note.value=(CONFIG.credit_note.defTerms.notes).replace("the referenced Tax Invoice","Tax Invoice No. "+r.number); } });
   }
+}
+
+/* ---------- quick-create a client without leaving the document ---------- */
+function quickCreateClient(cb){
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px";
+  ov.innerHTML=`<div class="card" style="max-width:600px;width:100%;max-height:90vh;overflow:auto;margin:0">
+    <h3>New client</h3>
+    <p class="muted" style="margin-top:-4px">Adds to the Clients register and selects it here. Only the name is required now — complete the rest in <b>Finance → Clients</b> later if needed.</p>
+    <div class="fgrid">
+      <div class="field full"><label>Party Name *</label><input id="qc_firm"></div>
+      <div class="field"><label>GSTIN / UIN</label><input id="qc_gstin"></div>
+      <div class="field"><label>Contact Person</label><input id="qc_name"></div>
+      <div class="field"><label>Mobile</label><input id="qc_mobile"></div>
+      <div class="field"><label>Email</label><input id="qc_email"></div>
+      <div class="field"><label>State</label><input id="qc_state"></div>
+      <div class="field"><label>District</label><input id="qc_district"></div>
+      <div class="field"><label>City</label><input id="qc_city"></div>
+      <div class="field"><label>Pincode</label><input id="qc_pincode"></div>
+      <div class="field full"><label>Address</label><input id="qc_address"></div>
+    </div>
+    <div class="err" id="qc_err"></div>
+    <div class="row" style="margin-top:10px"><button class="btn green" id="qc_save">Create &amp; select</button><button class="btn" id="qc_cancel" type="button">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  const g=id=>{ const el=ov.querySelector("#"+id); return el?el.value.trim():""; };
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  ov.querySelector("#qc_cancel").addEventListener("click",close);
+  ov.querySelector("#qc_save").addEventListener("click",async ()=>{
+    const firm=g("qc_firm"); if(!firm){ ov.querySelector("#qc_err").textContent="Party Name is required."; return; }
+    let client_ref=null; try{ const { data }=await sb().rpc("next_client_code",{}); if(data) client_ref=data; }catch(e){}
+    const rec={ firm_name:firm, name:g("qc_name")||null, gstin:g("qc_gstin")||null,
+      mobile:g("qc_mobile")||null, email:g("qc_email")||null, state:g("qc_state")||null,
+      district:g("qc_district")||null, city:g("qc_city")||null, pincode:g("qc_pincode")||null,
+      address:g("qc_address")||null, client_ref };
+    const btn=ov.querySelector("#qc_save"); btn.disabled=true;
+    const { data:ins, error }=await sb().from("clients").insert(rec).select().single();
+    btn.disabled=false;
+    if(error){ ov.querySelector("#qc_err").textContent=error.message; return; }
+    close(); cb(ins);
+  });
+  const fe=ov.querySelector("#qc_firm"); if(fe) fe.focus();
 }
 
 /* ---------- terms editors ---------- */
@@ -355,6 +409,9 @@ function toDocgen(){
 async function save(){
   syncTerms();
   if(!D.number){ $("dErr").textContent="Document number is required."; return; }
+  // Invoices & Quotations must be tied to a client from the register.
+  if((TYPE==='invoice'||TYPE==='quotation') && !D.party_id){
+    $("dErr").textContent="Select a client from the register (or use “+ Create client”) — free-typed names are no longer allowed."; return; }
   const t=computeTotals();
   const rec={ doc_type:TYPE, number:D.number, fiscal_year:D.fiscal_year, seq:D.seq, doc_date:D.doc_date,
     party_kind:CONFIG[TYPE].partyKind, party_id:D.party_id||null, party_snapshot:D.party,
