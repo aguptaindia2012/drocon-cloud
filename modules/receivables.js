@@ -112,6 +112,20 @@ async function load(){
     if(error){ alert("Could not re-categorise: "+error.message); return; }
     window.OPS.flashTop("Invoice re-categorised ✓"); load();
   }
+  // move many invoices at once (data is merged per-row from what's in memory)
+  async function setRevCategoryBulk(ids, cat){
+    let done=0;
+    for(let i=0;i<ids.length;i+=10){
+      const res=await Promise.all(ids.slice(i,i+10).map(id=>{
+        const rec=rows.find(x=>x.r.id===id); const data=Object.assign({}, rec?rec.r.data:null);
+        if(cat) data.rev_category=cat; else delete data.rev_category;
+        return sb().from("documents").update({ data }).eq("id",id); }));
+      const bad=res.find(r=>r&&r.error);
+      if(bad){ alert("Stopped after "+done+" — "+bad.error.message); load(); return; }
+      done+=Math.min(10, ids.length-i);
+    }
+    window.OPS.flashTop(done+" invoice"+(done===1?"":"s")+" re-categorised ✓"); load();
+  }
 
   // Pending invoicing: approved acre work not yet turned into an invoice.
   // farmer component = 0% GST (Bill of Supply); client component grossed up by
@@ -166,16 +180,23 @@ async function load(){
       </thead><tbody>
         ${catShow.map(([k,label])=>{
           const list=catInv[k].slice().sort((a,b)=> new Date(b.x.r.doc_date)-new Date(a.x.r.doc_date));
+          const bulk=`<div class="row" style="margin:0 0 8px;gap:8px;align-items:center;flex-wrap:wrap">
+              <label style="margin:0"><input type="checkbox" class="catAll" data-cat="${k}" style="width:auto"> Select all</label>
+              <span class="muted">move selected to</span>
+              <select class="catBulk" data-cat="${k}" style="width:auto;font-size:12px">${CATS.filter(([ck])=>ck!==k).map(([ck,cl])=>`<option value="${ck}">${cl}</option>`).join("")}<option value="__auto">Auto-detect</option></select>
+              <button class="btn sm catApply" data-cat="${k}">Move selected</button>
+              <span class="muted catCount" data-cat="${k}">0 selected</span></div>`;
           const detail=`<tr class="catDetail" data-cat="${k}" style="display:none"><td colspan="7" style="padding:0;background:#fafbf6">
-            <div style="padding:8px 14px;overflow:auto"><table style="margin:0;font-size:13px"><thead><tr><th>FY</th><th>Invoice</th><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th>Reconcile to</th></tr></thead>
+            <div style="padding:8px 14px;overflow:auto">${bulk}<table style="margin:0;font-size:13px"><thead><tr><th></th><th>FY</th><th>Invoice</th><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th>Reconcile to</th></tr></thead>
             <tbody>${list.map(({x,s,overridden})=>`<tr>
+              <td><input type="checkbox" class="catChk" data-cat="${k}" data-inv="${esc(x.r.id)}" style="width:auto"></td>
               <td>${s+"–"+String((s+1)%100).padStart(2,"0")}</td>
               <td><b>${esc(x.r.number||"")}</b>${overridden?' <span class="chip" title="Manually re-categorised">manual</span>':''}</td>
               <td>${esc(x.party||"")}</td>
               <td class="num">${money(x.gross)}</td>
               <td class="num">${money(x.paid)}</td>
               <td class="num" style="${x.balance>0?'font-weight:600':''}">${money(Math.max(0,x.balance))}</td>
-              <td>${catSelect(x.r,k)}</td></tr>`).join("")||'<tr><td colspan="7" class="muted">No invoices in this category.</td></tr>'}</tbody></table></div></td></tr>`;
+              <td>${catSelect(x.r,k)}</td></tr>`).join("")||'<tr><td colspan="8" class="muted">No invoices in this category.</td></tr>'}</tbody></table></div></td></tr>`;
           return `<tr class="catToggle" data-cat="${k}" style="cursor:pointer">
             <td><span class="caret" data-cat="${k}" style="display:inline-block;width:14px;color:var(--green)">▸</span>${label} <span class="muted">(${list.length})</span></td>
             <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].cur.inv)}</td><td class="num">${money(catFY[k].cur.rec)}</td><td class="num">${money(catFY[k].cur.recv)}</td>
@@ -235,6 +256,24 @@ async function load(){
   }));
   $("rHost").querySelectorAll(".catMove").forEach(sel=>sel.addEventListener("change",()=>{
     const val=sel.value; if(!val) return; setRevCategory(sel.getAttribute("data-inv"), val==="__auto"?null:val);
+  }));
+  // bulk selection + move
+  const catCount=k=>{ const n=$("rHost").querySelectorAll('.catChk[data-cat="'+k+'"]:checked').length;
+    const el=$("rHost").querySelector('.catCount[data-cat="'+k+'"]'); if(el) el.textContent=n+" selected"; };
+  $("rHost").querySelectorAll(".catAll").forEach(cb=>cb.addEventListener("change",()=>{
+    const k=cb.getAttribute("data-cat");
+    $("rHost").querySelectorAll('.catChk[data-cat="'+k+'"]').forEach(c=>{ c.checked=cb.checked; });
+    catCount(k);
+  }));
+  $("rHost").querySelectorAll(".catChk").forEach(cb=>cb.addEventListener("change",()=>catCount(cb.getAttribute("data-cat"))));
+  $("rHost").querySelectorAll(".catApply").forEach(btn=>btn.addEventListener("click",()=>{
+    const k=btn.getAttribute("data-cat");
+    const ids=[...$("rHost").querySelectorAll('.catChk[data-cat="'+k+'"]:checked')].map(c=>c.getAttribute("data-inv"));
+    if(!ids.length){ alert("Select one or more invoices first."); return; }
+    const sel=$("rHost").querySelector('.catBulk[data-cat="'+k+'"]'); const val=sel?sel.value:"";
+    const label=val==="__auto"?"Auto-detect":(REV_LABEL[val]||val);
+    if(!confirm("Move "+ids.length+" invoice"+(ids.length===1?"":"s")+" to “"+label+"”?")) return;
+    setRevCategoryBulk(ids, val==="__auto"?null:val);
   }));
 
   window.OPS.report.bar("recCredit", months, months.map(k=>invByM[k]||0), "Invoiced (₹)", "#0A6496");
