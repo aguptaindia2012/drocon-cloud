@@ -16,7 +16,7 @@ const DCB = {
   mobile:"+91 73026 27122", altMobile:"+91 90843 81822",
   email:"info@droconbharat.com", web:"www.droconbharat.com",
   director:"Abhishek Gupta",
-  bank:{ name:"ICICI Bank", account:"097505005032", ifsc:"ICIC0000975", branch:"Garh Road, Meerut" }
+  bank:{ name:"ICICI Bank", account:"097505005032", ifsc:"ICIC0000975", branch:"Garh Road, Meerut", type:"Current" }
 };
 const DCB_LOGO = (window.DCB_LOGO_DATAURL) || ""; // set below
 
@@ -141,6 +141,7 @@ function generateWord(doc){
     new D.Paragraph({children:[run(partyTitle,{bold:true,size:18,color:BLUE})],spacing:{after:10}}),
   ];
   if(p.firmName) partyLines.push(...kv("Firm/Name:", p.firmName));
+  if(p.clientRef && doc.doc_type!=="purchase_order") partyLines.push(...kv("Client No.:", p.clientRef));
   if(p.name && p.name!==p.firmName) partyLines.push(...kv("Contact:", p.name));
   if(p.address) partyLines.push(...kv("Address:", [p.address,p.city,p.state,p.pincode].filter(Boolean).join(", ")));
   if(p.mobile) partyLines.push(...kv("Mobile:", p.mobile));
@@ -235,12 +236,19 @@ function generateWord(doc){
   }
 
   // ---- Bank details (payment to DroCon) — invoices & quotations only ----
+  // Stacked, labelled rows (one below another) inside a bordered box.
   if((doc.doc_type==="invoice" || doc.doc_type==="quotation") && DCB.bank && DCB.bank.account){
-    children.push(new D.Paragraph({spacing:{before:120,after:30},children:[run("Bank Details (for payment to DroCon Bharat)",{bold:true,size:18,color:BLUE})]}));
-    children.push(new D.Paragraph({spacing:{after:20},children:[run(
-      "Account Name: "+DCB.legalName+"    |    Bank: "+DCB.bank.name+"    |    A/C No.: "+DCB.bank.account+
-      "    |    IFSC: "+DCB.bank.ifsc+(DCB.bank.branch?("    |    Branch: "+DCB.bank.branch):""),
-      {size:16})]}));
+    const bankLines=[
+      new D.Paragraph({children:[run("Company's Bank Details:",{bold:true,size:18,color:BLUE})],spacing:{after:20}}),
+      ...kv("Beneficiary Name:", DCB.legalName),
+      ...kv("Bank & Branch Name:", DCB.bank.name+(DCB.bank.branch?(", "+DCB.bank.branch):"")),
+      ...kv("Account Number:", DCB.bank.account),
+      ...kv("IFS Code:", DCB.bank.ifsc),
+      ...kv("Account Type:", DCB.bank.type||"Current"),
+    ];
+    children.push(new D.Paragraph({text:"",spacing:{before:120,after:20}}));
+    children.push(new D.Table({width:{size:6400,type:D.WidthType.DXA},columnWidths:[6400],
+      rows:[ new D.TableRow({children:[ cell(bankLines,{w:6400,fill:"FBFDF8"}) ]}) ]}));
   }
 
   // ---- Terms ----

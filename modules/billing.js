@@ -85,6 +85,36 @@ async function startNew(type){
 }
 /* ---------- Quotation → Invoice: raise an invoice from an accepted quotation ---------- */
 async function convertToInvoice(){
+  // 1) Quotation must be approved before it can become an invoice.
+  let appr=null; try{ const {data}=await sb().from("documents").select("approval_status").eq("id",D.id).single(); appr=data&&data.approval_status; }catch(e){}
+  if(appr!=="approved"){ alert("This quotation must be approved before you can create an invoice from it."); return; }
+  // 2) The client must exist in the register — link an existing one or create it now.
+  if(!D.party_id){
+    const p=D.party||{};
+    const miss=[]; if(!(p.firmName||"").trim())miss.push("Party Name"); if(!(p.gstin||"").trim())miss.push("GST/URP");
+    if(!(p.name||"").trim())miss.push("Contact Person"); if(!(p.mobile||"").trim())miss.push("Mobile"); if(!(p.address||"").trim())miss.push("Address");
+    if(miss.length){ alert("Complete these buyer details on the quotation before converting: "+miss.join(", ")); return; }
+    let client=null;
+    try{
+      if(p.gstin && p.gstin.toUpperCase()!=="URP"){ const {data}=await sb().from("clients").select("*").ilike("gstin",p.gstin).limit(1); client=(data||[])[0]||null; }
+      if(!client){ const {data}=await sb().from("clients").select("*").ilike("firm_name",p.firmName).limit(1); client=(data||[])[0]||null; }
+    }catch(e){}
+    if(client){
+      if(!confirm('Matched existing client "'+(client.firm_name||client.name||"")+'"'+(client.client_ref?(" (No. "+client.client_ref+")"):"")+".\n\nUse this client for the invoice?")) return;
+    } else {
+      if(!confirm('This quotation isn\'t linked to a registered client.\n\nCreate the client "'+(p.firmName||"")+'" now (a new client number will be assigned) and continue to the invoice?')) return;
+      let client_ref=null; try{ const {data}=await sb().rpc("next_client_code",{}); if(data) client_ref=data; }catch(e){}
+      const rec={ firm_name:p.firmName, name:p.name||null, gstin:p.gstin||null, mobile:p.mobile||null, email:p.email||null,
+        state:p.state||null, city:p.city||null, pincode:p.pincode||null, address:p.address||null, client_ref };
+      const {data:ins,error}=await sb().from("clients").insert(rec).select().single();
+      if(error){ alert("Could not create the client: "+error.message); return; }
+      client=ins; window.OPS.flashTop('Client "'+(client.firm_name||"")+'" created'+(client.client_ref?(" (No. "+client.client_ref+")"):"")+" ✓");
+    }
+    D.party_id=client.id;
+    D.party=Object.assign({}, D.party, { firmName:client.firm_name||p.firmName, name:client.name||p.name, mobile:client.mobile||p.mobile,
+      email:client.email||p.email, gstin:client.gstin||p.gstin, address:client.address||p.address, city:client.city||p.city,
+      state:client.state||p.state, pincode:client.pincode||p.pincode, clientRef:client.client_ref||"" });
+  }
   const srcNum=D.number, cfg=CONFIG.invoice, fy=fyOf(todayISO());
   const srcCat=(D.data&&D.data.rev_category)||null;
   let seq=1; try{ const { data }=await sb().rpc("next_doc_seq",{p_doc_type:"invoice",p_fy:fy}); if(data) seq=data; }catch(e){}
@@ -114,9 +144,12 @@ function computeTotals(){ return window.OPS.docgen.computeTotals(D.items); }
 const REV_CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
 function editor(){
   const cfg=CONFIG[TYPE]; const m=$("main"); const t=computeTotals();
-  // Invoices & Quotations: the client must come from the register — lock the
-  // party fields (they auto-fill from the picker) so nobody free-types a name.
-  const LOCK_PARTY = (TYPE==='invoice'||TYPE==='quotation');
+  // Invoice: the client must come from the register — lock the party fields
+  // (they auto-fill from the picker). Quotation stays open (may be a prospect),
+  // but its buyer details are made mandatory on save. Catalogue-only line items
+  // apply to both invoice and quotation.
+  const LOCK_PARTY = (TYPE==='invoice');
+  const CAT_ONLY   = (TYPE==='invoice'||TYPE==='quotation');
   const PLOCK = LOCK_PARTY ? ' readonly style="background:#f4f5f2"' : '';
   m.innerHTML=`<button class="btn sm" id="dBack">← Back</button>
     <div class="card" style="margin-top:12px">
@@ -132,12 +165,13 @@ function editor(){
           ${REV_CATS.map(([k,l])=>`<option value="${k}"${(D.data&&D.data.rev_category)===k?' selected':''}>${l}</option>`).join("")}
         </select></div>`:''}
       </div>
-      ${cfg.pickFrom?`<div class="field"><label>${cfg.partyKind==='client'?'Client — select from register':'Pull '+cfg.partyKind+' from registry'}</label>
+      ${cfg.pickFrom?`<div class="field"><label>${TYPE==='invoice'?'Client — select from register':(cfg.partyKind==='client'?'Link an existing client (optional)':'Pull '+cfg.partyKind+' from registry')}</label>
         <div class="row" style="gap:6px;align-items:stretch"><select id="dParty" style="flex:1"><option value="">— select ${cfg.partyKind} —</option></select>
         ${cfg.pickFrom==='clients'?'<button class="btn sm" id="dNewClient" type="button">+ Create client</button>':''}</div></div>`:''}
       ${cfg.linkInvoice?`<div class="field"><label>Against Invoice</label><select id="dInv"><option value="">— select invoice —</option></select></div>`:''}
       <h3>${esc(cfg.partyLabel)}</h3>
       ${LOCK_PARTY?`<div class="callout">The client is <b>always chosen from the register</b> — use the picker above (or <b>+ Create client</b> if they're not listed). These details fill in automatically and can't be typed here.</div>`:''}
+      ${TYPE==='quotation'?`<div class="callout">For a quotation you may enter a <b>prospective buyer</b> directly. All buyer fields below are required. Before it can become an invoice the client must be registered — the <b>→ Convert to Invoice</b> button will create/link the client for you.</div>`:''}
       <div class="fgrid">
         <div class="field full"><label>Firm / ${cfg.partyKind==='vendor'?'Vendor':'Buyer'} Name</label><input id="p_firmName" value="${esc(D.party.firmName||'')}"${PLOCK}></div>
         <div class="field"><label>Contact Person</label><input id="p_name" value="${esc(D.party.name||'')}"${PLOCK}></div>
@@ -152,15 +186,15 @@ function editor(){
       </div>
 
       <h3>Line Items</h3>
-      ${LOCK_PARTY?`<div class="callout">Lines must be picked from the <b>approved Catalogue</b> — description, HSN/SAC and GST% come from the catalogue and can't be typed. Adjust only quantity, rate and discount. Item not there? <b>Manage catalogue →</b> (new items need approval).</div>`:''}
+      ${CAT_ONLY?`<div class="callout">Lines must be picked from the <b>approved Catalogue</b> — description, HSN/SAC and GST% come from the catalogue and can't be typed. Adjust only quantity, rate and discount. Item not there? <b>Manage catalogue →</b> (new items need approval).</div>`:''}
       <datalist id="hsnList">${HSN_LIST.map(h=>`<option value="${h}">`).join("")}</datalist>
       <div style="overflow:auto"><table class="linetable" id="dItems"><thead><tr>
         <th style="min-width:200px">Description</th><th>HSN/SAC</th><th class="num">GST%</th><th class="num">Qty</th><th class="num">Rate</th><th>Per</th><th class="num">Disc%</th><th class="num">Amount</th><th></th>
       </tr></thead><tbody></tbody></table></div>
       <div class="row" style="margin-top:6px">
-        ${LOCK_PARTY?'':'<button class="btn sm" id="dAddItem">+ Blank line</button>'}
+        ${CAT_ONLY?'':'<button class="btn sm" id="dAddItem">+ Blank line</button>'}
         <select id="dCatPick" style="max-width:340px"><option value="">+ Add from catalogue…</option></select>
-        ${LOCK_PARTY?'<button class="btn sm" id="dCatMgr" type="button">Item not listed? Manage catalogue →</button>':''}</div>
+        ${CAT_ONLY?'<button class="btn sm" id="dCatMgr" type="button">Item not listed? Manage catalogue →</button>':''}</div>
 
       <div id="dTotals"></div>
       <div id="dMargin"></div>
@@ -324,7 +358,8 @@ async function loadPickers(cfg){
     if(D.party_id) $("dParty").value=D.party_id;
     const fillFrom=r=>{ if(!r) return; D.party_id=r.id;
       D.party={ firmName:r.firm_name||r.name||"", name:r.name||"", mobile:r.mobile||"", email:r.email||"",
-        gstin:r.gstin||"", address:r.address||"", city:r.city||"", state:r.state||"", stateCode:r.state_code||"", pincode:r.pincode||"" };
+        gstin:r.gstin||"", address:r.address||"", city:r.city||"", state:r.state||"", stateCode:r.state_code||"", pincode:r.pincode||"",
+        clientRef:r.client_ref||"" };
       ["firmName","name","mobile","email","gstin","address","city","state","stateCode","pincode"].forEach(k=>{ if($("p_"+k)) $("p_"+k).value=D.party[k]||""; });
       if(cfg.defTerms && r.default_terms && cfg.defTerms.poTerms){ const ta=$("t_poTerms"); if(ta) ta.value=r.default_terms; } };
     $("dParty").addEventListener("change",()=>fillFrom(rows.find(x=>x.id===$("dParty").value)));
@@ -436,7 +471,16 @@ async function save(){
   if(TYPE==='invoice'||TYPE==='quotation'){
     const err=t=>{ $("dErr").textContent=t; };
     if(!D.doc_date){ err("Date is required."); return; }
-    if(!D.party_id){ err("Select a client from the register (or use “+ Create client”) — free-typed names are no longer allowed."); return; }
+    if(TYPE==='invoice'){
+      if(!D.party_id){ err("Select a client from the register (or use “+ Create client”) — free-typed names are no longer allowed."); return; }
+    } else { // quotation — buyer may be a prospect, but the same details are mandatory
+      const p=D.party||{};
+      if(!(p.firmName||"").trim()){ err("Buyer / Party Name is required."); return; }
+      if(!(p.gstin||"").trim()){ err("Buyer GST Number (or URP) is required."); return; }
+      if(!(p.name||"").trim()){ err("Buyer Contact Person (POC) is required."); return; }
+      if(!(p.mobile||"").trim()){ err("Buyer Mobile / Phone is required."); return; }
+      if(!(p.address||"").trim()){ err("Buyer Address is required."); return; }
+    }
     if(!(D.data&&D.data.rev_category)){ err("Choose a Revenue category."); return; }
     const items=(D.items||[]).filter(it=>(it.desc||"").trim() || num(it.qty) || num(it.rate));
     if(!items.length){ err("Add at least one line item from the catalogue."); return; }
