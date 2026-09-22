@@ -7,11 +7,17 @@
 const { $, esc, money, num } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 
+// Revenue categories (keys shared with billing.js / receivables.js)
+const REV_CATS=[["","— unlabelled —"],["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
+const REV_LABEL=Object.fromEntries(REV_CATS);
+function revLabel(k){ return k?(REV_LABEL[k]||k):"—"; }
+
 const CATS = {
   service: { table:"service_catalogue", label:"Services", rateKey:"default_rate", hsnKey:"hsn_sac",
-    cols:[["name","Service"],["hsn_sac","HSN/SAC"],["unit","Unit"],["default_rate","Rate",true],["gst_rate","GST%",true],["_cost","Cost",true]],
+    cols:[["name","Service"],["rev_category","Rev. Category"],["hsn_sac","HSN/SAC"],["unit","Unit"],["default_rate","Rate",true],["gst_rate","GST%",true],["_cost","Cost",true]],
     fields:[
       {key:"name",label:"Service name",full:true,required:true},
+      {key:"rev_category",label:"Revenue category",type:"select",options:REV_CATS},
       {key:"hsn_sac",label:"HSN/SAC"},
       {key:"unit",label:"Unit"},
       {key:"default_rate",label:"Default Rate (₹)",type:"number"},
@@ -21,9 +27,10 @@ const CATS = {
       {key:"description",label:"Description",type:"textarea",full:true},
     ] },
   spare: { table:"spare_catalogue", label:"Spares", rateKey:"rate_excl_gst", hsnKey:"hsn_code",
-    cols:[["name","Spare"],["hsn_code","HSN"],["unit","Unit"],["rate_excl_gst","Rate excl.GST",true],["gst_rate","GST%",true],["_cost","Cost",true],["current_stock","Stock",true]],
+    cols:[["name","Spare"],["rev_category","Rev. Category"],["hsn_code","HSN"],["unit","Unit"],["rate_excl_gst","Rate excl.GST",true],["gst_rate","GST%",true],["_cost","Cost",true],["current_stock","Stock",true]],
     fields:[
       {key:"name",label:"Spare name",full:true,required:true},
+      {key:"rev_category",label:"Revenue category",type:"select",options:REV_CATS},
       {key:"hsn_code",label:"HSN Code"},
       {key:"unit",label:"Unit"},
       {key:"rate_excl_gst",label:"Rate excl. GST (₹)",type:"number"},
@@ -57,7 +64,8 @@ async function view(){
       <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.cols.map(c=>{
         let v=r[c[0]];
         if(c[0]==='_cost'){ const t=num(r.cost_base)+num(r.cost_shipping); v = t>0?t:null; }
-        if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
+        if(c[0]==='rev_category'){ v=revLabel(r.rev_category); }
+        else if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
         else if(c[0]==='gst_rate') v=(v==null?'':v+'%'); else if(c[0]==='current_stock') v=(v==null?0:v);
         return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td><button class="btn sm ghost" data-copy="${r.id}" title="Duplicate this item">⧉ Copy</button> <span class="muted">edit ›</span></td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No items yet.</div>';
@@ -87,7 +95,9 @@ function form(rec, seed){
       ${rec?'<div id="cUsage" class="muted">Checking where this item is used…</div>':''}
       <div class="fgrid">${cfg.fields.map(f=>{
         const v=e[f.key]==null?"":e[f.key];
-        const inner=f.type==="textarea"?`<textarea id="cf_${f.key}">${esc(v)}</textarea>`:`<input id="cf_${f.key}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':''} value="${esc(v)}">`;
+        const inner=f.type==="textarea"?`<textarea id="cf_${f.key}">${esc(v)}</textarea>`
+          :f.type==="select"?`<select id="cf_${f.key}">${(f.options||[]).map(o=>`<option value="${esc(o[0])}"${String(v)===String(o[0])?' selected':''}>${esc(o[1])}</option>`).join("")}</select>`
+          :`<input id="cf_${f.key}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':''} value="${esc(v)}">`;
         return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}${f.required?' *':''}</label>${inner}</div>`;
       }).join("")}</div>
       <div class="row"><button class="btn green" id="cSave">${rec?"Save":"Create"}</button>

@@ -349,6 +349,8 @@ async function loadPickers(cfg){
     const cost={ _cb:num(s.cost_base), _cs:num(s.cost_shipping) };
     if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0},cost));
     else D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:num(s.gst_rate),qty:1,rate:num(s.rate_excl_gst),per:s.unit||"",disc:0, _spareId:s.id},cost));
+    // stamp the document's Revenue category from the catalogue item (first one wins; still editable)
+    if(s.rev_category && !(D.data&&D.data.rev_category)){ D.data=D.data||{}; D.data.rev_category=s.rev_category; if($("dRevCat")) $("dRevCat").value=s.rev_category; }
     $("dCatPick").value=""; renderItems(); });
   // party picker
   if(cfg.pickFrom){
