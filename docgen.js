@@ -195,6 +195,45 @@ function generateWord(doc){
     run(amountInWords(totals.total),{italics:true,size:17})
   ]}));
 
+  // ---- HSN/SAC tax summary (Tax Invoice & acre Bill of Supply) ----
+  if(doc.doc_type==="invoice"){
+    const groups={};
+    (doc.items||[]).forEach(it=>{
+      const hsn=safe(it.hsn)||"—"; const gst=Number(it.gst)||0;
+      const qty=Number(it.qty)||0, rate=Number(it.rate)||0, disc=Number(it.disc)||0;
+      const amt=qty*rate*(1-disc/100);
+      const key=hsn+"|"+gst; const g=groups[key]||(groups[key]={hsn,gst,taxable:0,units:0});
+      g.taxable+=amt; g.units+=qty;
+    });
+    const keys=Object.keys(groups).sort((a,b)=>groups[a].hsn.localeCompare(groups[b].hsn));
+    const tColW=[2400,2200,1800,1400,1800];
+    const tHeadRow=new D.TableRow({tableHeader:true,children:["HSN/SAC","Taxable Value","Integrated Tax","Units","Total Tax Amount"]
+      .map((h,i)=>cell(h,{w:tColW[i],bold:true,color:"FFFFFF",fill:GREEN,size:17}))});
+    let gUnits=0,gTax=0,gTaxable=0;
+    const tRows=keys.map(k=>{ const g=groups[k]; const tax=Math.round(g.taxable*g.gst)/100; gUnits+=g.units; gTax+=tax; gTaxable+=g.taxable;
+      return new D.TableRow({children:[
+        cell(g.hsn,{w:tColW[0],size:17}),
+        cell(inr(g.taxable),{w:tColW[1],size:17}),
+        cell(g.gst+"%",{w:tColW[2],size:17}),
+        cell(g.units?String(g.units):"",{w:tColW[3],size:17}),
+        cell(inr(tax),{w:tColW[4],size:17}),
+      ]});
+    });
+    const tTotalRow=new D.TableRow({children:[
+      cell([new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run("Total",{bold:true,size:17})]})],{w:tColW[0],fill:"EEF5E9"}),
+      cell(inr(gTaxable),{w:tColW[1],bold:true,fill:"EEF5E9",size:17}),
+      cell("",{w:tColW[2],fill:"EEF5E9"}),
+      cell(String(gUnits),{w:tColW[3],bold:true,fill:"EEF5E9",size:17}),
+      cell(inr(gTax),{w:tColW[4],bold:true,fill:"EEF5E9",size:17}),
+    ]});
+    children.push(new D.Paragraph({spacing:{before:140,after:40},children:[run("Tax Summary (HSN/SAC-wise)",{bold:true,size:18,color:BLUE})]}));
+    children.push(new D.Table({width:{size:9600,type:D.WidthType.DXA},columnWidths:tColW,rows:[tHeadRow,...tRows,tTotalRow]}));
+    children.push(new D.Paragraph({spacing:{before:60,after:20},children:[
+      run("Tax Amount (in words): ",{bold:true,size:17}),
+      run(gTax>0.005?amountInWords(gTax):"Nil",{italics:true,size:17})
+    ]}));
+  }
+
   // ---- Bank details (payment to DroCon) — invoices & quotations only ----
   if((doc.doc_type==="invoice" || doc.doc_type==="quotation") && DCB.bank && DCB.bank.account){
     children.push(new D.Paragraph({spacing:{before:120,after:30},children:[run("Bank Details (for payment to DroCon Bharat)",{bold:true,size:18,color:BLUE})]}));
