@@ -93,14 +93,14 @@ const CHECKS = [
       if(error) return { status:"warn", detail:error.message };
       const tax=(data||[]).filter(r=>!(r.data&&r.data.title==="Bill of Supply"));   // acre Bills of Supply aren't client-linked
       const unl=tax.filter(r=>!r.party_id).length;
-      return unl ? { status:"warn", detail:`${unl}/${tax.length} tax invoice(s) not linked to a register client (legacy free-typed)` }
+      return unl ? { status:"warn", detail:`${unl}/${tax.length} tax invoice(s) have no register-linked client — legacy or tracker-imported (client was free-typed). Harmless for reports; to clear, open each and pick/create the client.` }
                  : { status:"pass", detail:`${tax.length} tax invoice(s) all client-linked` };
     }},
   { name:"Invoices have a revenue category", run: async()=>{
       const { data, error }=await sb().from("documents").select("data").eq("doc_type","invoice");
       if(error) return { status:"warn", detail:error.message };
       const tot=(data||[]).length; const miss=(data||[]).filter(r=>!(r.data&&r.data.rev_category)).length;
-      return miss ? { status:"warn", detail:`${miss}/${tot} invoice(s) have no revenue category (fall back to inference in the FY report)` }
+      return miss ? { status:"warn", detail:`${miss}/${tot} invoice(s) have no saved revenue category — created/imported before categories existed. The FY report infers them from HSN/description (figures stay correct); tag via Receivables → By revenue category, or open & save each.` }
                   : { status:"pass", detail:`${tot} invoice(s) categorised` };
     }},
   { name:"Idle-tracking views reachable", run: async()=>{
@@ -115,6 +115,13 @@ async function selftest(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Audit</div><h1>System Health</h1>
     <div class="callout">Read-only checks against the live database — run after a deploy or a large edit to confirm the accounting, billing and expense data all reconcile. Nothing here changes any data.</div>
+    <details style="margin:8px 0"><summary style="cursor:pointer;font-weight:600">What the results mean</summary>
+      <div class="card" style="margin-top:8px">
+        <p><span class="chip ok">PASS</span> all good. <span class="chip warn">WARN</span> <b>advisory</b> — usually legacy/imported data worth tidying; nothing is broken and reports are still correct. <span class="chip err">FAIL</span> a real problem to investigate (e.g. ledgers out of balance).</p>
+        <p><b>Invoices linked to a registered client (WARN):</b> tax invoices whose client was <b>free-typed or imported</b> before the app enforced picking from the Clients register. Their name/details are still on the invoice, they're just not linked to a client record. Optional to fix — open one and pick/create the client. New invoices are always linked.</p>
+        <p><b>Invoices have a revenue category (WARN):</b> invoices <b>created or imported before revenue categories existed</b>. They have no saved category, so the FY report classifies them automatically from HSN/description — the totals are correct, they're just not explicitly tagged. Tag them in <b>Finance → Invoices &amp; Receivables → By revenue category</b> (expand a bucket, select, move), or open &amp; save each. These won't appear as “special” anywhere in the accounting screens — that's why you can't spot them by browsing.</p>
+      </div>
+    </details>
     <div class="row" style="margin:10px 0"><button class="btn green sm" id="stRun">▶ Run all checks</button><span id="stSum" class="muted"></span></div>
     <div id="stBody" class="muted">Press <b>Run all checks</b> to begin.</div>`;
   $("stRun").addEventListener("click",e=>window.OPS.once(e.currentTarget,runAll));
