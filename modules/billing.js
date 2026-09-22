@@ -109,6 +109,7 @@ function openExisting(rec){
 
 function computeTotals(){ return window.OPS.docgen.computeTotals(D.items); }
 
+const REV_CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
 function editor(){
   const cfg=CONFIG[TYPE]; const m=$("main"); const t=computeTotals();
   m.innerHTML=`<button class="btn sm" id="dBack">← Back</button>
@@ -121,6 +122,10 @@ function editor(){
       <div class="fgrid">
         <div class="field"><label>Number</label><input id="dNum" value="${esc(D.number)}"></div>
         <div class="field"><label>Date</label><input id="dDate" type="date" value="${esc(D.doc_date)}"></div>
+        ${(TYPE==='invoice'||TYPE==='quotation')?`<div class="field"><label>Revenue category</label><select id="dRevCat">
+          <option value="">Auto-detect (from lines)</option>
+          ${REV_CATS.map(([k,l])=>`<option value="${k}"${(D.data&&D.data.rev_category)===k?' selected':''}>${l}</option>`).join("")}
+        </select></div>`:''}
       </div>
       ${cfg.pickFrom?`<div class="field"><label>Pull ${cfg.partyKind} from registry</label><select id="dParty"><option value="">— select ${cfg.partyKind} —</option></select></div>`:
         `<div class="callout">Quotation party details are filled <b>afresh</b> here and are independent of the Clients registry.</div>`}
@@ -174,6 +179,7 @@ function editor(){
   $("dNum").addEventListener("input",()=>D.number=$("dNum").value);
   $("dDate").addEventListener("input",()=>D.doc_date=$("dDate").value);
   if($("dCopy")) $("dCopy").addEventListener("change",()=>D.copyLabel=$("dCopy").value);
+  if($("dRevCat")) $("dRevCat").addEventListener("change",()=>{ D.data=D.data||{}; const v=$("dRevCat").value; if(v) D.data.rev_category=v; else delete D.data.rev_category; });
   ["firmName","name","mobile","email","gstin","address","city","state","stateCode","pincode"].forEach(k=>
     $("p_"+k).addEventListener("input",()=>D.party[k]=$("p_"+k).value));
   $("dAddItem").addEventListener("click",()=>{ D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); });
