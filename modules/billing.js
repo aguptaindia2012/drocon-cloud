@@ -40,7 +40,9 @@ async function listView(type){
   TYPE=type; const cfg=CONFIG[type]; const m=$("main");
   m.innerHTML=`<div class="eyebrow">Administration</div><h1>${esc(cfg.title.replace("Tax/Cash Credit Invoice","Invoice"))}s</h1>
     <div class="row" style="margin:10px 0"><input id="dSearch" placeholder="Search number / party…" style="max-width:280px">
+      ${type==="invoice"?`<select id="dFilter" style="width:auto"><option value="">All invoices</option><option value="uncat">⚠ No revenue category</option><option value="unlinked">⚠ No register client</option></select>`:''}
       <div class="spacer"></div><button class="btn green sm" id="dNew">+ New ${esc(type==="purchase_order"?"PO":cfg.title.split(" ")[0])}</button></div>
+    <div id="dFilterNote" class="muted" style="margin:-4px 0 8px"></div>
     <div id="dList" class="muted">Loading…</div>`;
   $("dNew").addEventListener("click",()=>startNew(type));
   const { data }=await sb().from("documents").select("*").eq("doc_type",type).order("created_at",{ascending:false});
@@ -53,9 +55,22 @@ async function listView(type){
       : '<div class="card muted">No documents yet.</div>';
     $("dList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>openExisting(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
   }
-  render(all);
-  $("dSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
-    render(!q?all:all.filter(r=>String(r.number||"").toLowerCase().includes(q)|| JSON.stringify(r.party_snapshot||{}).toLowerCase().includes(q))); });
+  function apply(){
+    const q=($("dSearch").value||"").toLowerCase().trim();
+    const f=$("dFilter")?$("dFilter").value:"";
+    let rows=all;
+    if(f==="uncat") rows=rows.filter(r=>!(r.data&&r.data.rev_category));
+    else if(f==="unlinked") rows=rows.filter(r=>!r.party_id && !(r.data&&r.data.title==="Bill of Supply"));
+    if(q) rows=rows.filter(r=>String(r.number||"").toLowerCase().includes(q)|| JSON.stringify(r.party_snapshot||{}).toLowerCase().includes(q));
+    const note=$("dFilterNote");
+    if(note) note.textContent = f ? (rows.length+" invoice(s) "+(f==="uncat"?"with no revenue category":"not linked to a register client")+" — open each to fix.") : "";
+    render(rows);
+  }
+  $("dSearch").addEventListener("input",apply);
+  if($("dFilter")) $("dFilter").addEventListener("change",apply);
+  // health-check hand-off: open pre-filtered on the flagged issue
+  if(type==="invoice" && window.OPS._invFilter && $("dFilter")){ $("dFilter").value=window.OPS._invFilter; window.OPS._invFilter=null; }
+  apply();
 }
 
 function blankParty(){ return { firmName:"", name:"", mobile:"", email:"", gstin:"", address:"", city:"", state:"", stateCode:"", pincode:"" }; }

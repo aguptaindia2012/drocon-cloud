@@ -50,6 +50,7 @@ async function view(){
       <button class="btn sm ${active==='service'?'green':''}" data-c="service">Services</button>
       <button class="btn sm ${active==='spare'?'green':''}" data-c="spare">Spares</button>
       <div class="spacer"></div>
+      <select id="cFilter" style="width:auto"><option value="">All categories</option><option value="__blank">⚠ Unlabelled</option>${REV_CATS.filter(([k])=>k).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join("")}</select>
       <input id="cSearch" placeholder="Search…" style="max-width:240px">
       <button class="btn green sm" id="cNew">+ New ${active==='service'?'service':'spare'}</button>
     </div>
@@ -73,9 +74,20 @@ async function view(){
     $("cList").querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
       const src=all.find(x=>String(x.id)===b.getAttribute("data-copy")); if(src) form(null, dupSeed(src)); }));
   }
-  render(all);
-  $("cSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
-    render(!q?all:all.filter(r=>String(r.name||"").toLowerCase().includes(q)|| String(r[cfg.hsnKey]||"").toLowerCase().includes(q))); });
+  function apply(){
+    const q=($("cSearch").value||"").toLowerCase().trim();
+    const f=$("cFilter")?$("cFilter").value:"";
+    let rows=all;
+    if(f==="__blank") rows=rows.filter(r=>!r.rev_category);
+    else if(f) rows=rows.filter(r=>r.rev_category===f);
+    if(q) rows=rows.filter(r=>String(r.name||"").toLowerCase().includes(q)|| String(r[cfg.hsnKey]||"").toLowerCase().includes(q));
+    render(rows);
+  }
+  $("cSearch").addEventListener("input",apply);
+  if($("cFilter")) $("cFilter").addEventListener("change",apply);
+  // health-check hand-off: open pre-filtered on unlabelled items
+  if(window.OPS._catFilter && $("cFilter")){ $("cFilter").value = window.OPS._catFilter==="unlabelled"?"__blank":window.OPS._catFilter; window.OPS._catFilter=null; }
+  apply();
 }
 
 function dupSeed(src){

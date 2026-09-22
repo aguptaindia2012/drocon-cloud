@@ -87,7 +87,7 @@ const CHECKS = [
       if(missing.length) return { status:"warn", detail:`${all.length} items · ${unl} unlabelled · no items in: ${missing.join(", ")}` };
       return unl ? { status:"warn", detail:`${all.length} items · ${unl} still unlabelled` }
                  : { status:"pass", detail:`${all.length} items · all labelled · 4 categories covered` };
-    }},
+    }, fix:{ tool:"catalogues", filter:"unlabelled", label:"Fix in Catalogues ›" } },
   { name:"Invoices linked to a registered client", run: async()=>{
       const { data, error }=await sb().from("documents").select("party_id,data").eq("doc_type","invoice");
       if(error) return { status:"warn", detail:error.message };
@@ -95,14 +95,14 @@ const CHECKS = [
       const unl=tax.filter(r=>!r.party_id).length;
       return unl ? { status:"warn", detail:`${unl}/${tax.length} tax invoice(s) have no register-linked client — legacy or tracker-imported (client was free-typed). Harmless for reports; to clear, open each and pick/create the client.` }
                  : { status:"pass", detail:`${tax.length} tax invoice(s) all client-linked` };
-    }},
+    }, fix:{ tool:"invoice", filter:"unlinked", label:"Fix in Invoices ›" } },
   { name:"Invoices have a revenue category", run: async()=>{
       const { data, error }=await sb().from("documents").select("data").eq("doc_type","invoice");
       if(error) return { status:"warn", detail:error.message };
       const tot=(data||[]).length; const miss=(data||[]).filter(r=>!(r.data&&r.data.rev_category)).length;
       return miss ? { status:"warn", detail:`${miss}/${tot} invoice(s) have no saved revenue category — created/imported before categories existed. The FY report infers them from HSN/description (figures stay correct); tag via Receivables → By revenue category, or open & save each.` }
                   : { status:"pass", detail:`${tot} invoice(s) categorised` };
-    }},
+    }, fix:{ tool:"invoice", filter:"uncat", label:"Fix in Invoices ›" } },
   { name:"Idle-tracking views reachable", run: async()=>{
       const a=await sb().from("v_idle_active_pilots").select("*").limit(1);
       const b=await sb().from("v_idle_active_locations").select("*").limit(1);
@@ -140,8 +140,12 @@ async function runAll(){
   for(let i=0;i<CHECKS.length;i++){
     let r; try{ r=await CHECKS[i].run(); }catch(e){ r={ status:"fail", detail:String(e&&e.message||e) }; }
     if(r.status==="pass")pass++; else if(r.status==="warn")warn++; else fail++;
-    const row=$("st_"+i); if(row){ row.children[1].innerHTML=chip(r.status); row.children[2].innerHTML=esc(r.detail||""); row.children[2].className=r.status==="fail"?"":"muted"; }
+    const row=$("st_"+i); if(row){ row.children[1].innerHTML=chip(r.status);
+      const fx=CHECKS[i].fix;
+      row.children[2].innerHTML=esc(r.detail||"")+((r.status!=="pass"&&fx)?` <button class="btn sm" data-fix="${i}" style="margin-left:6px">${esc(fx.label||"Go fix ›")}</button>`:"");
+      row.children[2].className=r.status==="fail"?"":"muted"; }
   }
+  $("stBody").querySelectorAll("[data-fix]").forEach(b=>b.addEventListener("click",()=>gotoFix(CHECKS[+b.getAttribute("data-fix")].fix)));
   $("stSum").innerHTML=` ${pass} pass · ${warn} warn · ${fail} fail · ${((Date.now()-t0)/1000).toFixed(1)}s`;
   window.OPS.flashTop(fail? (fail+" check(s) FAILED") : (warn? "All critical checks passed (some warnings)":"All checks passed ✓"));
 }
@@ -169,7 +173,14 @@ async function listInvoices(kind){
         : 'Open each and pick/create the client to link it. Harmless to leave as historical.'}</p>`
     :'<p class="muted">None 🎉</p>'}
   </div>`;
-  const ob=$("stOpenInv"); if(ob) ob.addEventListener("click",()=>window.OPS.openTool&&window.OPS.openTool(kind==='uncat'?"receivables":"invoice"));
+  const ob=$("stOpenInv"); if(ob) ob.addEventListener("click",()=>gotoFix({tool:"invoice", filter:(kind==='uncat'?'uncat':'unlinked')}));
+}
+
+// jump to the tab that can fix a warning, with its filter pre-applied
+function gotoFix(fix){ if(!fix) return;
+  if(fix.tool==="invoice")    window.OPS._invFilter=fix.filter;
+  if(fix.tool==="catalogues") window.OPS._catFilter=fix.filter;
+  if(window.OPS.openTool) window.OPS.openTool(fix.tool);
 }
 
 window.OPS.routes.selftest = selftest;
