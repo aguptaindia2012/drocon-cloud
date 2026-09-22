@@ -63,7 +63,7 @@ const CHECKS = [
       return error ? { status:"warn", detail:error.message } : { status:"pass", detail:"RPC OK" };
     }},
   { name:"Core tables reachable", run: async()=>{
-      const tbls=["employees","clients","vendors","acre_entries","hr_attendance","hr_comp_offs","expense_claims","partner_billing","partner_pilots","hr_month_locks","advances"];
+      const tbls=["employees","clients","vendors","acre_entries","hr_attendance","hr_comp_offs","expense_claims","partner_billing","partner_pilots","hr_month_locks","advances","documents","payments","service_catalogue","spare_catalogue"];
       const bad=[];
       for(const t of tbls){ const { error }=await sb().from(t).select("*",{count:"exact",head:true}); if(error) bad.push(t); }
       return bad.length ? { status:"fail", detail:"Unreachable: "+bad.join(", ") } : { status:"pass", detail:`${tbls.length} tables OK` };
@@ -74,6 +74,40 @@ const CHECKS = [
       const active=(data||[]).filter(e=>e.status==="active");
       const linked=active.filter(e=>e.user_id).length;
       return { status: linked? "pass":"warn", detail:`${linked}/${active.length} active employees have a linked login (needed for self-service)` };
+    }},
+  { name:"Catalogue items are revenue-categorised", run: async()=>{
+      const [svc,spr]=await Promise.all([
+        sb().from("service_catalogue").select("rev_category,active"),
+        sb().from("spare_catalogue").select("rev_category,active") ]);
+      if(svc.error||spr.error) return { status:"warn", detail:"rev_category not available (run sql/111): "+((svc.error||spr.error).message) };
+      const all=[...(svc.data||[]),...(spr.data||[])].filter(r=>r.active!==false);
+      const unl=all.filter(r=>!r.rev_category).length;
+      const cats=new Set(all.map(r=>r.rev_category).filter(Boolean));
+      const missing=["spray","demo","part","service"].filter(k=>!cats.has(k));
+      if(missing.length) return { status:"warn", detail:`${all.length} items · ${unl} unlabelled · no items in: ${missing.join(", ")}` };
+      return unl ? { status:"warn", detail:`${all.length} items · ${unl} still unlabelled` }
+                 : { status:"pass", detail:`${all.length} items · all labelled · 4 categories covered` };
+    }},
+  { name:"Invoices linked to a registered client", run: async()=>{
+      const { data, error }=await sb().from("documents").select("party_id,data").eq("doc_type","invoice");
+      if(error) return { status:"warn", detail:error.message };
+      const tax=(data||[]).filter(r=>!(r.data&&r.data.title==="Bill of Supply"));   // acre Bills of Supply aren't client-linked
+      const unl=tax.filter(r=>!r.party_id).length;
+      return unl ? { status:"warn", detail:`${unl}/${tax.length} tax invoice(s) not linked to a register client (legacy free-typed)` }
+                 : { status:"pass", detail:`${tax.length} tax invoice(s) all client-linked` };
+    }},
+  { name:"Invoices have a revenue category", run: async()=>{
+      const { data, error }=await sb().from("documents").select("data").eq("doc_type","invoice");
+      if(error) return { status:"warn", detail:error.message };
+      const tot=(data||[]).length; const miss=(data||[]).filter(r=>!(r.data&&r.data.rev_category)).length;
+      return miss ? { status:"warn", detail:`${miss}/${tot} invoice(s) have no revenue category (fall back to inference in the FY report)` }
+                  : { status:"pass", detail:`${tot} invoice(s) categorised` };
+    }},
+  { name:"Idle-tracking views reachable", run: async()=>{
+      const a=await sb().from("v_idle_active_pilots").select("*").limit(1);
+      const b=await sb().from("v_idle_active_locations").select("*").limit(1);
+      const bad=[]; if(a.error)bad.push("pilots"); if(b.error)bad.push("locations");
+      return bad.length ? { status:"warn", detail:"Unavailable: "+bad.join(", ") } : { status:"pass", detail:"Both idle views OK" };
     }},
 ];
 
