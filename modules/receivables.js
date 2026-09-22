@@ -136,6 +136,7 @@ async function load(){
       <tbody>
         <tr style="background:#e7f0de"><td><b>${fyLabel(curFY)} (current)</b></td><td class="num"><b>${money(fyCur.inv)}</b></td><td class="num">${money(fyCur.rec)}</td><td class="num" style="font-weight:700;color:var(--green)">${money(fyCur.recv)}</td><td class="num" style="${fyCur.over>0?'color:#a3322a;font-weight:700':''}">${fyCur.over}</td></tr>
         <tr><td><b>${fyLabel(curFY-1)} (last)</b></td><td class="num"><b>${money(fyLast.inv)}</b></td><td class="num">${money(fyLast.rec)}</td><td class="num" style="font-weight:700">${money(fyLast.recv)}</td><td class="num" style="${fyLast.over>0?'color:#a3322a;font-weight:700':''}">${fyLast.over}</td></tr>
+        <tr style="border-top:2px solid var(--green)"><td><b>Total (all years)</b></td><td class="num"><b>${money(totInvoiced)}</b></td><td class="num"><b>${money(totReceived)}</b></td><td class="num" style="font-weight:700;color:var(--green)"><b>${money(totReceivable)}</b></td><td class="num" style="${overdue>0?'color:#a3322a;font-weight:700':''}"><b>${overdue}</b></td></tr>
       </tbody></table></div>
       <p class="muted">Grouped by the <b>invoice date's</b> financial year (Apr–Mar). <b>Received</b> and <b>Still owed</b> are amounts against invoices raised in that year, so they reconcile within the year. Pending invoicing (un-billed acre work) is not date-tagged and is excluded here.</p>
     </div>
@@ -214,7 +215,8 @@ async function load(){
     {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total receivable",money(totReceivable)],["Total invoiced",money(totInvoiced)],["Total received",money(totReceived)],["Overdue >30d",overdue]].concat(pendShown?[["Pending invoicing (all entities, client incl. GST)",money(pendInvoicing)],["Total still to receive",money(totToReceive)]]:[])}},
     {heading:"By financial year", table:{headers:["Financial year","Invoiced","Received","Still owed","Overdue >30d"], rows:[
       [fyLabel(curFY)+" (current)",money(fyCur.inv),money(fyCur.rec),money(fyCur.recv),fyCur.over],
-      [fyLabel(curFY-1)+" (last)",money(fyLast.inv),money(fyLast.rec),money(fyLast.recv),fyLast.over]]}},
+      [fyLabel(curFY-1)+" (last)",money(fyLast.inv),money(fyLast.rec),money(fyLast.recv),fyLast.over],
+      ["Total (all years)",money(totInvoiced),money(totReceived),money(totReceivable),overdue]]}},
     {heading:"By revenue category & financial year", table:{headers:["Category",fyLabel(curFY)+" invoiced","received","still owed",fyLabel(curFY-1)+" invoiced","received","still owed"], rows:catShow.map(([k,label])=>[label,money(catFY[k].cur.inv),money(catFY[k].cur.rec),money(catFY[k].cur.recv),money(catFY[k].last.inv),money(catFY[k].last.rec),money(catFY[k].last.recv)]).concat([["Total",money(catTot.cur.inv),money(catTot.cur.rec),money(catTot.cur.recv),money(catTot.last.inv),money(catTot.last.rec),money(catTot.last.recv)]])}},
     {heading:"Monthly credit in market (invoiced)", image:window.OPS.report.img("recCredit"), table:{headers:["Month","Invoiced"], rows:months.map(k=>[k,money(invByM[k]||0)])}},
     {heading:"Funds received by month", image:window.OPS.report.img("recFunds"), table:{headers:["Month","Received"], rows:months.map(k=>[k,money(payByM[k]||0)])}},
