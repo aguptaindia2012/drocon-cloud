@@ -174,7 +174,9 @@ function editor(){
       <div class="row wrap" style="margin-top:14px">
         <button class="btn green" id="dSave">${D.id?"Save changes":"Save"}</button>
         ${TYPE==='quotation' && D.id?'<button class="btn blue" id="dToInvoice">→ Convert to Invoice</button>':''}
-        <button class="btn blue" id="dWord">⬇ Download Word (.docx)</button>
+        ${TYPE==='invoice'
+          ? '<button class="btn blue" id="dWordOG">⬇ Download Original</button><button class="btn blue" id="dWordDup">⬇ Download Duplicate</button><button class="btn blue" id="dWordShip">⬇ Download Shipper Copy</button>'
+          : '<button class="btn blue" id="dWord">⬇ Download Word (.docx)</button>'}
         <button class="btn" id="dJson">⬇ Download JSON</button>
         <button class="btn sm" id="dImport">Import JSON…</button>
         ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px"><input type="checkbox" id="dStock" style="width:auto"> reduce spare stock on save</label>':''}
@@ -196,11 +198,19 @@ function editor(){
   if($("dAddItem")) $("dAddItem").addEventListener("click",()=>{ D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); });
   if($("dCatMgr")) $("dCatMgr").addEventListener("click",()=>{ if(window.OPS.openTool) window.OPS.openTool("catalogues"); });
   $("dSave").addEventListener("click",save);
-  $("dWord").addEventListener("click",async()=>{ syncTerms();
+  // Word download — an optional copy label (Original / Duplicate / Shipper Copy)
+  // marks the document and drives a distinct filename suffix (OG / Dup / Ship).
+  async function downloadWord(label){ syncTerms();
+    const prev=D.copyLabel; if(label!==undefined) D.copyLabel=label;
     const g=toDocgen();
     if(D.id){ try{ const {data}=await sb().from("documents").select("approval_status").eq("id",D.id).single(); g.systemApproved = !!(data && data.approval_status==="approved"); }catch(e){} }
     window.OPS.docgen.generateWord(g);
-  });
+    D.copyLabel=prev; if($("dCopy")) $("dCopy").value=prev||"Original";
+  }
+  if($("dWord")) $("dWord").addEventListener("click",()=>downloadWord());
+  if($("dWordOG")) $("dWordOG").addEventListener("click",()=>downloadWord("Original"));
+  if($("dWordDup")) $("dWordDup").addEventListener("click",()=>downloadWord("Duplicate"));
+  if($("dWordShip")) $("dWordShip").addEventListener("click",()=>downloadWord("Shipper Copy"));
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
   if($("dToInvoice")) $("dToInvoice").addEventListener("click",convertToInvoice);

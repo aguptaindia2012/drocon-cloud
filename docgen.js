@@ -72,7 +72,11 @@ function fileBase(doc){
   const t={quotation:"Quotation",invoice:"Invoice",credit_note:"CreditNote",purchase_order:"PurchaseOrder"}[doc.doc_type]||"Document";
   const party=(doc.party&&(doc.party.firmName||doc.party.name)||"").replace(/[\\\/:*?"<>|]+/g,"").replace(/\s+/g,"_");
   const numSafe=(doc.number||"").replace(/[\\\/:*?"<>|]+/g,"-");
-  return `DroCon_${t}_${numSafe}${party?("_"+party):""}`;
+  // invoice copies get a distinct suffix so Original / Duplicate / Shipper don't collide
+  const suf = doc.doc_type==="invoice"
+    ? ({ "Original":"OG", "Duplicate":"Dup", "Shipper Copy":"Ship", "Shipper":"Ship" }[doc.copyLabel]||"")
+    : "";
+  return `DroCon_${t}_${numSafe}${party?("_"+party):""}${suf?("_"+suf):""}`;
 }
 
 /* ---------- JSON (retrievable draft) ---------- */
