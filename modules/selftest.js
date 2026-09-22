@@ -123,8 +123,14 @@ async function selftest(){
       </div>
     </details>
     <div class="row" style="margin:10px 0"><button class="btn green sm" id="stRun">▶ Run all checks</button><span id="stSum" class="muted"></span></div>
+    <div class="row" style="margin:0 0 10px;gap:8px"><span class="muted" style="align-self:center">Clean-up lists:</span>
+      <button class="btn sm" id="stUncat">Uncategorised invoices</button>
+      <button class="btn sm" id="stUnlinked">Unlinked (no register client)</button></div>
+    <div id="stList"></div>
     <div id="stBody" class="muted">Press <b>Run all checks</b> to begin.</div>`;
   $("stRun").addEventListener("click",e=>window.OPS.once(e.currentTarget,runAll));
+  $("stUncat").addEventListener("click",()=>listInvoices("uncat"));
+  $("stUnlinked").addEventListener("click",()=>listInvoices("unlinked"));
 }
 async function runAll(){
   const body=$("stBody"); const chip=s=> s==="pass"?'<span class="chip ok">PASS</span>':s==="warn"?'<span class="chip warn">WARN</span>':'<span class="chip err">FAIL</span>';
@@ -139,5 +145,32 @@ async function runAll(){
   $("stSum").innerHTML=` ${pass} pass · ${warn} warn · ${fail} fail · ${((Date.now()-t0)/1000).toFixed(1)}s`;
   window.OPS.flashTop(fail? (fail+" check(s) FAILED") : (warn? "All critical checks passed (some warnings)":"All checks passed ✓"));
 }
+// ---- clean-up lists: invoices missing a revenue category / not linked to a client ----
+async function listInvoices(kind){
+  const host=$("stList"); if(!host) return;
+  host.innerHTML='<div class="muted" style="margin:6px 0">Loading…</div>';
+  const { data, error }=await sb().from("documents").select("number,doc_date,party_id,party_snapshot,totals,data")
+    .eq("doc_type","invoice").order("doc_date",{ascending:false});
+  if(error){ host.innerHTML='<div class="card" style="color:#a3322a">'+esc(error.message)+'</div>'; return; }
+  const isBoS=r=> r.data && r.data.title==="Bill of Supply";
+  let rows=data||[]; let title;
+  if(kind==="uncat"){ rows=rows.filter(r=>!(r.data&&r.data.rev_category)); title="Invoices with no saved revenue category"; }
+  else { rows=rows.filter(r=>!r.party_id && !isBoS(r)); title="Tax invoices not linked to a register client"; }
+  const fd=window.OPS.helpers.fmtDate;
+  host.innerHTML=`<div class="card">
+    <div class="row"><h3 style="margin:0">${esc(title)} — ${rows.length}</h3><div class="spacer"></div>
+      <button class="btn sm" id="stOpenInv">Open Invoices tab ›</button></div>
+    ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Total</th>${kind==='uncat'?'<th>Type</th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`<tr><td><b>${esc(r.number||'')}</b></td><td>${esc(fd(r.doc_date))}</td>
+        <td>${esc((r.party_snapshot||{}).firmName||(r.party_snapshot||{}).name||'')}</td>
+        <td class="num">${money((r.totals||{}).total)}</td>${kind==='uncat'?('<td>'+(isBoS(r)?'Bill of Supply':'Tax Invoice')+'</td>'):''}</tr>`).join("")}</tbody></table></div>
+      <p class="muted">${kind==='uncat'
+        ? 'Tag these in <b>Finance → Invoices &amp; Receivables → By revenue category</b> (expand a bucket → select → move), or open &amp; save each.'
+        : 'Open each and pick/create the client to link it. Harmless to leave as historical.'}</p>`
+    :'<p class="muted">None 🎉</p>'}
+  </div>`;
+  const ob=$("stOpenInv"); if(ob) ob.addEventListener("click",()=>window.OPS.openTool&&window.OPS.openTool(kind==='uncat'?"receivables":"invoice"));
+}
+
 window.OPS.routes.selftest = selftest;
 })();
