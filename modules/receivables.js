@@ -75,6 +75,7 @@ async function load(){
   // categories in proportion to each line's value, so category totals reconcile
   // to the financial-year card above.
   const CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
+  const REV_LABEL=Object.fromEntries(CATS);
   const classifyLine=(desc,sub,hsn)=>{
     const d=((desc||"")+" "+(sub||"")).toLowerCase(); const h=String(hsn||"").replace(/\s/g,"");
     if(/demo/.test(d)) return "demo";
@@ -82,17 +83,35 @@ async function load(){
     if(/spray|aerial|agri/.test(d) || /^9986/.test(h)) return "spray";
     if(/part|spare|batter|propeller|\bmotor\b|nozzle|\bpump\b|blade|\besc\b|frame|charger|drone|kit|\barm\b/.test(d) || /^(8806|8807|8508|8507|8479|8413)/.test(h)) return "part";
     return "other"; };
-  const catFY={}; CATS.forEach(([k])=>catFY[k]={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}});
+  // Whole-invoice category: a manual override (documents.data.rev_category) wins;
+  // otherwise the category of the highest-value line. One invoice → one category,
+  // so the drill lists and reconciliation stay unambiguous and totals still tie out.
+  const autoCat=inv=>{ const items=inv.line_items||[]; if(!items.length) return "other";
+    const tally={}; items.forEach(it=>{ const base=Math.max(0,(num(it.qty)||0)*(num(it.rate)||0)*(1-(num(it.disc)||0)/100));
+      const c=classifyLine(it.desc,it.sub,it.hsn); tally[c]=(tally[c]||0)+base+0.0001; });
+    let best="other",bv=-1; Object.keys(tally).forEach(c=>{ if(tally[c]>bv){bv=tally[c];best=c;} }); return best; };
+  const catOf=inv=>{ const ov=(inv.data||{}).rev_category; return (ov && REV_LABEL[ov])?ov:autoCat(inv); };
+  const catFY={}, catInv={};
+  CATS.forEach(([k])=>{ catFY[k]={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}}; catInv[k]=[]; });
   rows.forEach(x=>{ const s=fyStart(x.r.doc_date); if(s!==curFY && s!==curFY-1) return;
-    const slot=s===curFY?"cur":"last"; const items=(x.r.line_items||[]);
-    const bases=items.map(it=>Math.max(0,(num(it.qty)||0)*(num(it.rate)||0)*(1-(num(it.disc)||0)/100)));
-    const sum=bases.reduce((a,b)=>a+b,0);
-    const add=(c,f)=>{ const o=catFY[c][slot]; o.inv+=x.gross*f; o.rec+=x.paid*f; o.recv+=Math.max(0,x.balance)*f; };
-    if(!(sum>0)){ const it=items[0]||{}; add(classifyLine(it.desc,it.sub,it.hsn),1); return; }
-    items.forEach((it,i)=>{ if(!(bases[i]>0)) return; add(classifyLine(it.desc,it.sub,it.hsn), bases[i]/sum); }); });
-  const catShow=CATS.filter(([k])=> k!=="other" || (["cur","last"].some(s=>catFY.other[s].inv||catFY.other[s].rec||catFY.other[s].recv)));
+    const slot=s===curFY?"cur":"last"; const c=catOf(x.r); const o=catFY[c][slot];
+    o.inv+=x.gross; o.rec+=x.paid; o.recv+=Math.max(0,x.balance);
+    catInv[c].push({x,s,overridden:!!((x.r.data||{}).rev_category)}); });
+  const catShow=CATS.filter(([k])=> k!=="other" || catInv.other.length);
   const catTot={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}};
   catShow.forEach(([k])=>["cur","last"].forEach(s=>{ catTot[s].inv+=catFY[k][s].inv; catTot[s].rec+=catFY[k][s].rec; catTot[s].recv+=catFY[k][s].recv; }));
+  // dropdown to reconcile a single invoice into another category
+  const catSelect=(inv,curk)=>`<select class="catMove" data-inv="${esc(inv.id)}" style="width:auto;font-size:12px">
+      <option value="">Move to…</option>${CATS.map(([ck,cl])=>`<option value="${ck}"${ck===curk?' disabled':''}>${cl}</option>`).join("")}<option value="__auto">Auto-detect</option>
+    </select>`;
+  // persist / clear the override, then refresh
+  async function setRevCategory(id, cat){
+    const rec=rows.find(x=>x.r.id===id); const data=Object.assign({}, rec?rec.r.data:null);
+    if(cat) data.rev_category=cat; else delete data.rev_category;
+    const { error }=await sb().from("documents").update({ data }).eq("id",id);
+    if(error){ alert("Could not re-categorise: "+error.message); return; }
+    window.OPS.flashTop("Invoice re-categorised ✓"); load();
+  }
 
   // Pending invoicing: approved acre work not yet turned into an invoice.
   // farmer component = 0% GST (Bill of Supply); client component grossed up by
@@ -145,14 +164,28 @@ async function load(){
         <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY)} (current)</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY-1)} (last)</th></tr>
         <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th></tr>
       </thead><tbody>
-        ${catShow.map(([k,label])=>`<tr><td>${label}</td>
-          <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].cur.inv)}</td><td class="num">${money(catFY[k].cur.rec)}</td><td class="num">${money(catFY[k].cur.recv)}</td>
-          <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].last.inv)}</td><td class="num">${money(catFY[k].last.rec)}</td><td class="num">${money(catFY[k].last.recv)}</td></tr>`).join("")}
+        ${catShow.map(([k,label])=>{
+          const list=catInv[k].slice().sort((a,b)=> new Date(b.x.r.doc_date)-new Date(a.x.r.doc_date));
+          const detail=`<tr class="catDetail" data-cat="${k}" style="display:none"><td colspan="7" style="padding:0;background:#fafbf6">
+            <div style="padding:8px 14px;overflow:auto"><table style="margin:0;font-size:13px"><thead><tr><th>FY</th><th>Invoice</th><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th>Reconcile to</th></tr></thead>
+            <tbody>${list.map(({x,s,overridden})=>`<tr>
+              <td>${s+"–"+String((s+1)%100).padStart(2,"0")}</td>
+              <td><b>${esc(x.r.number||"")}</b>${overridden?' <span class="chip" title="Manually re-categorised">manual</span>':''}</td>
+              <td>${esc(x.party||"")}</td>
+              <td class="num">${money(x.gross)}</td>
+              <td class="num">${money(x.paid)}</td>
+              <td class="num" style="${x.balance>0?'font-weight:600':''}">${money(Math.max(0,x.balance))}</td>
+              <td>${catSelect(x.r,k)}</td></tr>`).join("")||'<tr><td colspan="7" class="muted">No invoices in this category.</td></tr>'}</tbody></table></div></td></tr>`;
+          return `<tr class="catToggle" data-cat="${k}" style="cursor:pointer">
+            <td><span class="caret" data-cat="${k}" style="display:inline-block;width:14px;color:var(--green)">▸</span>${label} <span class="muted">(${list.length})</span></td>
+            <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].cur.inv)}</td><td class="num">${money(catFY[k].cur.rec)}</td><td class="num">${money(catFY[k].cur.recv)}</td>
+            <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].last.inv)}</td><td class="num">${money(catFY[k].last.rec)}</td><td class="num">${money(catFY[k].last.recv)}</td></tr>${detail}`;
+        }).join("")}
         <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td>
           <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.cur.inv)}</b></td><td class="num"><b>${money(catTot.cur.rec)}</b></td><td class="num"><b>${money(catTot.cur.recv)}</b></td>
           <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.last.inv)}</b></td><td class="num"><b>${money(catTot.last.rec)}</b></td><td class="num"><b>${money(catTot.last.recv)}</b></td></tr>
       </tbody></table></div>
-      <p class="muted">Each invoice line is classified by its <b>description and HSN/SAC</b> into the four lines of business; a mixed invoice is split across categories in proportion to each line's value. Totals here match the financial-year card above (bar rounding). If a line lands in the wrong bucket, adjust its wording on the invoice.</p>
+      <p class="muted"><b>Click a category</b> to expand the invoices in it (number, client and amounts). Each invoice is placed by its highest-value line's description + HSN/SAC. If one is in the wrong bucket, use <b>Reconcile to</b> to move that invoice — the choice is saved and the totals here (matching the financial-year card above, bar rounding) update. “Auto-detect” clears a manual override.</p>
     </div>
     <div class="card"><h3>How the receivable is built up</h3>
       <table><tbody>
@@ -191,6 +224,18 @@ async function load(){
       <table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Balance</th><th class="num">Age (d)</th></tr></thead>
       <tbody>${rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age).slice(0,15).map(x=>`<tr><td>${esc(x.r.entity||'DCB')}</td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td><td class="num" style="font-weight:700">${money(x.balance)}</td><td class="num" style="${x.age>30?'color:#a3322a;font-weight:700':''}">${x.age}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">Nothing outstanding.</td></tr>'}</tbody></table>
     </div>`;
+
+  // expand/collapse a revenue category, and reconcile an invoice into another category
+  $("rHost").querySelectorAll(".catToggle").forEach(tr=>tr.addEventListener("click",e=>{
+    if(e.target.closest("select")) return;
+    const k=tr.getAttribute("data-cat");
+    const d=$("rHost").querySelector('.catDetail[data-cat="'+k+'"]');
+    const car=tr.querySelector(".caret");
+    if(d){ const show=d.style.display==="none"; d.style.display=show?"":"none"; if(car) car.textContent=show?"▾":"▸"; }
+  }));
+  $("rHost").querySelectorAll(".catMove").forEach(sel=>sel.addEventListener("change",()=>{
+    const val=sel.value; if(!val) return; setRevCategory(sel.getAttribute("data-inv"), val==="__auto"?null:val);
+  }));
 
   window.OPS.report.bar("recCredit", months, months.map(k=>invByM[k]||0), "Invoiced (₹)", "#0A6496");
   window.OPS.report.line("recFunds", months, months.map(k=>payByM[k]||0), "Received (₹)", "#599533");
