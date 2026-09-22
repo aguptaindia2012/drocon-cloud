@@ -86,12 +86,14 @@ async function startNew(type){
 /* ---------- Quotation → Invoice: raise an invoice from an accepted quotation ---------- */
 async function convertToInvoice(){
   const srcNum=D.number, cfg=CONFIG.invoice, fy=fyOf(todayISO());
+  const srcCat=(D.data&&D.data.rev_category)||null;
   let seq=1; try{ const { data }=await sb().rpc("next_doc_seq",{p_doc_type:"invoice",p_fy:fy}); if(data) seq=data; }catch(e){}
   TYPE="invoice";
   D={ id:null, doc_type:"invoice", fiscal_year:fy, seq, number:cfg.number(fy,seq), doc_date:todayISO(),
       copyLabel:"Original", party:Object.assign(blankParty(), D.party||{}), party_id:D.party_id||null,
       related_doc_id:null, items:(D.items||[]).map(it=>Object.assign({},it)),
-      terms:Object.assign({},cfg.defTerms), status:"draft", fromQuotation:srcNum||null };
+      terms:Object.assign({},cfg.defTerms), status:"draft", fromQuotation:srcNum||null,
+      data:srcCat?{rev_category:srcCat}:{} };
   if(!D.items.length) D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"Acre",disc:0});
   window.OPS.flashTop("New invoice draft from quotation "+(srcNum||"")+" — review rates & save.");
   editor();
@@ -126,8 +128,8 @@ function editor(){
       <div class="fgrid">
         <div class="field"><label>Number</label><input id="dNum" value="${esc(D.number)}"></div>
         <div class="field"><label>Date</label><input id="dDate" type="date" value="${esc(D.doc_date)}"></div>
-        ${(TYPE==='invoice'||TYPE==='quotation')?`<div class="field"><label>Revenue category</label><select id="dRevCat">
-          <option value="">Auto-detect (from lines)</option>
+        ${(TYPE==='invoice'||TYPE==='quotation')?`<div class="field"><label>Revenue category *</label><select id="dRevCat">
+          <option value="">— select category —</option>
           ${REV_CATS.map(([k,l])=>`<option value="${k}"${(D.data&&D.data.rev_category)===k?' selected':''}>${l}</option>`).join("")}
         </select></div>`:''}
       </div>
@@ -151,12 +153,15 @@ function editor(){
       </div>
 
       <h3>Line Items</h3>
+      ${LOCK_PARTY?`<div class="callout">Lines must be picked from the <b>approved Catalogue</b> — description, HSN/SAC and GST% come from the catalogue and can't be typed. Adjust only quantity, rate and discount. Item not there? <b>Manage catalogue →</b> (new items need approval).</div>`:''}
       <datalist id="hsnList">${HSN_LIST.map(h=>`<option value="${h}">`).join("")}</datalist>
       <div style="overflow:auto"><table class="linetable" id="dItems"><thead><tr>
         <th style="min-width:200px">Description</th><th>HSN/SAC</th><th class="num">GST%</th><th class="num">Qty</th><th class="num">Rate</th><th>Per</th><th class="num">Disc%</th><th class="num">Amount</th><th></th>
       </tr></thead><tbody></tbody></table></div>
-      <div class="row" style="margin-top:6px"><button class="btn sm" id="dAddItem">+ Blank line</button>
-        <select id="dCatPick" style="max-width:320px"><option value="">+ Add from catalogue…</option></select></div>
+      <div class="row" style="margin-top:6px">
+        ${LOCK_PARTY?'':'<button class="btn sm" id="dAddItem">+ Blank line</button>'}
+        <select id="dCatPick" style="max-width:340px"><option value="">+ Add from catalogue…</option></select>
+        ${LOCK_PARTY?'<button class="btn sm" id="dCatMgr" type="button">Item not listed? Manage catalogue →</button>':''}</div>
 
       <div id="dTotals"></div>
       <div id="dMargin"></div>
@@ -188,7 +193,8 @@ function editor(){
   if($("dRevCat")) $("dRevCat").addEventListener("change",()=>{ D.data=D.data||{}; const v=$("dRevCat").value; if(v) D.data.rev_category=v; else delete D.data.rev_category; });
   ["firmName","name","mobile","email","gstin","address","city","state","stateCode","pincode"].forEach(k=>
     $("p_"+k).addEventListener("input",()=>D.party[k]=$("p_"+k).value));
-  $("dAddItem").addEventListener("click",()=>{ D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); });
+  if($("dAddItem")) $("dAddItem").addEventListener("click",()=>{ D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); });
+  if($("dCatMgr")) $("dCatMgr").addEventListener("click",()=>{ if(window.OPS.openTool) window.OPS.openTool("catalogues"); });
   $("dSave").addEventListener("click",save);
   $("dWord").addEventListener("click",async()=>{ syncTerms();
     const g=toDocgen();
@@ -204,13 +210,16 @@ function editor(){
 }
 
 function renderItems(){
+  const lock=(TYPE==='invoice'||TYPE==='quotation');   // catalogue-driven fields are read-only
+  const roD=lock?' readonly style="background:#f4f5f2"':'';
+  const roH=lock?' readonly':''; const bgH=lock?';background:#f4f5f2':'';
   const tb=$("dItems").querySelector("tbody");
   tb.innerHTML=D.items.map((it,i)=>{
     const amt=num(it.qty)*num(it.rate)*(1-num(it.disc)/100);
     return `<tr>
-      <td><input data-i="${i}" data-k="desc" value="${esc(it.desc||'')}"><input data-i="${i}" data-k="sub" placeholder="(sub-line, optional)" value="${esc(it.sub||'')}" style="font-size:11px;margin-top:2px"></td>
-      <td><input data-i="${i}" data-k="hsn" list="hsnList" value="${esc(it.hsn||'')}" style="width:90px"></td>
-      <td><input data-i="${i}" data-k="gst" type="number" step="any" value="${num(it.gst)}" style="width:55px;text-align:right"></td>
+      <td><input data-i="${i}" data-k="desc" value="${esc(it.desc||'')}"${roD}><input data-i="${i}" data-k="sub" placeholder="(sub-line, optional)" value="${esc(it.sub||'')}" style="font-size:11px;margin-top:2px"></td>
+      <td><input data-i="${i}" data-k="hsn" list="hsnList" value="${esc(it.hsn||'')}" style="width:90px${bgH}"${roH}></td>
+      <td><input data-i="${i}" data-k="gst" type="number" step="any" value="${num(it.gst)}" style="width:55px;text-align:right${bgH}"${roH}></td>
       <td><input data-i="${i}" data-k="qty" type="number" step="any" value="${num(it.qty)}" style="width:60px;text-align:right"></td>
       <td><input data-i="${i}" data-k="rate" type="number" step="any" value="${num(it.rate)}" style="width:90px;text-align:right"></td>
       <td><input data-i="${i}" data-k="per" value="${esc(it.per||'')}" style="width:60px"></td>
@@ -224,7 +233,7 @@ function renderItems(){
     const row=inp.closest("tr"); const amt=num(D.items[i].qty)*num(D.items[i].rate)*(1-num(D.items[i].disc)/100);
     row.children[7].textContent=money(amt); renderTotals();
   }));
-  tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ D.items.splice(+x.getAttribute("data-del"),1); if(!D.items.length) D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); }));
+  tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ D.items.splice(+x.getAttribute("data-del"),1); if(!D.items.length && !lock) D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); }));
   renderTotals();
 }
 function renderTotals(){
@@ -335,18 +344,18 @@ function quickCreateClient(cb){
   ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px";
   ov.innerHTML=`<div class="card" style="max-width:600px;width:100%;max-height:90vh;overflow:auto;margin:0">
     <h3>New client</h3>
-    <p class="muted" style="margin-top:-4px">Adds to the Clients register and selects it here. Only the name is required now — complete the rest in <b>Finance → Clients</b> later if needed.</p>
+    <p class="muted" style="margin-top:-4px">Adds to the Clients register and selects it here. Fields marked * are required.</p>
     <div class="fgrid">
       <div class="field full"><label>Party Name *</label><input id="qc_firm"></div>
-      <div class="field"><label>GSTIN / UIN</label><input id="qc_gstin"></div>
-      <div class="field"><label>Contact Person</label><input id="qc_name"></div>
-      <div class="field"><label>Mobile</label><input id="qc_mobile"></div>
+      <div class="field"><label>GST Number (or URP) *</label><input id="qc_gstin" placeholder="15-digit GSTIN or URP"></div>
+      <div class="field"><label>Contact Person (POC) *</label><input id="qc_name"></div>
+      <div class="field"><label>Mobile / Phone *</label><input id="qc_mobile"></div>
       <div class="field"><label>Email</label><input id="qc_email"></div>
       <div class="field"><label>State</label><input id="qc_state"></div>
       <div class="field"><label>District</label><input id="qc_district"></div>
       <div class="field"><label>City</label><input id="qc_city"></div>
       <div class="field"><label>Pincode</label><input id="qc_pincode"></div>
-      <div class="field full"><label>Address</label><input id="qc_address"></div>
+      <div class="field full"><label>Address *</label><input id="qc_address"></div>
     </div>
     <div class="err" id="qc_err"></div>
     <div class="row" style="margin-top:10px"><button class="btn green" id="qc_save">Create &amp; select</button><button class="btn" id="qc_cancel" type="button">Cancel</button></div>
@@ -357,7 +366,12 @@ function quickCreateClient(cb){
   ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
   ov.querySelector("#qc_cancel").addEventListener("click",close);
   ov.querySelector("#qc_save").addEventListener("click",async ()=>{
-    const firm=g("qc_firm"); if(!firm){ ov.querySelector("#qc_err").textContent="Party Name is required."; return; }
+    const seterr=t=>{ ov.querySelector("#qc_err").textContent=t; };
+    const firm=g("qc_firm"); if(!firm){ seterr("Party Name is required."); return; }
+    if(!g("qc_gstin")){ seterr("GST Number (or URP) is required — enter the GSTIN, or “URP” if unregistered."); return; }
+    if(!g("qc_name")){ seterr("Contact Person (POC) is required."); return; }
+    if(!g("qc_mobile")){ seterr("Mobile / Phone is required."); return; }
+    if(!g("qc_address")){ seterr("Address is required."); return; }
     let client_ref=null; try{ const { data }=await sb().rpc("next_client_code",{}); if(data) client_ref=data; }catch(e){}
     const rec={ firm_name:firm, name:g("qc_name")||null, gstin:g("qc_gstin")||null,
       mobile:g("qc_mobile")||null, email:g("qc_email")||null, state:g("qc_state")||null,
@@ -409,9 +423,22 @@ function toDocgen(){
 async function save(){
   syncTerms();
   if(!D.number){ $("dErr").textContent="Document number is required."; return; }
-  // Invoices & Quotations must be tied to a client from the register.
-  if((TYPE==='invoice'||TYPE==='quotation') && !D.party_id){
-    $("dErr").textContent="Select a client from the register (or use “+ Create client”) — free-typed names are no longer allowed."; return; }
+  // Invoices & Quotations: mandatory-field checks to keep the ledger clean.
+  if(TYPE==='invoice'||TYPE==='quotation'){
+    const err=t=>{ $("dErr").textContent=t; };
+    if(!D.doc_date){ err("Date is required."); return; }
+    if(!D.party_id){ err("Select a client from the register (or use “+ Create client”) — free-typed names are no longer allowed."); return; }
+    if(!(D.data&&D.data.rev_category)){ err("Choose a Revenue category."); return; }
+    const items=(D.items||[]).filter(it=>(it.desc||"").trim() || num(it.qty) || num(it.rate));
+    if(!items.length){ err("Add at least one line item from the catalogue."); return; }
+    for(let i=0;i<items.length;i++){ const it=items[i]; const n=i+1;
+      if(!(it.desc||"").trim()){ err("Line "+n+": description is missing (pick it from the catalogue)."); return; }
+      if(!String(it.hsn||"").trim()){ err("Line "+n+" ("+it.desc+"): HSN/SAC code is required."); return; }
+      if(it.gst===""||it.gst==null||isNaN(num(it.gst))){ err("Line "+n+" ("+it.desc+"): GST% is required (use 0 for exempt)."); return; }
+      if(!(num(it.qty)>0)){ err("Line "+n+" ("+it.desc+"): quantity must be greater than 0."); return; }
+      if(!(num(it.rate)>=0)){ err("Line "+n+" ("+it.desc+"): rate is required."); return; }
+    }
+  }
   const t=computeTotals();
   const rec={ doc_type:TYPE, number:D.number, fiscal_year:D.fiscal_year, seq:D.seq, doc_date:D.doc_date,
     party_kind:CONFIG[TYPE].partyKind, party_id:D.party_id||null, party_snapshot:D.party,
