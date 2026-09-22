@@ -100,6 +100,20 @@ async function load(){
   const catShow=CATS.filter(([k])=> k!=="other" || catInv.other.length);
   const catTot={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}};
   catShow.forEach(([k])=>["cur","last"].forEach(s=>{ catTot[s].inv+=catFY[k][s].inv; catTot[s].rec+=catFY[k][s].rec; catTot[s].recv+=catFY[k][s].recv; }));
+
+  // ---- period comparison (any FY + month vs any FY + month), by category ----
+  const MONTHNAME=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const FY_MONTHS=[4,5,6,7,8,9,10,11,12,1,2,3];   // Apr → Mar
+  const fyYears=[...new Set(rows.map(x=>fyStart(x.r.doc_date)).filter(v=>v!=null))];
+  [curFY,curFY-1].forEach(y=>{ if(!fyYears.includes(y)) fyYears.push(y); });
+  fyYears.sort((a,b)=>b-a);
+  const aggPeriod=(fyY,month)=>{ const acc={}; CATS.forEach(([k])=>acc[k]={inv:0,rec:0,recv:0});
+    rows.forEach(x=>{ if(fyStart(x.r.doc_date)!==fyY) return;
+      if(month){ const mo=new Date(x.r.doc_date).getMonth()+1; if(mo!==month) return; }
+      const c=catOf(x.r); const o=acc[c]; o.inv+=x.gross; o.rec+=x.paid; o.recv+=Math.max(0,x.balance); });
+    return acc; };
+  const fyOptStr=sel=>fyYears.map(y=>`<option value="${y}"${y===sel?' selected':''}>${fyLabel(y)}</option>`).join("");
+  const moOptStr=sel=>`<option value=""${sel===''?' selected':''}>Whole year</option>`+FY_MONTHS.map(mo=>`<option value="${mo}"${String(sel)===String(mo)?' selected':''}>${MONTHNAME[mo]}</option>`).join("");
   // dropdown to reconcile a single invoice into another category
   const catSelect=(inv,curk)=>`<select class="catMove" data-inv="${esc(inv.id)}" style="width:auto;font-size:12px">
       <option value="">Move to…</option>${CATS.map(([ck,cl])=>`<option value="${ck}"${ck===curk?' disabled':''}>${cl}</option>`).join("")}<option value="__auto">Auto-detect</option>
@@ -208,6 +222,19 @@ async function load(){
       </tbody></table></div>
       <p class="muted"><b>Click a category</b> to expand the invoices in it (number, client and amounts). Each invoice is placed by its highest-value line's description + HSN/SAC. If one is in the wrong bucket, use <b>Reconcile to</b> to move that invoice — the choice is saved and the totals here (matching the financial-year card above, bar rounding) update. “Auto-detect” clears a manual override.</p>
     </div>
+    <div class="card"><h3>Compare periods — by revenue category${entity?` — ${esc(entity)}`:''}</h3>
+      <div class="row wrap" style="gap:18px;align-items:flex-end">
+        <div><div class="muted" style="font-size:12px;margin-bottom:2px">Period A</div>
+          <select id="cmpFyA" style="width:auto">${fyOptStr(curFY)}</select>
+          <select id="cmpMoA" style="width:auto">${moOptStr('')}</select></div>
+        <div style="align-self:center;font-weight:700;color:#6a7179">vs</div>
+        <div><div class="muted" style="font-size:12px;margin-bottom:2px">Period B</div>
+          <select id="cmpFyB" style="width:auto">${fyOptStr(curFY-1)}</select>
+          <select id="cmpMoB" style="width:auto">${moOptStr('')}</select></div>
+      </div>
+      <div id="catCmpHost" style="margin-top:12px"></div>
+      <p class="muted">Pick any two periods — a whole financial year (Apr–Mar) or a single month within one — to compare each category side by side. Δ shows Period A minus Period B on invoiced value.</p>
+    </div>
     <div class="card"><h3>How the receivable is built up</h3>
       <table><tbody>
         <tr><td>Total invoiced</td><td class="num">${money(totInvoiced)}</td></tr>
@@ -275,6 +302,37 @@ async function load(){
     if(!confirm("Move "+ids.length+" invoice"+(ids.length===1?"":"s")+" to “"+label+"”?")) return;
     setRevCategoryBulk(ids, val==="__auto"?null:val);
   }));
+
+  // period comparison card
+  function renderCompare(){
+    const fyA=+$("cmpFyA").value, moA=$("cmpMoA").value?+$("cmpMoA").value:null;
+    const fyB=+$("cmpFyB").value, moB=$("cmpMoB").value?+$("cmpMoB").value:null;
+    const A=aggPeriod(fyA,moA), B=aggPeriod(fyB,moB);
+    const showKeys=CATS.filter(([k])=> k!=="other" || ["inv","rec","recv"].some(f=>A.other[f]||B.other[f]));
+    const labA=fyLabel(fyA)+" · "+(moA?MONTHNAME[moA]:"Full year");
+    const labB=fyLabel(fyB)+" · "+(moB?MONTHNAME[moB]:"Full year");
+    const signed=d=>(d>0?"+":"")+money(d);
+    const dcol=d=>d>0?"#3e6b20":(d<0?"#a3322a":"#6a7179");
+    let tAi=0,tAr=0,tAo=0,tBi=0,tBr=0,tBo=0;
+    const body=showKeys.map(([k,label])=>{ const a=A[k],b=B[k]; tAi+=a.inv;tAr+=a.rec;tAo+=a.recv;tBi+=b.inv;tBr+=b.rec;tBo+=b.recv;
+      const d=a.inv-b.inv;
+      return `<tr><td>${label}</td>
+        <td class="num" style="border-left:2px solid var(--line)">${money(a.inv)}</td><td class="num">${money(a.rec)}</td><td class="num">${money(a.recv)}</td>
+        <td class="num" style="border-left:2px solid var(--line)">${money(b.inv)}</td><td class="num">${money(b.rec)}</td><td class="num">${money(b.recv)}</td>
+        <td class="num" style="border-left:2px solid var(--line);color:${dcol(d)};font-weight:600">${signed(d)}</td></tr>`; }).join("");
+    const dt=tAi-tBi;
+    $("catCmpHost").innerHTML=`<div style="overflow:auto"><table><thead>
+      <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">A · ${esc(labA)}</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">B · ${esc(labB)}</th><th rowspan="2" class="num" style="border-left:2px solid var(--line)">Δ Invoiced (A−B)</th></tr>
+      <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th></tr>
+    </thead><tbody>${body}
+      <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td>
+        <td class="num" style="border-left:2px solid var(--line)"><b>${money(tAi)}</b></td><td class="num"><b>${money(tAr)}</b></td><td class="num"><b>${money(tAo)}</b></td>
+        <td class="num" style="border-left:2px solid var(--line)"><b>${money(tBi)}</b></td><td class="num"><b>${money(tBr)}</b></td><td class="num"><b>${money(tBo)}</b></td>
+        <td class="num" style="border-left:2px solid var(--line);color:${dcol(dt)}"><b>${signed(dt)}</b></td></tr>
+    </tbody></table></div>`;
+  }
+  ["cmpFyA","cmpMoA","cmpFyB","cmpMoB"].forEach(id=>{ const el=$(id); if(el) el.addEventListener("change",renderCompare); });
+  renderCompare();
 
   window.OPS.report.bar("recCredit", months, months.map(k=>invByM[k]||0), "Invoiced (₹)", "#0A6496");
   window.OPS.report.line("recFunds", months, months.map(k=>payByM[k]||0), "Received (₹)", "#599533");
