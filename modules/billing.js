@@ -47,13 +47,41 @@ async function listView(type){
   $("dNew").addEventListener("click",()=>startNew(type));
   const { data }=await sb().from("documents").select("*").eq("doc_type",type).order("created_at",{ascending:false});
   const all=data||[];
+  let clients=[];
+  if(type==="invoice"){ const { data:cl }=await sb().from("clients").select("*").order("firm_name"); clients=cl||[]; }
+  const clientSel=r=>`<select class="fxCl" data-id="${r.id}" style="width:190px"><option value="">— select client —</option>${clients.map(c=>`<option value="${c.id}"${r.party_id===c.id?' selected':''}>${esc(c.firm_name||c.name||"")}${c.client_ref?(" ("+esc(c.client_ref)+")"):""}</option>`).join("")}</select>`;
+  const catSel=r=>`<select class="fxCat" data-id="${r.id}" style="width:170px"><option value="">— category —</option>${REV_CATS.map(([k,l])=>`<option value="${k}"${((r.data&&r.data.rev_category)||"")===k?' selected':''}>${esc(l)}</option>`).join("")}</select>`;
   function render(rows){
-    $("dList").innerHTML = rows.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>${esc(cfg.partyLabel.split(" ")[0])}</th><th class="num">Total</th><th>Status</th></tr></thead>
+    const fx=$("dFilter")?$("dFilter").value:"";
+    const fixMode = type==="invoice" && (fx==="uncat"||fx==="unlinked");
+    $("dList").innerHTML = rows.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>${esc(cfg.partyLabel.split(" ")[0])}</th><th class="num">Total</th><th>Status</th>${fixMode?'<th>Register client</th><th>Revenue category</th><th></th>':''}</tr></thead>
       <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}"><td><b>${esc(r.number)}</b></td><td>${fmtDate(r.doc_date)}</td>
         <td>${esc(((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"")}</td>
-        <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(dispStatus(r))}</td></tr>`).join("")}</tbody></table>`
+        <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(dispStatus(r))}</td>${fixMode?`<td>${clientSel(r)}</td><td>${catSel(r)}</td><td><button class="btn sm green" data-sub="${r.id}">Submit revision</button></td>`:''}</tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No documents yet.</div>';
-    $("dList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>openExisting(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+    $("dList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("select,button")) return; openExisting(all.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
+    $("dList").querySelectorAll("[data-sub]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); const id=b.getAttribute("data-sub"); const r=all.find(x=>String(x.id)===id);
+      const cl=$("dList").querySelector('.fxCl[data-id="'+id+'"]'), ct=$("dList").querySelector('.fxCat[data-id="'+id+'"]');
+      submitRevision(r, cl?cl.value:"", ct?ct.value:""); }));
+  }
+  async function submitRevision(r, clientId, cat){
+    const upd={};
+    let changedClient=false;
+    if(clientId && clientId!==r.party_id){ const c=clients.find(x=>x.id===clientId);
+      if(c){ upd.party_id=c.id; changedClient=true;
+        upd.party_snapshot=Object.assign({}, r.party_snapshot||{}, { firmName:c.firm_name||c.name||"", name:c.name||"", mobile:c.mobile||"", email:c.email||"", gstin:c.gstin||"", address:c.address||"", city:c.city||"", state:c.state||"", pincode:c.pincode||"", clientRef:c.client_ref||"" }); } }
+    const curCat=(r.data&&r.data.rev_category)||"";
+    const changedCat=(cat||"")!==curCat;
+    if(changedCat){ upd.data=Object.assign({}, r.data||{}); if(cat) upd.data.rev_category=cat; else delete upd.data.rev_category; }
+    if(!changedClient && !changedCat){ alert("Pick a different client and/or category on this row first."); return; }
+    // send the corrected invoice for review & approval
+    upd.approval_status="submitted"; upd.submitted_by=window.OPS.me.id; upd.submitted_at=new Date().toISOString(); upd.reject_note=null;
+    const { error }=await sb().from("documents").update(upd).eq("id",r.id);
+    if(error){ alert("Could not submit revision: "+error.message); return; }
+    window.OPS.audit("revision_submitted","document",r.id,"invoice "+r.number+": "+[changedClient?"client":null,changedCat?"revenue category":null].filter(Boolean).join(" + ")+" revised → review");
+    window.OPS.flashTop("Revision submitted for approval ✓");
+    window.OPS._invFilter=($("dFilter")?$("dFilter").value:"");   // keep the filter after reload
+    listView(type);
   }
   function apply(){
     const q=($("dSearch").value||"").toLowerCase().trim();
@@ -63,7 +91,7 @@ async function listView(type){
     else if(f==="unlinked") rows=rows.filter(r=>!r.party_id && !(r.data&&r.data.title==="Bill of Supply"));
     if(q) rows=rows.filter(r=>String(r.number||"").toLowerCase().includes(q)|| JSON.stringify(r.party_snapshot||{}).toLowerCase().includes(q));
     const note=$("dFilterNote");
-    if(note) note.textContent = f ? (rows.length+" invoice(s) "+(f==="uncat"?"with no revenue category":"not linked to a register client")+" — open each to fix.") : "";
+    if(note) note.textContent = f ? (rows.length+" invoice(s) "+(f==="uncat"?"with no revenue category":"not linked to a register client")+" — set the client/category on the row and click Submit revision (goes for review & approval).") : "";
     render(rows);
   }
   $("dSearch").addEventListener("input",apply);
