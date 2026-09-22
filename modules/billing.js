@@ -160,7 +160,7 @@ function editor(){
       <div class="fgrid">
         <div class="field"><label>Number</label><input id="dNum" value="${esc(D.number)}"></div>
         <div class="field"><label>Date</label><input id="dDate" type="date" value="${esc(D.doc_date)}"></div>
-        ${(TYPE==='invoice'||TYPE==='quotation')?`<div class="field"><label>Revenue category *</label><select id="dRevCat">
+        ${(TYPE==='invoice'||TYPE==='quotation')?`<div class="field"><label>Revenue category * <span class="muted" style="font-weight:normal">(auto-filled from items — change only to override)</span></label><select id="dRevCat">
           <option value="">— select category —</option>
           ${REV_CATS.map(([k,l])=>`<option value="${k}"${(D.data&&D.data.rev_category)===k?' selected':''}>${l}</option>`).join("")}
         </select></div>`:''}
