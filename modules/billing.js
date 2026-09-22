@@ -122,7 +122,6 @@ function editor(){
     <div class="card" style="margin-top:12px">
       <div class="row wrap"><div class="eyebrow">Administration</div>
         <div class="spacer"></div>
-        ${cfg.copies?`<label style="display:inline;margin:0">Copy: </label><select id="dCopy" style="width:auto;display:inline-block"><option ${D.copyLabel==='Original'?'selected':''}>Original</option><option ${D.copyLabel==='Duplicate'?'selected':''}>Duplicate</option></select>`:''}
       </div>
       <h1>${D.id?"Edit ":"New "}${esc(cfg.title.replace("Tax/Cash Credit Invoice","Invoice"))}</h1>
       <div class="fgrid">
