@@ -10,6 +10,7 @@
 (function(){
 const { $, esc, num, fmtDate } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
+function reasonOpts(cur){ const list=window.OPS.SHORT_REASONS||[]; const extra=(cur&&!list.includes(cur))?`<option selected>${esc(cur)}</option>`:""; return extra+list.map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`).join(""); }
 
 async function render(scope){
   const m=$("main");
@@ -32,7 +33,7 @@ async function render(scope){
       <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th class="num">Acres</th><th style="min-width:260px">Reason</th>${editable?'<th></th>':''}</tr></thead>
       <tbody>${list.map((r)=>{ const i=rows.indexOf(r); return `<tr>
         <td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}${r.active?'':' <span class="chip muted" style="font-size:10px">closed</span>'}</td><td>${esc(r.pilot_name||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td>
-        <td>${editable?`<input class="in sdr" data-i="${i}" value="${esc(r.reason||"")}" placeholder="Reason for the short day" style="width:100%">`:(r.reason?esc(r.reason):'<span class="muted">—</span>')}</td>
+        <td>${editable?`<select class="in sdr" data-i="${i}" style="width:100%"><option value="">— reason —</option>${reasonOpts(r.reason)}</select>`:(r.reason?esc(r.reason):'<span class="muted">—</span>')}</td>
         ${editable?`<td><button class="btn sm" data-save="${i}">Save</button></td>`:''}</tr>`; }).join("")}</tbody></table></div></div>`;
     if(editable){
       $("sdList").querySelectorAll("[data-save]").forEach(b=>b.addEventListener("click",async()=>{

@@ -10,6 +10,9 @@ const sb = ()=>window.OPS.sb;
 
 function daysBetween(d){ if(!d) return 0; return Math.max(0, Math.floor((Date.now()-new Date(d).getTime())/86400000)); }
 function bucket(age){ return age<=30?"0-30":age<=60?"31-60":age<=90?"61-90":">90"; }
+// Indian financial year runs Apr 1 → Mar 31. fyStart() returns the FY's START year (int).
+function fyStart(d){ if(!d) return null; const dt=new Date(d); if(isNaN(dt)) return null; const y=dt.getFullYear(), m=dt.getMonth()+1; return m>=4?y:y-1; }
+function fyLabel(s){ return "FY "+s+"–"+String((s+1)%100).padStart(2,"0"); }   // e.g. FY 2026–27
 
 async function view(){
   const m=$("main");
@@ -55,6 +58,42 @@ async function load(){
   rows.forEach(x=>{ if(x.balance>0) buckets[bucket(x.age)]+=x.balance; });
   const overdue=rows.filter(x=>x.balance>0 && x.age>30).length;
 
+  // Per-financial-year split (grouped by the INVOICE date's FY, Apr–Mar).
+  // "Received" and "Still owed" are amounts against invoices raised in that FY,
+  // so Invoiced − Credit − Received − Advances = Still owed reconciles per year.
+  const byFY={};
+  rows.forEach(x=>{ const s=fyStart(x.r.doc_date); if(s==null) return;
+    const o=byFY[s]||(byFY[s]={inv:0,rec:0,recv:0,over:0});
+    o.inv+=x.gross; o.rec+=x.paid; o.recv+=Math.max(0,x.balance);
+    if(x.balance>0 && x.age>30) o.over++; });
+  const now=new Date(); const curFY=(now.getMonth()+1>=4)?now.getFullYear():now.getFullYear()-1;
+  const fyRow=s=>byFY[s]||{inv:0,rec:0,recv:0,over:0};
+  const fyCur=fyRow(curFY), fyLast=fyRow(curFY-1);
+
+  // Further split by revenue line of business, per FY. Each invoice LINE is
+  // classified by its description + HSN/SAC; a mixed invoice is split across
+  // categories in proportion to each line's value, so category totals reconcile
+  // to the financial-year card above.
+  const CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
+  const classifyLine=(desc,sub,hsn)=>{
+    const d=((desc||"")+" "+(sub||"")).toLowerCase(); const h=String(hsn||"").replace(/\s/g,"");
+    if(/demo/.test(d)) return "demo";
+    if(/servic|repair|mainten|overhaul|\bmro\b|\bamc\b|refurb/.test(d) || /^9987/.test(h)) return "service";
+    if(/spray|aerial|agri/.test(d) || /^9986/.test(h)) return "spray";
+    if(/part|spare|batter|propeller|\bmotor\b|nozzle|\bpump\b|blade|\besc\b|frame|charger|drone|kit|\barm\b/.test(d) || /^(8806|8807|8508|8507|8479|8413)/.test(h)) return "part";
+    return "other"; };
+  const catFY={}; CATS.forEach(([k])=>catFY[k]={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}});
+  rows.forEach(x=>{ const s=fyStart(x.r.doc_date); if(s!==curFY && s!==curFY-1) return;
+    const slot=s===curFY?"cur":"last"; const items=(x.r.line_items||[]);
+    const bases=items.map(it=>Math.max(0,(num(it.qty)||0)*(num(it.rate)||0)*(1-(num(it.disc)||0)/100)));
+    const sum=bases.reduce((a,b)=>a+b,0);
+    const add=(c,f)=>{ const o=catFY[c][slot]; o.inv+=x.gross*f; o.rec+=x.paid*f; o.recv+=Math.max(0,x.balance)*f; };
+    if(!(sum>0)){ const it=items[0]||{}; add(classifyLine(it.desc,it.sub,it.hsn),1); return; }
+    items.forEach((it,i)=>{ if(!(bases[i]>0)) return; add(classifyLine(it.desc,it.sub,it.hsn), bases[i]/sum); }); });
+  const catShow=CATS.filter(([k])=> k!=="other" || (["cur","last"].some(s=>catFY.other[s].inv||catFY.other[s].rec||catFY.other[s].recv)));
+  const catTot={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}};
+  catShow.forEach(([k])=>["cur","last"].forEach(s=>{ catTot[s].inv+=catFY[k][s].inv; catTot[s].rec+=catFY[k][s].rec; catTot[s].recv+=catFY[k][s].recv; }));
+
   // Pending invoicing: approved acre work not yet turned into an invoice.
   // farmer component = 0% GST (Bill of Supply); client component grossed up by
   // 18% so it is comparable to the GST-inclusive invoice receivable above.
@@ -91,6 +130,28 @@ async function load(){
       <div class="stat"><div class="n">${overdue}</div><div class="l">Overdue &gt;30d</div></div>
       ${pendShown?`<div class="stat"><div class="n">${money(pendInvoicing)}</div><div class="l">Pending invoicing</div></div>
       <div class="stat" style="background:#e7f0de;border-color:#c9dcb6"><div class="n" style="color:var(--green)">${money(totToReceive)}</div><div class="l">Total still to receive</div></div>`:''}
+    </div>
+    <div class="card"><h3>By financial year${entity?` — ${esc(entity)}`:''}</h3>
+      <div style="overflow:auto"><table><thead><tr><th>Financial year</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num">Overdue &gt;30d</th></tr></thead>
+      <tbody>
+        <tr style="background:#e7f0de"><td><b>${fyLabel(curFY)} (current)</b></td><td class="num"><b>${money(fyCur.inv)}</b></td><td class="num">${money(fyCur.rec)}</td><td class="num" style="font-weight:700;color:var(--green)">${money(fyCur.recv)}</td><td class="num" style="${fyCur.over>0?'color:#a3322a;font-weight:700':''}">${fyCur.over}</td></tr>
+        <tr><td><b>${fyLabel(curFY-1)} (last)</b></td><td class="num"><b>${money(fyLast.inv)}</b></td><td class="num">${money(fyLast.rec)}</td><td class="num" style="font-weight:700">${money(fyLast.recv)}</td><td class="num" style="${fyLast.over>0?'color:#a3322a;font-weight:700':''}">${fyLast.over}</td></tr>
+      </tbody></table></div>
+      <p class="muted">Grouped by the <b>invoice date's</b> financial year (Apr–Mar). <b>Received</b> and <b>Still owed</b> are amounts against invoices raised in that year, so they reconcile within the year. Pending invoicing (un-billed acre work) is not date-tagged and is excluded here.</p>
+    </div>
+    <div class="card"><h3>By revenue category &amp; financial year${entity?` — ${esc(entity)}`:''}</h3>
+      <div style="overflow:auto"><table><thead>
+        <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY)} (current)</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY-1)} (last)</th></tr>
+        <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th></tr>
+      </thead><tbody>
+        ${catShow.map(([k,label])=>`<tr><td>${label}</td>
+          <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].cur.inv)}</td><td class="num">${money(catFY[k].cur.rec)}</td><td class="num">${money(catFY[k].cur.recv)}</td>
+          <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].last.inv)}</td><td class="num">${money(catFY[k].last.rec)}</td><td class="num">${money(catFY[k].last.recv)}</td></tr>`).join("")}
+        <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td>
+          <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.cur.inv)}</b></td><td class="num"><b>${money(catTot.cur.rec)}</b></td><td class="num"><b>${money(catTot.cur.recv)}</b></td>
+          <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.last.inv)}</b></td><td class="num"><b>${money(catTot.last.rec)}</b></td><td class="num"><b>${money(catTot.last.recv)}</b></td></tr>
+      </tbody></table></div>
+      <p class="muted">Each invoice line is classified by its <b>description and HSN/SAC</b> into the four lines of business; a mixed invoice is split across categories in proportion to each line's value. Totals here match the financial-year card above (bar rounding). If a line lands in the wrong bucket, adjust its wording on the invoice.</p>
     </div>
     <div class="card"><h3>How the receivable is built up</h3>
       <table><tbody>
@@ -151,6 +212,10 @@ async function load(){
   const due=rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age);
   window.OPS.report.wordButton("recReport","Invoices & Receivables Report"+(entity?(" — "+entity):""), ()=>([
     {heading:"Summary", table:{headers:["Metric","Value"], rows:[["Total receivable",money(totReceivable)],["Total invoiced",money(totInvoiced)],["Total received",money(totReceived)],["Overdue >30d",overdue]].concat(pendShown?[["Pending invoicing (all entities, client incl. GST)",money(pendInvoicing)],["Total still to receive",money(totToReceive)]]:[])}},
+    {heading:"By financial year", table:{headers:["Financial year","Invoiced","Received","Still owed","Overdue >30d"], rows:[
+      [fyLabel(curFY)+" (current)",money(fyCur.inv),money(fyCur.rec),money(fyCur.recv),fyCur.over],
+      [fyLabel(curFY-1)+" (last)",money(fyLast.inv),money(fyLast.rec),money(fyLast.recv),fyLast.over]]}},
+    {heading:"By revenue category & financial year", table:{headers:["Category",fyLabel(curFY)+" invoiced","received","still owed",fyLabel(curFY-1)+" invoiced","received","still owed"], rows:catShow.map(([k,label])=>[label,money(catFY[k].cur.inv),money(catFY[k].cur.rec),money(catFY[k].cur.recv),money(catFY[k].last.inv),money(catFY[k].last.rec),money(catFY[k].last.recv)]).concat([["Total",money(catTot.cur.inv),money(catTot.cur.rec),money(catTot.cur.recv),money(catTot.last.inv),money(catTot.last.rec),money(catTot.last.recv)]])}},
     {heading:"Monthly credit in market (invoiced)", image:window.OPS.report.img("recCredit"), table:{headers:["Month","Invoiced"], rows:months.map(k=>[k,money(invByM[k]||0)])}},
     {heading:"Funds received by month", image:window.OPS.report.img("recFunds"), table:{headers:["Month","Received"], rows:months.map(k=>[k,money(payByM[k]||0)])}},
     {heading:"Receivables aging", image:window.OPS.report.img("recAging"), table:{headers:["0–30","31–60","61–90",">90"], rows:[[money(buckets["0-30"]),money(buckets["31-60"]),money(buckets["61-90"]),money(buckets[">90"])]]}},

@@ -13,6 +13,7 @@ const sb = ()=>window.OPS.sb;
 let drows=[], clients=[], editingId=null, pilotReason={};
 const pilotKeyOf=(r)=>String(r.pilot_id||"") || (r.pilot||"").trim().toLowerCase();
 const pilotNameOf=(r)=>(locPilots.find(p=>String(p.id)===String(r.pilot_id))||{}).name || (r.pilot||"").trim() || "(unassigned)";
+function reasonOpts(cur){ const list=window.OPS.SHORT_REASONS||[]; const extra=(cur&&!list.includes(cur))?`<option selected>${esc(cur)}</option>`:""; return extra+list.map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`).join(""); }
 let locs=[], locPilots=[], curLoc=null, cropsList=[], curRates=[];
 function blank(){ return { pilot:"", pilot_id:"", farmer:"", phone:"", village:"", crop:"", crop_id:"", chemical:"", acres:"", crate:"", frate:"", gps:false, short_reason:"" }; }
 const SHORT_AC=12;   // a pilot-day under this many acres needs a reason
@@ -173,7 +174,7 @@ function renderRows(){
         <td class="num" style="font-weight:700">${money(totAmt)}</td>
         <td></td>
         <td>${short
-          ? `<input data-pk="${esc(k)}" class="sdr" value="${esc(pilotReason[k]||'')}" placeholder="reason (< ${SHORT_AC} ac/day)" style="width:160px;border-color:#e0a800;background:#fff8e6">`
+          ? `<select data-pk="${esc(k)}" class="sdr" style="width:200px;border-color:#e0a800;background:#fff8e6"><option value="">— reason (&lt; ${SHORT_AC} ac/day) —</option>${reasonOpts(pilotReason[k])}</select>`
           : (tot>0?'<span class="chip ok" style="font-size:11px">met minimum</span>':'')}</td>
         <td></td></tr>`;
     }
@@ -188,7 +189,7 @@ function renderRows(){
   // when acres or the pilot name settle, regroup + refresh subtotals / short-day state
   tb.querySelectorAll("input[data-k='acres'],input[data-k='pilot']").forEach(inp=>inp.addEventListener("change",renderRows));
   // per-pilot short-day reason
-  tb.querySelectorAll(".sdr").forEach(inp=>inp.addEventListener("input",()=>{ pilotReason[inp.getAttribute("data-pk")]=inp.value; }));
+  tb.querySelectorAll(".sdr").forEach(inp=>inp.addEventListener("change",()=>{ pilotReason[inp.getAttribute("data-pk")]=inp.value; }));
   // crop picker: set the crop, then resolve the effective rate for that crop/date
   tb.querySelectorAll("select[data-k='crop_id']").forEach(sel=>sel.addEventListener("change",()=>{
     const i=+sel.getAttribute("data-i"); drows[i].crop_id=sel.value;
