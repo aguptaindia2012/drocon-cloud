@@ -169,8 +169,8 @@ async function loadBilling(partnerId){
    Line-item editor (shared by submit form + manager on-behalf)
    kind: 'authorized_partner' (agent invoice) | 'consultant' (timesheet)
    --------------------------------------------------------------------------- */
-function blankRow(kind, model){
-  if(kind==="consultant") return {date:todayISO(),description:"",hours:"",rate:"",amount:0};
+function blankRow(kind, model, dfltRate){
+  if(kind==="consultant") return {date:todayISO(),description:"",hours:"",rate:(dfltRate!=null&&dfltRate!==""?dfltRate:""),amount:0};
   if(model==="full_client_rate") return {date:todayISO(),acres:"",rate:"",waived:false,amount:0,contrib_acres:0,comm_amount:0};
   return {date:todayISO(),farmer:"",mobile:"",rate:"",acre:"",amount:0,comm_rate:"",comm_amount:0};
 }
@@ -199,10 +199,12 @@ function lineEditor(host, kind, rows, ctx, onChange){
     });
     if(onChange) onChange(rowsToTotals(kind,rows));
   }
+  const cu = ctx.consultant||{};
+  const qtyLabel = cu.qtyLabel||"Hours", rateLabel = cu.rateLabel||"Rate ₹/hr";
   function draw(){
     recalc();
     const head = kind==="consultant"
-      ? `<th>Date</th><th>Description</th><th class="num">Hours</th><th class="num">Rate ₹/hr</th><th class="num">Amount ₹</th><th></th>`
+      ? `<th>Date</th><th>Description</th><th class="num">${qtyLabel}</th><th class="num">${rateLabel}</th><th class="num">Amount ₹</th><th></th>`
       : isFCR
       ? `<th>Date</th><th class="num">Acres sprayed</th><th class="num">Client rate ₹/acre</th><th title="Downtime waiver">Waive</th><th class="num">Gross ₹</th><th class="num">Contrib. (acre)</th><th class="num">DroCon margin ₹</th><th class="num">Net ₹</th><th></th>`
       : `<th>Date</th><th>Farmer</th><th>Mobile</th><th class="num">Rate ₹/acre</th><th class="num">Acre</th><th class="num">Amount ₹</th><th class="num">Comm %</th><th class="num">Comm ₹</th><th></th>`;
@@ -244,7 +246,7 @@ function lineEditor(host, kind, rows, ctx, onChange){
       inp.addEventListener("change",draw);
     });
     host.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ rows.splice(+b.getAttribute("data-del"),1); draw(); }));
-    $("peAdd").addEventListener("click",()=>{ rows.push(blankRow(kind, billing.model)); draw(); });
+    $("peAdd").addEventListener("click",()=>{ rows.push(blankRow(kind, billing.model, cu.rate)); draw(); });
   }
   draw();
   return { rows, totals:()=>rowsToTotals(kind,rows), setRows:(nr)=>{ rows.length=0; (nr||[]).forEach(r=>rows.push(r)); draw(); } };
@@ -295,8 +297,20 @@ async function portalSubmit(){
   if($("piNote2")) $("piNote2").innerHTML = isFCR
     ? `Enter the <b>acres sprayed</b> and the <b>client rate</b> for each operating day. You are paid the <b>full client rate</b> for every acre; DroCon's margin is the daily <b>Acreage Contribution</b> (<b>${billing.contribution_above}</b> acre when the day's order exceeds <b>${billing.threshold_acres}</b> acres, else <b>${billing.contribution_upto}</b> acre), valued at the client rate. Tick <b>Waive</b> on a downtime day (no work available, or drone damage per the agreement).`
     : `Enter the <b>actual per-acre rate you received from the farmer</b> on each row. The commission % is filled automatically from the standard slabs (you can override it if your contract differs).`;
-  const rows = [blankRow(kind, billing.model)];
-  const ed = lineEditor($("piRows"), kind, rows, {slabs, billing}, t=>{
+  // consultants: pre-fill the line rate from their engagement (rate + basis)
+  let consultantCtx=null;
+  if(kind==="consultant"){
+    try{ const { data:rr }=await sb().rpc("my_consultant_rate"); const e=(rr&&rr[0])||null;
+      if(e){ const rt=(e.rate_type||"Monthly"), amt=num(e.rate);
+        consultantCtx = rt==="Hourly" ? {rate:amt||"",qtyLabel:"Hours", rateLabel:"Rate ₹/hr"}
+                      : rt==="Daily"  ? {rate:amt||"",qtyLabel:"Days",  rateLabel:"Rate ₹/day"}
+                      :                 {rate:amt||"",qtyLabel:"Months",rateLabel:"Rate ₹/month"};
+        if(amt){ const h=$("piNote"); if($("piRows")) $("piRows").insertAdjacentHTML("beforebegin",`<div class="muted" style="font-size:12px;margin-bottom:4px">Rate pre-filled from your engagement: <b>${money(amt)} / ${esc((rt||"Monthly").toLowerCase())}</b> — adjust any line if needed.</div>`); }
+      }
+    }catch(e){}
+  }
+  const rows = [blankRow(kind, billing.model, consultantCtx&&consultantCtx.rate)];
+  const ed = lineEditor($("piRows"), kind, rows, {slabs, billing, consultant:consultantCtx}, t=>{
     $("piGross").textContent=money(t.gross);
     if($("piComm")) $("piComm").textContent=money(t.commission_total);
     $("piNet").textContent=money(t.net_payable);
@@ -357,8 +371,19 @@ async function portalMine(){
 window.OPS.routes.portal_mine = portalMine;
 
 /* ---------------------------------------------------------------------------
-   EXTERNAL — Submit Expenses (consultants)
+   EXTERNAL — Submit Expenses (consultants & authorized partners)
    --------------------------------------------------------------------------- */
+async function uploadReceipts(fileList){
+  const files=Array.from(fileList||[]); const out=[];
+  for(const f of files){
+    const safe=f.name.replace(/[^\w.\-]+/g,"_");
+    const path=window.OPS.me.id+"/"+Date.now()+"_"+safe;
+    const { error }=await sb().storage.from("receipts").upload(path,f,{upsert:false});
+    if(error) throw error;
+    out.push({path, name:f.name});
+  }
+  return out;
+}
 async function portalExpense(){
   const p = window.OPS.profile||{};
   const TYPES=[["da","Daily Allowance"],["mileage","Mileage / fuel"],["hotel","Hotel / stay"],["local_transport","Local transport"],["hired_help","Hired help"],["misc","Miscellaneous"]];
@@ -374,8 +399,9 @@ async function portalExpense(){
       <h3 style="margin:14px 0 4px">Expense lines</h3>
       <div id="xeRows"></div>
       <div class="row" style="margin-top:8px"><button class="btn sm" id="xeAdd" type="button">+ Add line</button><div class="spacer"></div><div>Total: <b id="xeTot">₹0</b></div></div>
+      <div class="field full" style="margin-top:10px"><label>Attach receipts (images / PDF)</label><input type="file" id="xeFiles" multiple accept="image/*,application/pdf"></div>
       <div class="row" style="margin-top:10px"><button class="btn green" id="xeSend">Submit expense claim</button><div class="spacer"></div><div class="err" id="xeErr"></div></div>
-      <div class="muted" style="margin-top:8px">Keep your receipts — the office may ask for them during review.</div>
+      <div class="muted" style="margin-top:8px">Attach your receipts above, or keep them handy — the office may ask during review.</div>
     </div>
     <h3 style="margin-top:18px">My expense claims</h3>
     <div id="xeList" class="muted">Loading…</div>`;
@@ -395,10 +421,16 @@ async function portalExpense(){
   $("xeSend").addEventListener("click",async()=>{
     const clean=rows.filter(r=>r.desc||num(r.amount)); if(!clean.length){ $("xeErr").textContent="Add at least one expense line."; return; }
     const total=clean.reduce((s,r)=>s+num(r.amount),0);
-    const rec={ employee_id:p.party_id||null, employee_name:p.full_name||p.email||null, claim_type:$("xeType").value,
-      period:$("xePeriod").value.trim()||null, title:$("xePurpose").value.trim()||null, purpose:$("xePurpose").value.trim()||null,
-      lines:clean.map(r=>({desc:r.desc||"",amount:num(r.amount)})), total, status:"submitted", created_by:window.OPS.me.id };
-    $("xeSend").disabled=true;
+    $("xeSend").disabled=true; $("xeErr").textContent="";
+    let receipts=[];
+    try{ receipts = await uploadReceipts($("xeFiles")?$("xeFiles").files:[]); }
+    catch(e){ $("xeErr").textContent="Receipt upload failed: "+(e.message||e); $("xeSend").disabled=false; return; }
+    const rec={ employee_id:(p.party_type==="consultant"?(p.party_id||null):null), employee_name:p.full_name||p.email||null,
+      claim_type:$("xeType").value, period:$("xePeriod").value.trim()||null, title:$("xePurpose").value.trim()||null,
+      purpose:$("xePurpose").value.trim()||null, lines:clean.map(r=>({desc:r.desc||"",amount:num(r.amount)})),
+      receipts, total, status:"submitted",
+      note:(p.party_type!=="consultant"?("Submitted by "+(p.party_type||"partner")):null),
+      created_by:window.OPS.me.id };
     const { error }=await sb().from("expense_claims").insert(rec);
     $("xeSend").disabled=false;
     if(error){ $("xeErr").textContent=error.message; return; }
