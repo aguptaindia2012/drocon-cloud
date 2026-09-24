@@ -144,21 +144,70 @@ window.OPS.routes.hr_employees = window.OPS.makeRegistry({
 });
 
 /* ============================ Consultants (Consultancy section) ============================ */
+// Extra portal logins for one consultant — mirrors the Client/Vendor POC pattern.
+async function consultantPortalExtras(rec, host){
+  if(!(window.OPS.isAdmin && window.OPS.isAdmin())) return;
+  if(!rec || !rec.id){ host.innerHTML=""; return; }
+  const sb=window.OPS.sb;
+  host.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Consultant portal logins (POCs)</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Create the consultant's own login in <b>Account access</b> above (Consultant portal). To authorise additional people from the consultancy, add their emails here — each gets its own login into this consultant's portal (timesheet &amp; expenses).</div>
+    <div id="kpPoc" class="muted">Loading…</div>
+    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+      <input id="kpName" placeholder="Contact name" style="max-width:180px">
+      <input id="kpEmail" type="email" placeholder="email@company.com" style="max-width:240px">
+      <button class="btn green sm" id="kpAdd">Add &amp; create login</button>
+    </div>
+    <div id="kpOut" style="margin-top:8px"></div></div>`;
+  async function load(){
+    const { data }=await sb.from("consultant_pocs").select("*").eq("consultant_id",rec.id).order("created_at");
+    const pocs=data||[];
+    $("kpPoc").innerHTML = pocs.length ? `<div style="border:1px solid var(--line);border-radius:8px;padding:6px">${pocs.map(p=>`<div class="row" style="justify-content:space-between;padding:2px 0"><span>${esc(p.name||"")} <span class="muted">${esc(p.email)}</span></span><button class="btn sm ghost" data-poc="${esc(p.email)}">Remove</button></div>`).join("")}</div>` : '<div class="muted">No additional POC logins yet.</div>';
+    $("kpPoc").querySelectorAll("[data-poc]").forEach(b=>b.addEventListener("click",async()=>{
+      const email=b.getAttribute("data-poc");
+      if(!confirm("Remove "+email+" from this consultant's POC list? (Their login is not deleted.)")) return;
+      const { error }=await sb.from("consultant_pocs").delete().eq("consultant_id",rec.id).eq("email",email);
+      if(error){ alert(error.message); return; } load();
+    }));
+  }
+  load();
+  $("kpAdd").addEventListener("click",async()=>{
+    const email=($("kpEmail").value||"").trim().toLowerCase(), name=($("kpName").value||"").trim(), out=$("kpOut");
+    if(!email){ out.innerHTML='<span class="err">Enter an email.</span>'; return; }
+    $("kpAdd").disabled=true;
+    try{
+      const { error }=await sb.from("consultant_pocs").upsert({consultant_id:rec.id, email, name:name||null}); if(error) throw error;
+      const r=await window.OPS.accountAccess.adminCall({ action:"create", email, full_name:name||"", access:"consultant", party_id:rec.id });
+      out.innerHTML = r.temp_password
+        ? `<div class="card" style="background:#fbfdf8"><b>Login created ✓</b><div style="font-size:13px;margin-top:4px">Email: <code>${esc(email)}</code><br>Temporary password: <code style="font-size:15px">${esc(r.temp_password)}</code></div><div class="muted" style="font-size:12px;margin-top:6px">Share securely (not via the messenger). They sign in and change it.</div></div>`
+        : '<div class="card" style="background:#fbfdf8">An account already existed for this email — it is now linked as a consultant POC.</div>';
+      $("kpEmail").value=""; $("kpName").value=""; load();
+    }catch(e){ out.innerHTML='<span class="err">'+esc(e.message)+'</span>'; }
+    $("kpAdd").disabled=false;
+  });
+}
+
 window.OPS.routes.consultants = window.OPS.makeRegistry({
   tool:"consultants", table:"employees", title:"Consultants", eyebrow:"Partners · Consultancy", logView:true,
-  formExtra:(rec,host)=>window.OPS.accountAccess.panel({mode:"consultant"})(rec,host),
+  formExtra:(rec,host)=>{
+    const a=document.createElement("div"), b=document.createElement("div");
+    host.appendChild(a); host.appendChild(b);
+    window.OPS.accountAccess.panel({mode:"consultant"})(rec,a);
+    consultantPortalExtras(rec,b);
+  },
   orderBy:"name", filter:{col:"emp_type",val:"consultant"},
   searchKeys:["name","designation","phone","email"],
   listCols:[
     {key:"name",label:"Name"},
     {key:"designation",label:"Role"},
-    {key:"monthly_salary",label:"Rate / Retainer",num:true,fmt:v=>v==null?"":money(v)},
+    {key:"monthly_salary",label:"Rate",num:true,fmt:v=>v==null?"":money(v)},
+    {key:"rate_type",label:"Basis"},
     {key:"status",label:"Status"},
   ],
   fields:[
     {key:"name",label:"Name",full:true,required:true},
     {key:"designation",label:"Role (Consultant / PM / Technician)"},
-    {key:"monthly_salary",label:"Rate / Monthly Retainer (₹)",type:"number"},
+    {key:"rate_type",label:"Rate basis",type:"select",options:["Monthly","Hourly","Daily"]},
+    {key:"monthly_salary",label:"Rate amount (₹)",type:"number"},
     {key:"doj",label:"Engagement Start",type:"date"},
     {key:"dol",label:"Engagement End (blank = active)",type:"date"},
     {key:"status",label:"Status",type:"select",options:["active","inactive"]},

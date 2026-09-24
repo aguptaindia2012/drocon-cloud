@@ -357,6 +357,63 @@ async function portalMine(){
 window.OPS.routes.portal_mine = portalMine;
 
 /* ---------------------------------------------------------------------------
+   EXTERNAL — Submit Expenses (consultants)
+   --------------------------------------------------------------------------- */
+async function portalExpense(){
+  const p = window.OPS.profile||{};
+  const TYPES=[["da","Daily Allowance"],["mileage","Mileage / fuel"],["hotel","Hotel / stay"],["local_transport","Local transport"],["hired_help","Hired help"],["misc","Miscellaneous"]];
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Partner Portal</div><h1>Submit Expenses</h1>
+    <div class="callout">Welcome, <b>${esc(p.full_name||p.email||"")}</b>. Claim your reimbursable expenses here. The DroCon Bharat team reviews and processes payment; track status below.</div>
+    <div class="card">
+      <div class="fgrid">
+        <div class="field"><label>Type</label><select id="xeType">${TYPES.map(t=>`<option value="${t[0]}">${esc(t[1])}</option>`).join("")}</select></div>
+        <div class="field"><label>Period</label><input id="xePeriod" placeholder="e.g. Jun 2026"></div>
+        <div class="field full"><label>Purpose / description</label><input id="xePurpose" placeholder="e.g. Client visit — Meerut"></div>
+      </div>
+      <h3 style="margin:14px 0 4px">Expense lines</h3>
+      <div id="xeRows"></div>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="xeAdd" type="button">+ Add line</button><div class="spacer"></div><div>Total: <b id="xeTot">₹0</b></div></div>
+      <div class="row" style="margin-top:10px"><button class="btn green" id="xeSend">Submit expense claim</button><div class="spacer"></div><div class="err" id="xeErr"></div></div>
+      <div class="muted" style="margin-top:8px">Keep your receipts — the office may ask for them during review.</div>
+    </div>
+    <h3 style="margin-top:18px">My expense claims</h3>
+    <div id="xeList" class="muted">Loading…</div>`;
+  let rows=[{desc:"",amount:""}];
+  const tot=()=>{ const t=rows.reduce((s,r)=>s+num(r.amount),0); if($("xeTot")) $("xeTot").textContent=money(t); return t; };
+  const draw=()=>{
+    $("xeRows").innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Description</th><th class="num">Amount ₹</th><th></th></tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr data-i="${i}"><td><input data-k="desc" value="${esc(r.desc||'')}" style="width:100%"></td>
+        <td><input data-k="amount" type="number" step="any" value="${esc(r.amount||'')}" style="width:120px;text-align:right"></td>
+        <td><button class="btn sm ghost" data-del="${i}">✕</button></td></tr>`).join("")}</tbody></table></div>`;
+    $("xeRows").querySelectorAll("input[data-k]").forEach(inp=>inp.addEventListener("input",()=>{ const i=+inp.closest("tr").getAttribute("data-i"); rows[i][inp.getAttribute("data-k")]=inp.value; tot(); }));
+    $("xeRows").querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ rows.splice(+b.getAttribute("data-del"),1); if(!rows.length) rows.push({desc:"",amount:""}); draw(); }));
+    tot();
+  };
+  $("xeAdd").addEventListener("click",()=>{ rows.push({desc:"",amount:""}); draw(); });
+  draw();
+  $("xeSend").addEventListener("click",async()=>{
+    const clean=rows.filter(r=>r.desc||num(r.amount)); if(!clean.length){ $("xeErr").textContent="Add at least one expense line."; return; }
+    const total=clean.reduce((s,r)=>s+num(r.amount),0);
+    const rec={ employee_id:p.party_id||null, employee_name:p.full_name||p.email||null, claim_type:$("xeType").value,
+      period:$("xePeriod").value.trim()||null, title:$("xePurpose").value.trim()||null, purpose:$("xePurpose").value.trim()||null,
+      lines:clean.map(r=>({desc:r.desc||"",amount:num(r.amount)})), total, status:"submitted", created_by:window.OPS.me.id };
+    $("xeSend").disabled=true;
+    const { error }=await sb().from("expense_claims").insert(rec);
+    $("xeSend").disabled=false;
+    if(error){ $("xeErr").textContent=error.message; return; }
+    window.OPS.flashTop("Expense claim submitted ✓"); portalExpense();
+  });
+  const { data, error }=await sb().from("expense_claims").select("*").eq("created_by",window.OPS.me.id).order("created_at",{ascending:false});
+  if(error){ $("xeList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
+  const list=data||[];
+  $("xeList").innerHTML = list.length ? `<table><thead><tr><th>Submitted</th><th>Type</th><th>Period</th><th class="num">Total ₹</th><th>Status</th></tr></thead>
+    <tbody>${list.map(r=>`<tr><td>${fmt(r.created_at)}</td><td>${esc(r.claim_type||'')}</td><td>${esc(r.period||'—')}</td><td class="num">${money(r.total)}</td><td>${invChip(r.status)}</td></tr>`).join("")}</tbody></table>`
+    : '<div class="card muted">No expense claims yet.</div>';
+}
+window.OPS.routes.portal_expense = portalExpense;
+
+/* ---------------------------------------------------------------------------
    MANAGER — Invoice Approvals (+ partner login invites)
    --------------------------------------------------------------------------- */
 async function managerInvoices(){

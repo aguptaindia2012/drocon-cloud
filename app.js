@@ -136,6 +136,7 @@ const TOOLS = [
   // `party` scopes a tool to specific external party types.
   { key:"portal_submit",       section:"portal", label:"Submit Invoice", gate:"external", party:["authorized_partner","consultant"] },
   { key:"portal_mine",         section:"portal", label:"My Invoices",    gate:"external", party:["authorized_partner","consultant"] },
+  { key:"portal_expense",      section:"portal", label:"Submit Expenses", gate:"external", party:["consultant"] },
   { key:"vendor_dashboard",    section:"portal", label:"Acre Dashboard", gate:"external", party:["vendor"] },
   { key:"vendor_pilots",       section:"portal", label:"My Pilots",      gate:"external", party:["vendor"] },
   { key:"vendor_acre_review",  section:"portal", label:"Pilot Reports",  gate:"external", party:["vendor"] },
@@ -751,6 +752,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "224";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "225";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
