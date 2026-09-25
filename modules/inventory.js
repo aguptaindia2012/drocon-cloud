@@ -42,7 +42,7 @@ async function view(){
     <div id="iList" class="muted">Loading…</div>
     <div class="err" id="iErr"></div>`;
   wireSubnav();
-  const { data }=await sb().from("spare_catalogue").select("*").order("name");
+  const { data }=await sb().from("spare_catalogue").select("*").eq("active",true).order("name");
   const all=data||[];
   function newStock(r){ const p=pending[r.id]||{}; return num(r.current_stock)+num(p.purchased)-num(p.sold); }
   function render(rows){
@@ -100,7 +100,7 @@ async function entriesView(){
   $("enSearch").addEventListener("input",e=>{ eq=e.target.value.toLowerCase().trim(); renderEntries(); });
   $("enDir").addEventListener("change",e=>{ edir=e.target.value; renderEntries(); });
   $("enStatus").addEventListener("change",e=>{ estatus=e.target.value; renderEntries(); });
-  if(!spares.length){ const { data }=await sb().from("spare_catalogue").select("id,name,unit").order("name"); spares=data||[]; }
+  if(!spares.length){ const { data }=await sb().from("spare_catalogue").select("id,name,unit").eq("active",true).order("name"); spares=data||[]; }
   const { data, error }=await sb().from("inventory_moves").select("*, spare:spare_id(name,unit)").order("created_at",{ascending:false}).limit(500);
   if(error){ $("enList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
   entries=data||[];
@@ -126,7 +126,7 @@ function renderEntries(){
 
 async function editEntry(row){
   const m=$("main"); const isNew=!row; const admin=isApprover();
-  if(!spares.length){ const { data }=await sb().from("spare_catalogue").select("id,name,unit").order("name"); spares=data||[]; }
+  if(!spares.length){ const { data }=await sb().from("spare_catalogue").select("id,name,unit").eq("active",true).order("name"); spares=data||[]; }
   const cur = row ? { spare_id:row.spare_id, direction:row.direction, qty:row.qty, moved_on:(row.moved_on||"").slice(0,10), reason:row.reason||"", purchase_invoice_no:row.purchase_invoice_no||"", sales_invoice_no:row.sales_invoice_no||"" }
                   : { spare_id:(spares[0]&&spares[0].id)||"", direction:"in", qty:"", moved_on:todayISO(), reason:"purchase", purchase_invoice_no:"", sales_invoice_no:"" };
   m.innerHTML=`<button class="btn sm" id="enBack">← Back to Entries</button>

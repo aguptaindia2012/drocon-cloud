@@ -380,8 +380,8 @@ function renderMargin(){
 async function loadPickers(cfg){
   // catalogue picker (services + spares)
   const [{data:svc},{data:spr}]=await Promise.all([
-    sb().from("service_catalogue").select("*").order("name"),
-    sb().from("spare_catalogue").select("*").order("name") ]);
+    sb().from("service_catalogue").select("*").eq("active",true).order("name"),
+    sb().from("spare_catalogue").select("*").eq("active",true).order("name") ]);
   const opt=[];
   (svc||[]).forEach(s=>opt.push(`<option value="svc:${s.id}">[Service] ${esc(s.name)}${s.default_rate?(" — "+money(s.default_rate)):""}</option>`));
   (spr||[]).forEach(s=>opt.push(`<option value="spr:${s.id}">[Spare] ${esc(s.name)}${s.rate_excl_gst?(" — "+money(s.rate_excl_gst)):""}</option>`));

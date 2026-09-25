@@ -50,10 +50,12 @@ async function view(){
       <button class="btn sm ${active==='service'?'green':''}" data-c="service">Services</button>
       <button class="btn sm ${active==='spare'?'green':''}" data-c="spare">Spares</button>
       <div class="spacer"></div>
+      <select id="cActive" style="width:auto"><option value="active">Active</option><option value="disabled">Disabled</option><option value="all">All</option></select>
       <select id="cFilter" style="width:auto"><option value="">All categories</option><option value="__blank">⚠ Unlabelled</option>${REV_CATS.filter(([k])=>k).map(([k,l])=>`<option value="${k}">${esc(l)}</option>`).join("")}</select>
       <input id="cSearch" placeholder="Search…" style="max-width:240px">
       <button class="btn green sm" id="cNew">+ New ${active==='service'?'service':'spare'}</button>
     </div>
+    <div class="muted" style="font-size:12px;margin:-4px 0 8px">Renaming/repricing? <b>Disable</b> an old item (it can't be deleted once invoiced) so it drops off the Inventory list and the Invoicing catalogue picker — existing invoices are unaffected, and you can re-enable it anytime.</div>
     <div id="cList" class="muted">Loading…</div>`;
   m.querySelectorAll("[data-c]").forEach(b=>b.addEventListener("click",()=>{ active=b.getAttribute("data-c"); view(); }));
   $("cNew").addEventListener("click",()=>form(null));
@@ -68,28 +70,42 @@ async function view(){
         if(c[0]==='rev_category'){ v=revLabel(r.rev_category); }
         else if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
         else if(c[0]==='gst_rate') v=(v==null?'':v+'%'); else if(c[0]==='current_stock') v=(v==null?0:v);
-        return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td><button class="btn sm ghost" data-copy="${r.id}" title="Duplicate this item">⧉ Copy</button> <span class="muted">edit ›</span></td></tr>`).join("")}</tbody></table>`
+        return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td>${r.active===false?'<span class="chip" style="background:#eee;color:#888">Disabled</span> ':''}<button class="btn sm" data-tog="${r.id}">${r.active===false?'Enable':'Disable'}</button> <button class="btn sm ghost" data-copy="${r.id}" title="Duplicate this item">⧉ Copy</button> <span class="muted">edit ›</span></td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No items yet.</div>';
-    $("cList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+    $("cList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("button")) return; form(all.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
     $("cList").querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
       const src=all.find(x=>String(x.id)===b.getAttribute("data-copy")); if(src) form(null, dupSeed(src)); }));
+    $("cList").querySelectorAll("[data-tog]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
+      const src=all.find(x=>String(x.id)===b.getAttribute("data-tog")); if(src) toggleActive(src); }));
   }
   function apply(){
     const q=($("cSearch").value||"").toLowerCase().trim();
     const f=$("cFilter")?$("cFilter").value:"";
+    const av=$("cActive")?$("cActive").value:"active";
     let rows=all;
+    if(av==="active") rows=rows.filter(r=>r.active!==false);
+    else if(av==="disabled") rows=rows.filter(r=>r.active===false);
     if(f==="__blank") rows=rows.filter(r=>!r.rev_category);
     else if(f) rows=rows.filter(r=>r.rev_category===f);
     if(q) rows=rows.filter(r=>String(r.name||"").toLowerCase().includes(q)|| String(r[cfg.hsnKey]||"").toLowerCase().includes(q));
     render(rows);
   }
   $("cSearch").addEventListener("input",apply);
+  if($("cActive")) $("cActive").addEventListener("change",apply);
   if($("cFilter")) $("cFilter").addEventListener("change",apply);
   // health-check hand-off: open pre-filtered on unlabelled items
   if(window.OPS._catFilter && $("cFilter")){ $("cFilter").value = window.OPS._catFilter==="unlabelled"?"__blank":window.OPS._catFilter; window.OPS._catFilter=null; }
   apply();
 }
 
+async function toggleActive(rec){
+  const cfg=CATS[active]; const disable = rec.active!==false;
+  if(disable && !confirm("Disable “"+(rec.name||"")+"”?\n\nIt will no longer appear in Inventory or the Invoicing catalogue picker. Existing invoices are unaffected, and you can re-enable it anytime.")) return;
+  const { error }=await sb().from(cfg.table).update({active:!disable}).eq("id",rec.id);
+  if(error){ alert(error.message); return; }
+  window.OPS.audit&&window.OPS.audit(disable?"disabled":"enabled",cfg.table,rec.id,rec.name||"");
+  window.OPS.flashTop(disable?"Item disabled ✓":"Item enabled ✓"); view();
+}
 function dupSeed(src){
   const cfg=CATS[active]; const seed={};
   cfg.fields.forEach(f=>{ seed[f.key]=src[f.key]; });
@@ -103,6 +119,7 @@ function form(rec, seed){
     <div class="card" style="margin-top:12px">
       <h1>${rec?"Edit":"New"} ${active==='service'?'service':'spare'}</h1>
       ${(!rec&&seed)?'<div class="callout">Duplicated from an existing item — edit the details below and <b>Create</b> to save it as a new '+(active==='service'?'service':'spare')+'.</div>':''}
+      ${rec&&rec.active===false?'<div class="callout warn">This item is <b>disabled</b> — hidden from Inventory and the Invoicing catalogue picker. Use <b>Enable</b> below to bring it back.</div>':''}
       ${rec&&active==='spare'?`<div class="callout">Current stock: <b>${num(rec.current_stock)}</b> ${esc(rec.unit||'')}. Adjust stock in the <b>Inventory</b> tool.</div>`:''}
       ${rec?'<div id="cUsage" class="muted">Checking where this item is used…</div>':''}
       <div class="fgrid">${cfg.fields.map(f=>{
@@ -115,6 +132,7 @@ function form(rec, seed){
       <div class="row"><button class="btn green" id="cSave">${rec?"Save":"Create"}</button>
         <button class="btn" id="cCancel">Cancel</button><div class="spacer"></div>
         ${rec?'<button class="btn sm" id="cDup">⧉ Duplicate</button> ':''}
+        ${rec?`<button class="btn sm" id="cToggle">${rec.active===false?'Enable':'Disable'}</button> `:''}
         ${rec?'<button class="btn sm" id="cDel" style="color:#a3322a;border-color:#e4b4b4" disabled title="Checking usage…">Delete</button>':''}</div>
       <div class="err" id="cErr"></div>
     </div>`;
@@ -124,6 +142,7 @@ function form(rec, seed){
     if("name" in s) s.name=String(s.name||"").replace(/\s*\(copy\)\s*$/i,"")+" (copy)";
     form(null, s);
   });
+  if($("cToggle")) $("cToggle").addEventListener("click",()=>toggleActive(rec));
   if(rec) checkUsage(rec);
   $("cSave").addEventListener("click",async()=>{
     const out={};
