@@ -102,8 +102,8 @@ function renderList(){
   if(mode==="farmer") renderFarmer(rows); else renderAcre(rows);
 }
 function renderFarmer(rows){
-  $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th></tr></thead>
-    <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.spray_date)}</td><td>${esc(r.pilot_name||'')}</td><td>${esc(r.farmer_name||'')}</td><td>${esc(mask(r.contact_no))}</td><td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical_company||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td><td>${r.gps_image_present?'✓':'·'}</td></tr>`).join("")}</tbody></table></div>`
+  $("eqList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acre</th><th class="num">Amount</th><th>GPS</th><th>Short-day reason</th></tr></thead>
+    <tbody>${rows.slice(0,250).map(r=>`<tr class="clickable" data-id="${r.id}"><td>${fmtDate(r.spray_date)}</td><td>${esc(r.pilot_name||'')}</td><td>${esc(r.farmer_name||'')}</td><td>${esc(mask(r.contact_no))}</td><td>${esc(r.village||'')}</td><td>${esc(r.crop||'')}</td><td>${esc(r.chemical_company||'')}</td><td class="num">${num(r.acre)}</td><td class="num">${money(r.amount)}</td><td>${r.gps_image_present?'✓':'·'}</td><td class="muted" style="font-size:12px">${esc(r._reason||'')}</td></tr>`).join("")}</tbody></table></div>`
     :'<div class="card muted">No matching rows.</div>';
   // ids are bigint (numbers) but data-id is a string — compare as strings
   $("eqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>{
@@ -237,7 +237,17 @@ async function loadFarmer(){
   if(f.to)   q=q.lte("spray_date",f.to);
   const { data, error }=await q.range(0,9999);
   if(error){ $("eqList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
-  allRows=data||[]; renderList();
+  allRows=data||[];
+  // short-day reasons per pilot-day (a farmer row carries no location, so map by date+pilot)
+  try{
+    if(allRows.length){
+      const minD=allRows.reduce((a,r)=>r.spray_date<a?r.spray_date:a, allRows[0].spray_date);
+      const { data:sd }=await sb().from("short_day_logs").select("entry_date,pilot_name,reason").gte("entry_date",minD);
+      const m={}; (sd||[]).forEach(x=>{ if(x.reason) m[`${x.entry_date}|${x.pilot_name}`]=x.reason; });
+      allRows.forEach(r=>{ r._reason=m[`${r.spray_date}|${r.pilot_name||''}`]||""; });
+    }
+  }catch(e){}
+  renderList();
 }
 function farmerForm(r){
   const m=$("main"); const seePhone=window.OPS.canViewContacts();

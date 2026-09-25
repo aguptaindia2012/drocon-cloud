@@ -207,12 +207,12 @@ async function vendorEntries(){
     return rows.filter(r=>(!loc||r.location_name===loc)&&(!bill||(bill==='billed'?r.billed:!r.billed))); }
   function render(){ const fr=filtered(); const tot=fr.reduce((s,r)=>s+num(r.acres),0);
     $("veList").innerHTML=`<div class="card"><div class="row" style="margin-bottom:6px"><b>${fr.length} row${fr.length===1?'':'s'}</b><span class="muted" style="margin-left:8px">${tot.toFixed(1)} acres</span></div>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th>Crop</th><th class="num">Acres</th><th>Billing</th></tr></thead>
-      <tbody>${fr.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.pilot_name||"")}</td><td>${esc(r.crop||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td><td>${r.billed?'<span class="chip ok">Billed</span>':'<span class="chip warn">Unbilled</span>'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No approved entries for this filter.</td></tr>'}</tbody></table></div></div>`; }
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th>Pilot</th><th>Crop</th><th class="num">Acres</th><th>Billing</th><th>Short-day reason</th></tr></thead>
+      <tbody>${fr.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td>${esc(r.pilot_name||"")}</td><td>${esc(r.crop||"")}</td><td class="num">${num(r.acres).toFixed(1)}</td><td>${r.billed?'<span class="chip ok">Billed</span>':'<span class="chip warn">Unbilled</span>'}</td><td class="muted" style="font-size:12px">${esc(r.short_reason||"")}</td></tr>`).join("")||'<tr><td colspan="7" class="muted">No approved entries for this filter.</td></tr>'}</tbody></table></div></div>`; }
   $("veGo").addEventListener("click",run);
   $("veLoc").addEventListener("change",()=>{ if(rows.length) render(); });
   $("veBill").addEventListener("change",()=>{ if(rows.length) render(); });
-  $("veXls").addEventListener("click",()=>{ const fr=filtered(); if(window.OPS.xlsx) window.OPS.xlsx.download("vendor-entries.xlsx","Entries",["Date","Location","Pilot","Crop","Acres","Billing"], fr.map(r=>[r.entry_date,r.location_name,r.pilot_name,r.crop,num(r.acres),r.billed?"Billed":"Unbilled"])); });
+  $("veXls").addEventListener("click",()=>{ const fr=filtered(); if(window.OPS.xlsx) window.OPS.xlsx.download("vendor-entries.xlsx","Entries",["Date","Location","Pilot","Crop","Acres","Billing","Short-day reason"], fr.map(r=>[r.entry_date,r.location_name,r.pilot_name,r.crop,num(r.acres),r.billed?"Billed":"Unbilled",r.short_reason||""])); });
   run();
 }
 

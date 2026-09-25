@@ -278,6 +278,7 @@ async function approvals(host){
     <div id="daBody" class="muted">Loading…</div>`;
   $("daNew").addEventListener("click",()=>window.OPS.openTool("daily_entry"));
   $("daFilter").addEventListener("change",load);
+  let sdMap={};   // "date|location|pilot" -> short-day reason
   async function load(){
     const f=$("daFilter").value; const meId=window.OPS.me.id;
     let q=sb().from("daily_submissions").select("*").order("created_at",{ascending:false});
@@ -288,6 +289,11 @@ async function approvals(host){
     const { data, error }=await q;
     if(error){ $("daBody").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
     const rows=data||[];
+    sdMap={};
+    try{ if(rows.length){ const minD=rows.reduce((a,r)=>(r.entry_date&&r.entry_date<a)?r.entry_date:a, rows[0].entry_date);
+      const { data:sd }=await sb().from("short_day_logs").select("entry_date,location_name,pilot_name,reason").gte("entry_date",minD);
+      (sd||[]).forEach(x=>{ if(x.reason) sdMap[`${x.entry_date}|${x.location_name}|${x.pilot_name}`]=x.reason; }); }
+    }catch(e){}
     $("daBody").innerHTML = rows.length ? rows.map(card).join("") : '<div class="card muted">Nothing here.</div>';
     rows.forEach(wire);
   }
@@ -304,8 +310,8 @@ async function approvals(host){
           ${r.approval_status==="rejected"&&r.reject_note?`<div class="muted" style="color:#a3322a">Rejected: ${esc(r.reject_note)}</div>`:''}</div>
       </div>
       <details style="margin-top:8px"><summary class="muted">View ${sprays.length} spray row(s)</summary>
-        <table class="tight" style="margin-top:6px"><thead><tr><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th>GPS</th></tr></thead>
-        <tbody>${sprays.map(x=>`<tr><td>${esc(x.pilot||"")}</td><td>${esc(x.farmer||"")}</td><td>${esc(window.OPS.helpers.maskPhone(x.phone))}</td><td>${esc(x.village||"")}</td><td>${esc(x.crop||"")}</td><td>${esc(x.chemical||"")}</td><td class="num">${esc(x.acres||"")}</td><td class="num">${esc(x.crate||"")}</td><td class="num">${esc(x.frate||"")}</td><td>${x.gps?"✓":""}</td></tr>`).join("")}</tbody></table>
+        <table class="tight" style="margin-top:6px"><thead><tr><th>Pilot</th><th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acres</th><th class="num">Client ₹</th><th class="num">Farmer ₹</th><th>GPS</th><th>Short-day reason</th></tr></thead>
+        <tbody>${sprays.map(x=>{ const reason=(x.short_reason||"").trim()||sdMap[`${r.entry_date}|${r.location_name}|${x.pilot||""}`]||""; return `<tr><td>${esc(x.pilot||"")}</td><td>${esc(x.farmer||"")}</td><td>${esc(window.OPS.helpers.maskPhone(x.phone))}</td><td>${esc(x.village||"")}</td><td>${esc(x.crop||"")}</td><td>${esc(x.chemical||"")}</td><td class="num">${esc(x.acres||"")}</td><td class="num">${esc(x.crate||"")}</td><td class="num">${esc(x.frate||"")}</td><td>${x.gps?"✓":""}</td><td class="muted" style="font-size:12px">${esc(reason)}</td></tr>`; }).join("")}</tbody></table>
       </details>
       <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
         ${canEdit?`<button class="btn sm" data-act="edit" data-id="${r.id}">Edit</button>`:''}
