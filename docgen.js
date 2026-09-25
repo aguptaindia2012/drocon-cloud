@@ -65,7 +65,12 @@ function computeTotals(items){
     sub+=line; gstTotal+=g;
     gstBuckets[gst]=(gstBuckets[gst]||0)+g;
   });
-  return { sub, gstTotal, total: sub+gstTotal, gstBuckets };
+  // Round the grand total to whole rupees; the difference is a Round Off line
+  // (clients pay in whole numbers, so this keeps the receivable exact).
+  const raw = sub+gstTotal;
+  const total = Math.round(raw);
+  const roundOff = Math.round((total-raw)*100)/100;
+  return { sub, gstTotal, raw, total, roundOff, gstBuckets };
 }
 
 function fileBase(doc){
@@ -187,6 +192,8 @@ function generateWord(doc){
   Object.keys(totals.gstBuckets||{}).filter(g=>Number(g)>0 && totals.gstBuckets[g]>0).forEach(g=>{
     allRows.push(totalRow("GST @ "+g+"%", inr(totals.gstBuckets[g])));
   });
+  if(Math.abs(Number(totals.roundOff)||0) >= 0.005)
+    allRows.push(totalRow("Round Off", (totals.roundOff>0?"+ ":"− ")+inr(Math.abs(totals.roundOff))));
   allRows.push(totalRow("Grand Total"+(totalQty?(" (Qty "+totalQty+")"):""), inr(totals.total), {fill:"EEF5E9",color:GREEN}));
   children.push(new D.Table({width:{size:9600,type:D.WidthType.DXA},columnWidths:colW,rows:allRows}));
 

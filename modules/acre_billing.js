@@ -13,6 +13,8 @@ const { $, esc, num, money, fmtDate, todayISO, fyOf } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const HSN = "9986";
 const CLIENT_GST = 18;
+// Round the grand total to whole rupees; the difference is a Round Off line.
+function withRound(sub, gstTotal){ const raw=sub+gstTotal; const total=Math.round(raw); const roundOff=Math.round((total-raw)*100)/100; return { sub, gstTotal, roundOff, total }; }
 
 let side="farmer", rows=[], farmerBySource={}, sel=new Set(), allLocs=[], selClient=null;
 const F = { from:"", to:"" };
@@ -314,7 +316,8 @@ function buildPreview(chosen){
       <td class="num">${x.acres}</td><td class="num">${money(x.rate)}</td><td class="num">${money(x.amount)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="6" class="num"><b>Sub total</b></td><td class="num"><b>${money(sub)}</b></td></tr>
       ${side==="client"?`<tr><td colspan="6" class="num">GST @ ${CLIENT_GST}%</td><td class="num">${money(gst)}</td></tr>`:''}
-      <tr><td colspan="6" class="num"><b>Grand total (Qty ${acres.toFixed(1)})</b></td><td class="num"><b>${money(sub+gst)}</b></td></tr></tfoot></table></div>
+      ${Math.abs(withRound(sub,gst).roundOff)>=0.005?`<tr><td colspan="6" class="num">Round Off</td><td class="num">${withRound(sub,gst).roundOff>0?'+':'−'}${money(Math.abs(withRound(sub,gst).roundOff))}</td></tr>`:''}
+      <tr><td colspan="6" class="num"><b>Grand total (Qty ${acres.toFixed(1)})</b></td><td class="num"><b>${money(withRound(sub,gst).total)}</b></td></tr></tfoot></table></div>
     <div class="row" style="margin-top:10px"><button class="btn green" id="abGen">Generate ${side==="farmer"?"Bill of Supply":"Invoice"}</button>
       <span class="muted">Creates the document and marks these acre rows as billed.</span></div>
     <div class="err" id="abErr"></div></div>`;
@@ -348,7 +351,7 @@ async function generate(chosen){
       party_kind:"client", party_id:partyId,
       party_snapshot:{ firmName:partyName(party), gstin:party&&party.gstin, state:party&&party.state,
                        address:party&&party.address, mobile:party&&party.mobile },
-      line_items:items, totals:{ sub, gstTotal, total: sub+gstTotal },
+      line_items:items, totals:withRound(sub, gstTotal),
       terms:{ delivery:"For acre spraying work "+fmtDate(L[0].date)+" to "+fmtDate(L[L.length-1].date) },
       status:"issued", approval_status:"draft",
       data:{ source:"acre_billing", side,

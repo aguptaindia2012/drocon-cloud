@@ -327,6 +327,7 @@ function renderTotals(){
   let gstLines=Object.keys(t.gstBuckets||{}).filter(g=>num(g)>0&&t.gstBuckets[g]>0).map(g=>`<tr><td>GST @ ${g}%</td><td class="num">${money(t.gstBuckets[g])}</td></tr>`).join("");
   $("dTotals").innerHTML=`<div class="card" style="background:var(--soft-green);max-width:340px;margin-left:auto">
     <table style="font-size:13px"><tr><td>Sub Total</td><td class="num">${money(t.sub)}</td></tr>${gstLines}
+    ${Math.abs(t.roundOff||0)>=0.005?`<tr><td>Round Off</td><td class="num">${t.roundOff>0?'+':'−'}${money(Math.abs(t.roundOff))}</td></tr>`:''}
     <tr><td><b style="color:var(--green)">Grand Total</b></td><td class="num"><b style="color:var(--green)">${money(t.total)}</b></td></tr></table>
     <div class="muted" style="margin-top:6px">${window.OPS.docgen.amountInWords(t.total)}</div></div>`;
   renderMargin();
