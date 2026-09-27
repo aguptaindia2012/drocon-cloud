@@ -49,6 +49,7 @@ async function vendorPocExtras(rec, host){
 
 window.OPS.routes.vendors = window.OPS.makeRegistry({
   tool:"vendors", table:"vendors", title:"Vendors", eyebrow:"Finance", approvable:true, logView:true,
+  activeField:{key:"is_active", activeVal:true, inactiveVal:false},
   formExtra:(rec,host)=>{
     const a=document.createElement("div"), b=document.createElement("div");
     host.appendChild(a); host.appendChild(b);

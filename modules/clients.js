@@ -99,6 +99,7 @@ const MSA_RESPONSIBILITIES = [
 
 window.OPS.routes.clients = window.OPS.makeRegistry({
   tool:"clients", table:"clients", title:"Clients", eyebrow:"Finance", approvable:true, logView:true,
+  activeField:{key:"is_active", activeVal:true, inactiveVal:false},
   orderBy:"firm_name",
   autoNumber:{ field:"client_ref", rpc:"next_client_code" },
   formExtra:(rec,host)=>{
