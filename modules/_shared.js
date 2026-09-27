@@ -95,6 +95,7 @@ function makeRegistry(cfg){
         ${window.OPS.isAdmin()?'<button class="btn sm" id="rqClear" style="color:#a3322a;border-color:#e4b4b4">Clear all</button>':''}
         <button class="btn green sm" id="rqNew">+ New</button>
       </div>
+      <div id="rqFilters" class="row wrap" style="gap:8px;margin:0 0 8px"></div>
       <div id="rqSummary"></div>
       <div id="rqList" class="muted">Loading…</div>`;
     (cfg.extraActions||[]).forEach((a,i)=>{ const b=$("main").querySelector(`[data-extra="${i}"]`); if(b) b.addEventListener("click",a.fn); });
@@ -105,17 +106,48 @@ function makeRegistry(cfg){
     if(error){ $("rqList").innerHTML='<div class="card">Error: '+esc(error.message)+'</div>'; return; }
     all=data||[];
     if(cfg.summary && $("rqSummary")){ try{ $("rqSummary").innerHTML=cfg.summary(all); }catch(e){} }
-    function render(rows){
-      $("rqList").innerHTML = rows.length ? `<table><thead><tr>${cfg.listCols.map(c=>`<th class="${c.num?'num':''}">${esc(c.label)}</th>`).join("")}</tr></thead>
-        <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.listCols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.key],r):(c.mask?esc(window.OPS.helpers.maskPhone(r[c.key])):esc(r[c.key]==null?"":r[c.key]))}</td>`).join("")}</tr>`).join("")}</tbody></table>`
-        : '<div class="card muted">No records yet.</div>';
-      $("rqList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>form(all.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+    // ---- filter bar: Active/Inactive (via cfg.activeField) + any cfg.filters ----
+    const af = cfg.activeField;
+    const filterDefs = [];
+    if(af) filterDefs.push({ key:af.key, label:"Status",
+      options:[[String(af.activeVal), af.activeLabel||"Active"],[String(af.inactiveVal), af.inactiveLabel||"Inactive"]],
+      def:String(af.activeVal) });
+    (cfg.filters||[]).forEach(f=>filterDefs.push(Object.assign({},f)));
+    for(const f of filterDefs){
+      if(!f.options){ const seen=new Set(); f.options=[]; all.forEach(r=>{ const v=r[f.key];
+        if(v!=null&&v!==""&&!seen.has(String(v))){ seen.add(String(v)); f.options.push([String(v),String(v)]); } });
+        f.options.sort((a,b)=>a[1].localeCompare(b[1])); }
+      else if(typeof f.options==="function"){ try{ f.options=await f.options(all)||[]; }catch(e){ f.options=[]; } }
     }
-    render(all);
-    $("rqSearch").addEventListener("input",e=>{
-      const q=e.target.value.toLowerCase().trim();
-      render(!q?all:all.filter(r=>(cfg.searchKeys||cfg.listCols.map(c=>c.key)).some(k=>String(r[k]||"").toLowerCase().includes(q))));
-    });
+    if($("rqFilters")) $("rqFilters").innerHTML = filterDefs.map((f,i)=>`<select data-fi="${i}" style="width:auto"><option value="">All ${esc(f.label)}</option>${f.options.map(o=>`<option value="${esc(o[0])}"${(f.def!=null&&String(f.def)===String(o[0]))?' selected':''}>${esc(o[1])}</option>`).join("")}</select>`).join("");
+    function statusCell(r){ const isA=String(r[af.key])===String(af.activeVal);
+      return `<td>${isA?'<span class="chip approved">'+esc(af.activeLabel||'Active')+'</span>':'<span class="chip draft">'+esc(af.inactiveLabel||'Inactive')+'</span>'} <button class="btn sm" data-tog="${r.id}">${isA?'Deactivate':'Activate'}</button></td>`; }
+    async function toggleActive(r){ if(!r) return;
+      const isA=String(r[af.key])===String(af.activeVal), to=isA?af.inactiveVal:af.activeVal, verb=isA?"Deactivate":"Activate";
+      if(!confirm(verb+' "'+(r[cfg.listCols[0].key]||"")+'"?')) return;
+      const patch={}; patch[af.key]=to;
+      const { error }=await sb().from(cfg.table).update(patch).eq("id",r.id);
+      if(error){ alert(error.message); return; }
+      window.OPS.audit(isA?"deactivated":"activated",cfg.table,r.id,String(r[cfg.listCols[0].key]||""));
+      window.OPS.flashTop(verb+"d ✓"); list();
+    }
+    function render(rows){
+      $("rqList").innerHTML = rows.length ? `<table><thead><tr>${cfg.listCols.map(c=>`<th class="${c.num?'num':''}">${esc(c.label)}</th>`).join("")}${af?'<th>Status</th>':''}</tr></thead>
+        <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.listCols.map(c=>`<td class="${c.num?'num':''}">${c.fmt?c.fmt(r[c.key],r):(c.mask?esc(window.OPS.helpers.maskPhone(r[c.key])):esc(r[c.key]==null?"":r[c.key]))}</td>`).join("")}${af?statusCell(r):''}</tr>`).join("")}</tbody></table>`
+        : '<div class="card muted">No records match.</div>';
+      $("rqList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("button")) return; form(all.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
+      if(af) $("rqList").querySelectorAll("[data-tog]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleActive(all.find(x=>String(x.id)===b.getAttribute("data-tog"))); }));
+    }
+    function applyFilters(){
+      const q=($("rqSearch").value||"").toLowerCase().trim();
+      const sels=filterDefs.map((f,i)=>({k:f.key, v:((($("rqFilters")&&$("rqFilters").querySelector('[data-fi="'+i+'"]'))||{}).value)||""}));
+      let rows=all.filter(r=> sels.every(s=> s.v==="" || String(r[s.k]==null?"":r[s.k])===s.v));
+      if(q) rows=rows.filter(r=>(cfg.searchKeys||cfg.listCols.map(c=>c.key)).some(k=>String(r[k]||"").toLowerCase().includes(q)));
+      render(rows);
+    }
+    applyFilters();
+    $("rqSearch").addEventListener("input",applyFilters);
+    if($("rqFilters")) $("rqFilters").querySelectorAll("[data-fi]").forEach(s=>s.addEventListener("change",applyFilters));
     $("rqNew").addEventListener("click",()=>form(null));
     if($("rqExport")) $("rqExport").addEventListener("click",()=>{
       downloadCSV(cfg.table+".csv", cfg.fields.map(f=>f.label), all.map(r=>cfg.fields.map(f=>r[f.key]==null?"":r[f.key])));

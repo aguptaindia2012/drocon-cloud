@@ -28,16 +28,42 @@ async function view(){
     <div class="callout">Pilots are selected from this list when entering acre data, so names stay consistent.
       A pilot must belong to a <b>Vendor</b> — create the vendor first under <b>Finance → Vendors</b>.
       Each pilot works <b>one location at a time</b>.</div>
-    <div class="row wrap" style="margin:10px 0">
+    <div class="row wrap" style="margin:10px 0;gap:8px">
       <input id="plSearch" placeholder="Search pilot / vendor / phone…" style="max-width:280px">
+      <select id="plStatus" style="width:auto"><option value="">All status</option><option value="active" selected>Active</option><option value="inactive">Inactive</option></select>
+      <select id="plVendor" style="width:auto"><option value="">All vendors</option></select>
       <div class="spacer"></div>
       <button class="btn green sm" id="plNew">+ New pilot</button>
     </div>
     <div id="plList" class="muted">Loading…</div>`;
   $("plNew").addEventListener("click",()=>form(null));
   await loadRefs();
+  const vs=$("plVendor"); if(vs) vs.innerHTML='<option value="">All vendors</option>'+vendors.map(v=>`<option value="${v.id}">${esc(vName(v))}</option>`).join("");
+  $("plSearch").addEventListener("input",applyFilters);
+  $("plStatus").addEventListener("change",applyFilters);
+  $("plVendor").addEventListener("change",applyFilters);
   await loadPilots();
-  $("plSearch").addEventListener("input",e=>render(e.target.value.toLowerCase().trim()));
+}
+function applyFilters(){
+  const q=($("plSearch")?$("plSearch").value:"").toLowerCase().trim();
+  const st=$("plStatus")?$("plStatus").value:"", vd=$("plVendor")?$("plVendor").value:"";
+  const rows=pilots.filter(p=>{
+    if(st==="active" && !p.is_active) return false;
+    if(st==="inactive" && p.is_active) return false;
+    if(vd && String(p.vendor_id||"")!==vd) return false;
+    if(q && ![p.name,vName(p.vendor),p.phone,p.rpc_no,p.drone_uin].some(x=>String(x||"").toLowerCase().includes(q))) return false;
+    return true;
+  });
+  renderRows(rows);
+}
+async function togglePilot(p){ if(!p) return;
+  const activate=!p.is_active, verb=activate?"Activate":"Deactivate";
+  if(!confirm(verb+' pilot "'+(p.name||"")+'"?')) return;
+  const patch = activate ? {is_active:true, inactive_from:null} : {is_active:false, inactive_from: todayISO()};
+  const { error }=await sb().from("pilots").update(patch).eq("id",p.id);
+  if(error){ alert(error.message); return; }
+  window.OPS.audit&&window.OPS.audit(activate?"activated":"deactivated","pilots",p.id,p.name||"");
+  window.OPS.flashTop(verb+"d ✓"); loadPilots();
 }
 
 async function loadPilots(){
@@ -48,14 +74,12 @@ async function loadPilots(){
   const { data:pa }=await sb().from("pilot_assignments")
     .select("*, loc:location_id(name,is_locked)").order("start_date",{ascending:false});
   assigns={}; (pa||[]).forEach(a=>{ (assigns[a.pilot_id]=assigns[a.pilot_id]||[]).push(a); });
-  render("");
+  applyFilters();
 }
 
 function activeOf(pid){ return (assigns[pid]||[]).find(a=>a.status==="active"); }
 
-function render(q){
-  const rows=pilots.filter(p=>!q ||
-    [p.name,vName(p.vendor),p.phone,p.rpc_no,p.drone_uin].some(x=>String(x||"").toLowerCase().includes(q)));
+function renderRows(rows){
   const needFix=pilots.filter(p=>!p.vendor_id).length;
   const banner = needFix
     ? `<div class="callout warn"><b>${needFix} pilot${needFix>1?'s':''} imported from your existing entries need attention.</b>
@@ -72,11 +96,14 @@ function render(q){
         <td>${esc(p.phone||'')}</td>
         <td>${esc(p.rpc_no||'—')}</td><td>${esc(p.drone_uin||'—')}</td>
         <td>${a?esc((a.loc&&a.loc.name)||''):'<span class="muted">— unassigned —</span>'}</td>
-        <td>${p.is_active?'<span class="chip approved">Active</span>':'<span class="chip draft">Inactive</span>'}</td></tr>`;
+        <td>${p.is_active?'<span class="chip approved">Active</span>':'<span class="chip draft">Inactive</span>'} <button class="btn sm" data-tog="${p.id}">${p.is_active?'Deactivate':'Activate'}</button></td></tr>`;
     }).join("")}</tbody></table></div>`
-    : '<div class="card muted">No pilots yet. Click “New pilot”.</div>');
-  $("plList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>{
+    : '<div class="card muted">No pilots match this filter.</div>');
+  $("plList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{
+    if(e.target.closest("button")) return;
     const p=pilots.find(x=>String(x.id)===tr.getAttribute("data-id")); if(p) form(p); }));
+  $("plList").querySelectorAll("[data-tog]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
+    togglePilot(pilots.find(x=>String(x.id)===b.getAttribute("data-tog"))); }));
 }
 
 /* ----------------------------- create / edit ----------------------------- */

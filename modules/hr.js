@@ -120,6 +120,7 @@ window.OPS.routes.hr_employees = window.OPS.makeRegistry({
   tool:"hr_employees", table:"employees", title:"Employees", eyebrow:"HR", logView:true,
   formExtra:(rec,host)=>window.OPS.accountAccess.panel({mode:"employee"})(rec,host),
   orderBy:"name", filter:{col:"emp_type",val:"employee"},
+  activeField:{key:"status", activeVal:"active", inactiveVal:"inactive"},
   searchKeys:["name","designation","phone","email"],
   listCols:[
     {key:"name",label:"Name"},
@@ -195,6 +196,7 @@ window.OPS.routes.consultants = window.OPS.makeRegistry({
     consultantPortalExtras(rec,b);
   },
   orderBy:"name", filter:{col:"emp_type",val:"consultant"},
+  activeField:{key:"status", activeVal:"active", inactiveVal:"inactive"},
   searchKeys:["name","designation","phone","email"],
   listCols:[
     {key:"name",label:"Name"},
