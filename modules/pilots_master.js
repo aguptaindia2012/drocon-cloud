@@ -15,7 +15,7 @@ const locName = l => l ? (l.name + (l.is_locked?" 🔒":"")) : "";
 
 async function loadRefs(){
   const [v,l]=await Promise.all([
-    sb().from("vendors").select("id,firm_name,name").order("firm_name"),
+    sb().from("vendors").select("id,firm_name,name,is_active").order("firm_name"),
     sb().from("spray_locations").select("id,name,is_locked,client_id, client:client_id(firm_name,name)").order("name")
   ]);
   vendors=v.data||[]; locations=l.data||[];
@@ -126,7 +126,7 @@ function form(rec){
       <div class="fgrid">
         <div class="field"><label>Vendor (employer) * <a href="#" id="pNewVendor" style="font-weight:400">+ new vendor</a></label><select id="p_vendor">
           <option value="">— select vendor —</option>
-          ${vendors.map(v=>`<option value="${v.id}" ${e.vendor_id===v.id?'selected':''}>${esc(vName(v))}</option>`).join("")}
+          ${vendors.filter(v=>v.is_active!==false || e.vendor_id===v.id).map(v=>`<option value="${v.id}" ${e.vendor_id===v.id?'selected':''}>${esc(vName(v))}${v.is_active===false?' (inactive)':''}</option>`).join("")}
         </select></div>
         <div class="field"><label>Pilot name *</label><input id="p_name" value="${esc(e.name||'')}"></div>
         <div class="field"><label>Phone number</label><input id="p_phone" value="${esc(e.phone||'')}"></div>

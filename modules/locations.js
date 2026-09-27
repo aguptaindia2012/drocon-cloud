@@ -14,10 +14,13 @@ const isApprover = ()=> window.OPS.isAdmin() || (window.OPS.isApprover && window
 async function loadLocations(){
   const [l,c]=await Promise.all([
     sb().from("spray_locations").select("*, client:client_id(firm_name,name), fbt:farmer_bill_to(firm_name,name), cbt:client_bill_to(firm_name,name)").order("name"),
-    sb().from("clients").select("id,firm_name,name").order("firm_name")
+    sb().from("clients").select("id,firm_name,name,is_active").order("firm_name")
   ]);
   locations=l.data||[]; clients=c.data||[];
 }
+// client <option>s: active only, plus the one already selected (if now inactive)
+function clientOpts(selId){ return clients.filter(c=>c.is_active!==false || c.id===selId)
+  .map(c=>`<option value="${c.id}" ${selId===c.id?'selected':''}>${esc(cName(c))}${c.is_active===false?' (inactive)':''}</option>`).join(""); }
 
 async function view(){
   await loadLocations();
@@ -25,24 +28,51 @@ async function view(){
   m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>Locations</h1>
     <div class="callout">Every location belongs to a <b>Client</b> — create the client first under <b>Finance → Client</b>.
       Locking a location freezes it: no new pilots can be assigned and it disappears from the entry drop-downs, which keeps the lists short and prevents wrong entries.</div>
-    <div class="row" style="margin-bottom:8px"><input id="lSearch" placeholder="Search locations…" style="max-width:280px"><div class="spacer"></div><button class="btn green sm" id="lNew">+ New location</button></div>
+    <div class="row wrap" style="margin-bottom:8px;gap:8px">
+      <input id="lSearch" placeholder="Search locations…" style="max-width:280px">
+      <select id="lStatus" style="width:auto"><option value="">All status</option><option value="open" selected>Open</option><option value="locked">Locked</option></select>
+      <select id="lClient" style="width:auto"><option value="">All clients</option></select>
+      <div class="spacer"></div><button class="btn green sm" id="lNew">+ New location</button></div>
     <div id="lList" class="muted">Loading…</div>`;
   $("lNew").addEventListener("click",()=>locForm(null));
-  function render(rows){
-    $("lList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>District / State</th><th class="num">Farmer ₹</th><th>Billed to</th><th class="num">Client ₹</th><th>Billed to</th><th>Status</th></tr></thead>
+  const cl=$("lClient"); if(cl) cl.innerHTML='<option value="">All clients</option>'+clients.map(c=>`<option value="${c.id}">${esc(cName(c))}</option>`).join("");
+  function renderRows(rows){
+    $("lList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District / State</th><th class="num">Farmer ₹</th><th class="num">Client ₹</th><th>Status</th></tr></thead>
       <tbody>${rows.map(l=>`<tr class="clickable" data-id="${l.id}"><td><b>${esc(l.name)}</b></td>
+        <td>${esc(cName(l.client))}</td>
         <td>${esc([l.district,l.state].filter(Boolean).join(", "))}</td>
         <td class="num">${l.farmer_rate!=null?money(l.farmer_rate):'—'}</td>
-        <td>${l.fbt?esc(cName(l.fbt)):'<span class="chip rejected">not set</span>'}</td>
         <td class="num">${num(l.client_rate)>0?money(l.client_rate):'<span class="muted">0</span>'}</td>
-        <td>${num(l.client_rate)>0?(l.cbt?esc(cName(l.cbt)):'<span class="chip rejected">not set</span>'):'<span class="muted">—</span>'}</td>
-        <td>${l.is_locked?'<span class="chip executed">🔒 Locked</span>':'<span class="chip approved">Open</span>'}</td></tr>`).join("")}</tbody></table></div>`
-      :'<div class="card muted">No locations yet. Add one to start logging acres.</div>';
-    $("lList").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>locForm(locations.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+        <td>${l.is_locked?'<span class="chip executed">🔒 Locked</span>':'<span class="chip approved">Open</span>'}${isApprover()?` <button class="btn sm" data-tog="${l.id}">${l.is_locked?'Unlock':'Lock'}</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="card muted">No locations match this filter.</div>';
+    $("lList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("button")) return; locForm(locations.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
+    $("lList").querySelectorAll("[data-tog]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleLock(locations.find(x=>String(x.id)===b.getAttribute("data-tog"))); }));
   }
-  render(locations);
-  $("lSearch").addEventListener("input",e=>{ const q=e.target.value.toLowerCase().trim();
-    render(!q?locations:locations.filter(l=>[l.name,l.district,l.state,cName(l.client)].some(v=>String(v||"").toLowerCase().includes(q)))); });
+  function applyFilters(){
+    const q=($("lSearch").value||"").toLowerCase().trim();
+    const st=$("lStatus")?$("lStatus").value:"", cid=$("lClient")?$("lClient").value:"";
+    const rows=locations.filter(l=>{
+      if(st==="open" && l.is_locked) return false;
+      if(st==="locked" && !l.is_locked) return false;
+      if(cid && String(l.client_id||"")!==cid) return false;
+      if(q && ![l.name,l.district,l.state,cName(l.client)].some(v=>String(v||"").toLowerCase().includes(q))) return false;
+      return true;
+    });
+    renderRows(rows);
+  }
+  async function toggleLock(l){ if(!l) return;
+    if(!isApprover()){ alert("Only an approver can lock or unlock a location."); return; }
+    const locked=!!l.is_locked;
+    const note = locked ? null : prompt("Optional note for locking this location:","");
+    if(!locked && note===null) return;
+    const { error }=await sb().rpc("set_location_lock",{ p_id:l.id, p_locked:!locked, p_note:note||null });
+    if(error){ alert(error.message); return; }
+    window.OPS.flashTop(locked?"Location unlocked ✓":"Location locked ✓"); view();
+  }
+  $("lSearch").addEventListener("input",applyFilters);
+  $("lStatus").addEventListener("change",applyFilters);
+  $("lClient").addEventListener("change",applyFilters);
+  applyFilters();
 }
 
 function locForm(rec){
@@ -59,7 +89,7 @@ function locForm(rec){
     <div class="fgrid">
       <div class="field"><label>Client * <a href="#" id="lNewClient" style="font-weight:400">+ new client</a></label><select id="lClient" ${locked?'disabled':''}>
         <option value="">— select client —</option>
-        ${clients.map(c=>`<option value="${c.id}" ${e.client_id===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
+        ${clientOpts(e.client_id)}
       </select></div>
       <div class="field"><label>Location name *</label><input id="lName" value="${esc(e.name||'')}" ${locked?'disabled':''}></div>
       <div class="field"><label>State</label>${window.OPS.geoUI.stateSelect("lState",e.state||"")}</div>
@@ -73,13 +103,13 @@ function locForm(rec){
         <input id="lFarmerRate" type="number" step="any" value="${e.farmer_rate!=null?e.farmer_rate:''}" ${locked?'disabled':''}></div>
       <div class="field"><label>Bill farmer rate to *</label><select id="lFarmerTo" ${locked?'disabled':''}>
         <option value="">— select client —</option>
-        ${clients.map(c=>`<option value="${c.id}" ${e.farmer_bill_to===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
+        ${clientOpts(e.farmer_bill_to)}
       </select><div class="small-note">0% GST · “Bill of Supply”</div></div>
       <div class="field"><label>Client rate (₹/acre)</label>
         <input id="lClientRate" type="number" step="any" value="${e.client_rate!=null?e.client_rate:0}" ${locked?'disabled':''}></div>
       <div class="field"><label>Bill client rate to</label><select id="lClientTo" ${locked?'disabled':''}>
         <option value="">— none (client rate is 0) —</option>
-        ${clients.map(c=>`<option value="${c.id}" ${e.client_bill_to===c.id?'selected':''}>${esc(cName(c))}</option>`).join("")}
+        ${clientOpts(e.client_bill_to)}
       </select><div class="small-note">18% GST · Marketing Expense / Subsidy</div></div>
     </div>
     <div class="row wrap"><button class="btn green" id="lSave" ${locked?'disabled':''}>${rec?"Save":"Create"}</button><button class="btn" id="lCancel">Cancel</button>

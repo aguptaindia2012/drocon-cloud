@@ -396,9 +396,11 @@ async function loadPickers(cfg){
     // stamp the document's Revenue category from the catalogue item (first one wins; still editable)
     if(s.rev_category && !(D.data&&D.data.rev_category)){ D.data=D.data||{}; D.data.rev_category=s.rev_category; if($("dRevCat")) $("dRevCat").value=s.rev_category; }
     $("dCatPick").value=""; renderItems(); });
-  // party picker
+  // party picker — active parties only (keep the one already on this document)
   if(cfg.pickFrom){
-    const { data }=await sb().from(cfg.pickFrom).select("*").order(cfg.pickFrom==="clients"?"firm_name":"firm_name");
+    let pq=sb().from(cfg.pickFrom).select("*").order("firm_name");
+    if(D.party_id) pq=pq.or("is_active.eq.true,id.eq."+D.party_id); else pq=pq.eq("is_active",true);
+    const { data }=await pq;
     const rows=data||[];
     $("dParty").innerHTML='<option value="">— select '+cfg.partyKind+' —</option>'+rows.map(r=>`<option value="${r.id}">${esc(r.firm_name||r.name)}</option>`).join("");
     if(D.party_id) $("dParty").value=D.party_id;
