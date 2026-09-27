@@ -33,6 +33,7 @@ async function pilotReport(prefill){
       <div class="fgrid">
         <div class="field"><label>Date *</label><input id="prDate" type="date" value="${esc(dDate)}"></div>
         <div class="field"><label>Location *</label><select id="prLoc"><option value="">— select —</option>${locs.map(l=>`<option value="${l.id}" ${l.id===dLoc?'selected':''}>${esc(l.name)}${l.district?(" · "+esc(l.district)):""}</option>`).join("")}</select></div>
+        <div class="field"><label>Mill / Party <span class="muted" style="font-weight:normal">(optional)</span></label><input id="prMill" value="${esc((prefill&&prefill.mill)||"")}" placeholder="e.g. Shree ji mill"></div>
       </div>
       <div style="overflow:auto"><table class="tt-skip"><thead><tr>
         <th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th style="width:90px">Acres</th><th>GPS</th><th></th></tr></thead>
@@ -89,7 +90,7 @@ async function save(){
   const reason=($("prShort")?$("prShort").value:"").trim();
   if(total>0 && total<SHORT_PILOT && !reason){ $("prErr").textContent="Add a short-day reason — the day total is under "+SHORT_PILOT+" acres."; return; }
   $("prSave").disabled=true;
-  const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId, p_reason:(reason||null) });
+  const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId, p_reason:(reason||null), p_mill:(($("prMill")&&$("prMill").value.trim())||null) });
   $("prSave").disabled=false;
   if(error){ $("prErr").textContent=error.message; return; }
   window.OPS.flashTop("Report submitted ✓"); editingId=null; pilotReports();
@@ -131,6 +132,7 @@ function buildReportMessage(r){
   L.push(name+" — Drone Pilot");
   L.push("Date - "+fmtDate(r.entry_date));
   L.push("Location - "+(r.location_name||""));
+  if(r.mill) L.push("Mill / Party - "+r.mill);
   L.push("Total acres - "+total.toFixed(2));
   L.push("");
   L.push("Farmer details");
