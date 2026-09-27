@@ -102,7 +102,37 @@ function panel(opts){
     });
     // Pilots register: also allow granting the Pilot Portal to an INTERNAL employee
     if(fixed==="pilot") renderInternalPilotLink(rec, host);
+    // Employees register: optionally grant the Pilot Portal to this employee
+    if(mode==="employee") renderEmployeePilotGrant(rec, host);
   };
+}
+
+// Employees register: pick a pilot record to link this employee's internal login
+// to, so they also get the Pilot Portal on top of their internal access.
+async function renderEmployeePilotGrant(rec, host){
+  if(!rec || !rec.id) return;
+  const sb=window.OPS.sb;
+  const div=document.createElement("div"); host.appendChild(div);
+  const email=(rec.email||"").trim();
+  if(!email){ div.innerHTML='<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Pilot Portal (optional)</h3><div class="muted" style="font-size:12px">Add the employee\'s <b>Email</b> above and <b>Save</b>, then create their internal login — after that you can also grant them the Pilot Portal here.</div></div>'; return; }
+  let pilots=[], curLink=null;
+  try{ [pilots, curLink]=await Promise.all([
+    sb.from("pilots").select("id,name").order("name").then(r=>r.data||[]),
+    sb.rpc("login_linked_pilot",{p_email:email}).then(r=>(r.data&&r.data[0])||null) ]); }catch(e){}
+  const curId=(curLink&&curLink.pilot_id)||"";
+  div.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Pilot Portal (optional)</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">If this employee also flies, grant them the <b>Pilot Portal</b> (Report Acres, My Reports, Field Issues) on top of their internal access. Pick their pilot record below — they must have an <b>internal login</b> (above) first.</div>
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+      <select id="acEmpPilot" style="max-width:280px"><option value="">— none (no Pilot Portal) —</option>${pilots.map(p=>`<option value="${p.id}"${String(curId)===String(p.id)?' selected':''}>${esc(p.name||"")}</option>`).join("")}</select>
+      <button class="btn green sm" id="acEmpPilotSave">Save</button></div>
+    <div id="acEmpPilotOut" class="muted" style="font-size:12px;margin-top:6px">${curLink&&curLink.pilot_id?('Currently linked to pilot <b>'+esc(curLink.pilot_name||"")+'</b>.'):''}</div></div>`;
+  div.querySelector("#acEmpPilotSave").addEventListener("click",async()=>{
+    const pid=div.querySelector("#acEmpPilot").value||null;
+    const { error }=await sb.rpc("admin_link_pilot_login",{p_email:email,p_pilot:pid});
+    const o=div.querySelector("#acEmpPilotOut");
+    o.innerHTML = error ? ('<span class="err">'+esc(error.message)+'</span>')
+      : (pid ? "Granted ✓ — they get the Pilot Portal after signing out and back in." : "Removed the Pilot Portal for this login ✓");
+  });
 }
 
 // Link a DroCon employee's internal login to this pilot record: they keep My
