@@ -89,12 +89,9 @@ async function save(){
   const reason=($("prShort")?$("prShort").value:"").trim();
   if(total>0 && total<SHORT_PILOT && !reason){ $("prErr").textContent="Add a short-day reason — the day total is under "+SHORT_PILOT+" acres."; return; }
   $("prSave").disabled=true;
-  const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId });
+  const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId, p_reason:(reason||null) });
   $("prSave").disabled=false;
   if(error){ $("prErr").textContent=error.message; return; }
-  if(total>0 && total<SHORT_PILOT && reason){
-    try{ await sb().rpc("pilot_report_short_reason",{ p_date:date, p_location:loc, p_acres:total, p_reason:reason }); }catch(e){ console.warn("pilot short-day reason:", e.message); }
-  }
   window.OPS.flashTop("Report submitted ✓"); editingId=null; pilotReports();
 }
 
@@ -156,14 +153,21 @@ async function pilotAcreApprovals(){
     const done=rows.filter(r=>r.status==="approved"||r.status==="rejected");
     const acresOf=r=>(r.rows||[]).reduce((s,x)=>s+num(x.acres),0);
     const vn=r=>(r.vendor&&(r.vendor.firm_name||r.vendor.name))||"";
+    // short-day reason: on the report (new) or short_day_logs (older reports)
+    let sdMap={};
+    try{ if(rows.length){ const minD=rows.reduce((a,r)=>(r.entry_date&&r.entry_date<a)?r.entry_date:a, rows[0].entry_date);
+      const { data:sd }=await sb().from("short_day_logs").select("entry_date,location_name,pilot_name,reason").gte("entry_date",minD);
+      (sd||[]).forEach(x=>{ if(x.reason) sdMap[`${x.entry_date}|${x.location_name}|${x.pilot_name}`]=x.reason; }); } }catch(e){}
+    const reasonOf=r=> (r.short_reason||"").trim() || sdMap[`${r.entry_date}|${r.location_name||""}|${(r.pilot&&r.pilot.name)||""}`] || "";
     $("paList").innerHTML=`
-      <div class="card"><h3>Awaiting DroCon approval (${pend.length})</h3>${pend.length?pend.map(r=>`
+      <div class="card"><h3>Awaiting DroCon approval (${pend.length})</h3>${pend.length?pend.map(r=>{ const reason=reasonOf(r); return `
         <div class="card" style="background:#fafbf8">
           <div class="row wrap"><b>${esc(r.pilot&&r.pilot.name||"Pilot")}</b><span class="muted">${esc(vn(r))} · ${fmtDate(r.entry_date)} · ${esc(r.location_name||"")}</span><div class="spacer"></div><b>${acresOf(r).toFixed(1)} ac</b></div>
+          ${reason?`<div class="callout" style="margin:6px 0;background:#fff7e6;border-color:#f0d8a8"><b>Short-day reason:</b> ${esc(reason)}</div>`:''}
           <div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Farmer</th><th>Village</th><th>Crop</th><th>Medicine</th><th class="num">Acres</th></tr></thead>
             <tbody>${(r.rows||[]).map(x=>`<tr><td>${esc(x.farmer||"")}</td><td>${esc(x.village||"")}</td><td>${esc(x.crop||"")}</td><td>${esc(x.chemical||"")}</td><td class="num">${num(x.acres).toFixed(1)}</td></tr>`).join("")}</tbody></table></div>
           <div class="row" style="margin-top:6px"><button class="btn green sm" data-ap="${r.id}">Approve &amp; post</button>
-            <button class="btn sm" data-rj="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button></div></div>`).join(""):'<div class="muted">Nothing awaiting approval.</div>'}</div>
+            <button class="btn sm" data-rj="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button></div></div>`; }).join(""):'<div class="muted">Nothing awaiting approval.</div>'}</div>
       ${done.length?`<div class="card"><h3>Recent decisions</h3><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Vendor</th><th>Location</th><th class="num">Acres</th><th>Status</th></tr></thead>
         <tbody>${done.slice(0,40).map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.pilot&&r.pilot.name||"")}</td><td>${esc(vn(r))}</td><td>${esc(r.location_name||"")}</td><td class="num">${acresOf(r).toFixed(1)}</td><td><span class="chip ${chip(r.status)}">${esc(label(r.status))}</span></td></tr>`).join("")}</tbody></table></div></div>`:''}`;
     $("paList").querySelectorAll("[data-ap]").forEach(b=>b.addEventListener("click",async()=>{
