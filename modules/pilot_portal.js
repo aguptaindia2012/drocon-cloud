@@ -110,14 +110,70 @@ async function pilotReports(){
   $("mrList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th class="num">Acres</th><th>Status</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td class="num">${acresOf(r).toFixed(1)}</td>
       <td><span class="chip ${chip(r.status)}">${esc(label(r.status))}</span>${r.reject_reason?`<br><span class="small-note" style="color:#a3322a">${esc(r.reject_reason)}</span>`:''}</td>
-      <td>${(r.status==="submitted"||r.status==="rejected")?`<button class="btn sm" data-edit="${r.id}">Edit</button> `:''}${r.status==="submitted"?`<button class="btn sm ghost" data-wd="${r.id}">Withdraw</button>`:''}</td></tr>`).join("")}</tbody></table></div></div>`
+      <td><button class="btn sm blue" data-msg="${r.id}">📤 Message</button> ${(r.status==="submitted"||r.status==="rejected")?`<button class="btn sm" data-edit="${r.id}">Edit</button> `:''}${r.status==="submitted"?`<button class="btn sm ghost" data-wd="${r.id}">Withdraw</button>`:''}</td></tr>`).join("")}</tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-top:6px">📤 <b>Message</b> drafts a WhatsApp-style report you can copy or share to the <b>DroCon Pilots' Group</b> and the location's <b>Client Group</b>.</p></div>`
     : '<div class="card muted">No reports yet. Click “Report acres”.</div>';
+  $("mrList").querySelectorAll("[data-msg]").forEach(b=>b.addEventListener("click",()=>{ const r=rows.find(x=>x.id===b.getAttribute("data-msg")); if(r) showReportMessage(r); }));
   $("mrList").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>{ const r=rows.find(x=>x.id===b.getAttribute("data-edit")); pilotReport(r); }));
   $("mrList").querySelectorAll("[data-wd]").forEach(b=>b.addEventListener("click",async()=>{
     if(!confirm("Withdraw this report?")) return;
     const { error }=await sb().from("pilot_acre_reports").delete().eq("id",b.getAttribute("data-wd"));
     if(error){ alert(error.message); return; } window.OPS.flashTop("Withdrawn ✓"); pilotReports();
   }));
+}
+
+/* ---- WhatsApp-style report draft (copy / share to the groups) ---- */
+function buildReportMessage(r){
+  const p=window.OPS.profile||{};
+  const name=p.full_name||p.email||"Pilot";
+  const total=(r.rows||[]).reduce((s,x)=>s+num(x.acres),0);
+  const L=[];
+  L.push(name+" — Drone Pilot");
+  L.push("Date - "+fmtDate(r.entry_date));
+  L.push("Location - "+(r.location_name||""));
+  L.push("Total acres - "+total.toFixed(2));
+  L.push("");
+  L.push("Farmer details");
+  L.push("");
+  (r.rows||[]).forEach((x,i)=>{
+    L.push((i+1)+". "+(x.farmer||"—"));
+    L.push("Acres - "+num(x.acres).toFixed(2));
+    if(x.village) L.push("Village - "+x.village);
+    if(x.crop) L.push("Crop - "+x.crop);
+    L.push("GPS photo - "+(x.gps?"✅ Received":"❌ Pending"));
+    L.push("");
+  });
+  L.push("Pilot - "+name);
+  return L.join("\n");
+}
+function showReportMessage(r){
+  const text=buildReportMessage(r);
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px";
+  ov.innerHTML=`<div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;margin:0">
+    <h3 style="margin:0 0 4px">Report message</h3>
+    <p class="muted" style="margin-top:0;font-size:12px">Copy or share this to the <b>DroCon Pilots' Group</b> and the location's <b>Client Group</b>. Edit if needed before sending.</p>
+    <textarea id="pmText" style="width:100%;min-height:300px;font-size:13px;line-height:1.4">${esc(text)}</textarea>
+    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+      <button class="btn green" id="pmCopy">📋 Copy</button>
+      <button class="btn blue" id="pmShare">Share…</button>
+      <button class="btn" id="pmWa">Open WhatsApp</button>
+      <div class="spacer"></div><button class="btn sm" id="pmClose">Close</button></div>
+    <div id="pmOut" class="muted" style="font-size:12px;margin-top:6px"></div></div>`;
+  document.body.appendChild(ov);
+  const q=id=>ov.querySelector(id);
+  const close=()=>ov.remove();
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  q("#pmClose").addEventListener("click",close);
+  q("#pmCopy").addEventListener("click",async()=>{
+    const val=q("#pmText").value;
+    try{ await navigator.clipboard.writeText(val); q("#pmOut").textContent="Copied ✓ — paste into WhatsApp."; }
+    catch(e){ q("#pmText").select(); try{ document.execCommand("copy"); q("#pmOut").textContent="Copied ✓"; }catch(_){ q("#pmOut").textContent="Select the text and copy manually."; } }
+  });
+  const sh=q("#pmShare");
+  if(navigator.share){ sh.addEventListener("click",async()=>{ try{ await navigator.share({text:q("#pmText").value}); }catch(e){} }); }
+  else { sh.style.display="none"; }
+  q("#pmWa").addEventListener("click",()=>{ window.open("https://wa.me/?text="+encodeURIComponent(q("#pmText").value),"_blank"); });
 }
 
 /* -------------------------------------------------------------- VENDOR --- */
