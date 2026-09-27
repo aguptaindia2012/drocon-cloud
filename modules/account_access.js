@@ -100,7 +100,34 @@ function panel(opts){
       try{ const r=await adminCall({action:"reset", email}); showPw(r.temp_password,"Password reset ✓"); }
       catch(e){ out.innerHTML='<span class="err">'+esc(e.message)+'</span>'; }
     });
+    // Pilots register: also allow granting the Pilot Portal to an INTERNAL employee
+    if(fixed==="pilot") renderInternalPilotLink(rec, host);
   };
+}
+
+// Link a DroCon employee's internal login to this pilot record: they keep My
+// Space / Mail / Messenger / Policies and ALSO get the Pilot Portal. Rendered
+// under the Account access panel in the Pilots register (admins only).
+async function renderInternalPilotLink(rec, host){
+  const sb=window.OPS.sb;
+  const div=document.createElement("div"); host.appendChild(div);
+  let cur=null; try{ cur=await sb.rpc("pilot_linked_login",{p_pilot:rec.id}).then(r=>r.data); }catch(e){}
+  div.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Internal-employee pilot</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">If this pilot is a <b>DroCon employee</b>, link their existing internal login here. They keep <b>My Space, Mail, Messenger &amp; Policies</b> and additionally get the <b>Pilot Portal</b> (Report Acres, My Reports, Field Issues) with their regular sign-in — no separate external login needed.</div>
+    ${cur?`<div style="margin-bottom:6px">Linked to <b>${esc(cur)}</b></div>`:'<div class="muted" style="margin-bottom:6px">Not linked to any internal login.</div>'}
+    <div class="row" style="gap:6px;flex-wrap:wrap"><input id="acPilotEmail" placeholder="employee@droconbharat.com" value="${esc(cur||'')}" style="max-width:280px">
+      <button class="btn green sm" id="acPilotLink">Link internal login</button>${cur?'<button class="btn sm" id="acPilotUnlink">Unlink</button>':''}</div>
+    <div id="acPilotOut" class="muted" style="font-size:12px;margin-top:6px"></div></div>`;
+  const out=()=>div.querySelector("#acPilotOut");
+  div.querySelector("#acPilotLink").addEventListener("click",async()=>{
+    const email=(div.querySelector("#acPilotEmail").value||"").trim(); if(!email){ out().textContent="Enter the employee's email."; return; }
+    const { error }=await sb.rpc("admin_link_pilot_login",{p_email:email,p_pilot:rec.id});
+    out().textContent=error?("Error: "+error.message):"Linked ✓ — they get the Pilot Portal after signing out and back in.";
+  });
+  const un=div.querySelector("#acPilotUnlink"); if(un) un.addEventListener("click",async()=>{
+    const { error }=await sb.rpc("admin_link_pilot_login",{p_email:cur,p_pilot:null});
+    out().textContent=error?("Error: "+error.message):"Unlinked ✓";
+  });
 }
 
 window.OPS.accountAccess = { adminCall, panel };
