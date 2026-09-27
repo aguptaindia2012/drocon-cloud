@@ -16,6 +16,35 @@ let crops=[], locs=[], drows=[], editingId=null;
 const SHORT_PILOT=15;   // a pilot-day under this many acres needs a reason (pilot side)
 const blank = ()=>({farmer:"",phone:"",village:"",crop:"",crop_id:"",chemical:"",acres:"",gps:false});
 
+/* ---- lightweight i18n for the Pilot Portal (labels only; typed data & option
+   lists stay in English so the internal side is unaffected) ---- */
+function lang(){ try{ return localStorage.getItem("dcb_lang")||"en"; }catch(e){ return "en"; } }
+function setLang(l){ try{ localStorage.setItem("dcb_lang", l); }catch(e){} }
+const DICT={ en:{}, hi:{
+  "Pilot Portal":"पायलट पोर्टल","Report Acres":"एकड़ रिपोर्ट करें","Edit report":"रिपोर्ट संपादित करें",
+  "Date":"दिनांक","Location":"स्थान","Mill / Party":"मिल / पार्टी","(optional)":"(वैकल्पिक)",
+  "Farmer":"किसान","Contact":"संपर्क","Village":"गाँव","Crop":"फ़सल","Medicine":"दवा","Acres":"एकड़",
+  "+ Add row":"+ पंक्ति जोड़ें","Submit":"जमा करें","Update & resubmit":"अपडेट कर पुनः जमा करें",
+  "Day total":"दिन का कुल","acres":"एकड़","met minimum":"न्यूनतम पूर्ण","Note":"टिप्पणी",
+  "My Reports":"मेरी रिपोर्ट्स","+ Report acres":"+ एकड़ रिपोर्ट करें","Status":"स्थिति","Message":"संदेश",
+  "Edit":"संपादित करें","Withdraw":"वापस लें",
+  "No reports yet. Click Report acres.":"अभी कोई रिपोर्ट नहीं। ‘एकड़ रिपोर्ट करें’ दबाएँ।",
+  "You have no locations assigned yet — ask the DroCon team to assign you, then you can report acres.":"आपको अभी कोई स्थान नहीं सौंपा गया है — DroCon टीम से कहें, फिर आप एकड़ रिपोर्ट कर सकते हैं।",
+  "Report submitted ✓":"रिपोर्ट जमा हो गई ✓","Pick a location.":"स्थान चुनें।","Pick a date.":"दिनांक चुनें।",
+  "Add at least one row with acres.":"कम से कम एक पंक्ति एकड़ के साथ जोड़ें।",
+  "Report message":"रिपोर्ट संदेश","Copy":"कॉपी करें","Share…":"साझा करें…","Open WhatsApp":"व्हाट्सएप खोलें","Close":"बंद करें",
+  "Copied ✓ — paste into WhatsApp.":"कॉपी हो गया ✓ — व्हाट्सएप में पेस्ट करें।",
+  "Copy or share this to the DroCon Pilots' Group and the location's Client Group. Edit if needed before sending.":"इसे DroCon पायलट ग्रुप और स्थान के क्लाइंट ग्रुप में कॉपी/साझा करें। भेजने से पहले आवश्यकतानुसार संपादित करें।",
+  "drafts a WhatsApp-style report you can copy or share to the DroCon Pilots' Group and the location's Client Group.":"एक व्हाट्सएप-शैली रिपोर्ट तैयार करता है जिसे आप DroCon पायलट ग्रुप और स्थान के क्लाइंट ग्रुप में कॉपी/साझा कर सकते हैं।",
+  "Drone Pilot":"ड्रोन पायलट","Total acres":"कुल एकड़","Farmer details":"किसान विवरण",
+  "GPS photo":"जीपीएस फ़ोटो","Received":"प्राप्त","Pending":"लंबित","Pilot":"पायलट"
+}};
+function t(k){ const d=DICT[lang()]; return (d&&d[k])||k; }
+function langToggleHTML(){ const to=lang()==="hi"?"en":"hi"; return `<button class="btn sm" id="plLang" title="Language / भाषा">${to==="hi"?"हिंदी":"English"}</button>`; }
+function currentPrefill(){ return { id:editingId, rows:drows.slice(),
+  entry_date:$("prDate")?$("prDate").value:todayISO(), location_id:$("prLoc")?$("prLoc").value:"",
+  note:$("prNote")?$("prNote").value:"", mill:$("prMill")?$("prMill").value:"" }; }
+
 /* --------------------------------------------------------------- PILOT --- */
 async function pilotReport(prefill){
   const m=$("main");
@@ -27,28 +56,30 @@ async function pilotReport(prefill){
   drows = (prefill&&Array.isArray(prefill.rows)&&prefill.rows.length)?prefill.rows.map(r=>Object.assign(blank(),r)):[blank()];
   const dDate = (prefill&&prefill.entry_date)||todayISO();
   const dLoc  = (prefill&&prefill.location_id)||"";
-  m.innerHTML=`<div class="eyebrow">Pilot Portal</div><h1>${editingId?"Edit report":"Report Acres"}</h1>
-    ${locs.length?"":'<div class="callout warn">You have <b>no locations assigned</b> yet. Ask the DroCon team to assign you to a location, then you can report acres.</div>'}
-    <div class="card">
+  const shortPh = lang()==="hi" ? `— कम-एकड़ कारण (दिन ${SHORT_PILOT} एकड़ से कम) —` : `— short-day reason (day under ${SHORT_PILOT} ac) —`;
+  m.innerHTML=`<div class="row" style="justify-content:space-between;align-items:flex-start"><div><div class="eyebrow">${t("Pilot Portal")}</div><h1 style="margin:0">${editingId?t("Edit report"):t("Report Acres")}</h1></div>${langToggleHTML()}</div>
+    ${locs.length?"":`<div class="callout warn">${t("You have no locations assigned yet — ask the DroCon team to assign you, then you can report acres.")}</div>`}
+    <div class="card" style="margin-top:10px">
       <div class="fgrid">
-        <div class="field"><label>Date *</label><input id="prDate" type="date" value="${esc(dDate)}"></div>
-        <div class="field"><label>Location *</label><select id="prLoc"><option value="">— select —</option>${locs.map(l=>`<option value="${l.id}" ${l.id===dLoc?'selected':''}>${esc(l.name)}${l.district?(" · "+esc(l.district)):""}</option>`).join("")}</select></div>
-        <div class="field"><label>Mill / Party <span class="muted" style="font-weight:normal">(optional)</span></label><input id="prMill" value="${esc((prefill&&prefill.mill)||"")}" placeholder="e.g. Shree ji mill"></div>
+        <div class="field"><label>${t("Date")} *</label><input id="prDate" type="date" value="${esc(dDate)}"></div>
+        <div class="field"><label>${t("Location")} *</label><select id="prLoc"><option value="">— select —</option>${locs.map(l=>`<option value="${l.id}" ${l.id===dLoc?'selected':''}>${esc(l.name)}${l.district?(" · "+esc(l.district)):""}</option>`).join("")}</select></div>
+        <div class="field"><label>${t("Mill / Party")} <span class="muted" style="font-weight:normal">${t("(optional)")}</span></label><input id="prMill" value="${esc((prefill&&prefill.mill)||"")}" placeholder="e.g. Shree ji mill"></div>
       </div>
       <div style="overflow:auto"><table class="tt-skip"><thead><tr>
-        <th>Farmer</th><th>Contact</th><th>Village</th><th>Crop</th><th>Medicine</th><th style="width:90px">Acres</th><th>GPS</th><th></th></tr></thead>
+        <th>${t("Farmer")}</th><th>${t("Contact")}</th><th>${t("Village")}</th><th>${t("Crop")}</th><th>${t("Medicine")}</th><th style="width:90px">${t("Acres")}</th><th>GPS</th><th></th></tr></thead>
         <tbody id="prBody"></tbody></table></div>
-      <div class="row" style="margin-top:8px"><button class="btn sm" id="prAdd">+ Add row</button>
-        <div class="spacer"></div><button class="btn green" id="prSave">${editingId?"Update &amp; resubmit":"Submit"}</button></div>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="prAdd">${t("+ Add row")}</button>
+        <div class="spacer"></div><button class="btn green" id="prSave">${editingId?t("Update & resubmit"):t("Submit")}</button></div>
       <div class="row" style="margin-top:8px;align-items:center;gap:10px;flex-wrap:wrap">
-        <span class="muted">Day total: <b id="prTotal">0.0</b> acres</span>
-        <span id="prShortWrap" style="display:none;align-items:center;gap:6px"><select id="prShort" style="width:300px;border-color:#e0a800;background:#fff8e6"><option value="">— short-day reason (day under ${SHORT_PILOT} ac) —</option>${(window.OPS.SHORT_REASONS||[]).map(x=>`<option>${esc(x)}</option>`).join("")}</select></span>
-        <span id="prMet" class="chip ok" style="display:none;font-size:11px">met minimum</span>
+        <span class="muted">${t("Day total")}: <b id="prTotal">0.0</b> ${t("acres")}</span>
+        <span id="prShortWrap" style="display:none;align-items:center;gap:6px"><select id="prShort" style="width:300px;border-color:#e0a800;background:#fff8e6"><option value="">${esc(shortPh)}</option>${(window.OPS.SHORT_REASONS||[]).map(x=>`<option>${esc(x)}</option>`).join("")}</select></span>
+        <span id="prMet" class="chip ok" style="display:none;font-size:11px">${t("met minimum")}</span>
       </div>
-      <div class="field" style="margin-top:8px"><label>Note (optional)</label><input id="prNote" value="${esc((prefill&&prefill.note)||"")}"></div>
+      <div class="field" style="margin-top:8px"><label>${t("Note")} ${t("(optional)")}</label><input id="prNote" value="${esc((prefill&&prefill.note)||"")}"></div>
       <div class="err" id="prErr"></div>
     </div>`;
   renderRows();
+  if($("plLang")) $("plLang").addEventListener("click",()=>{ setLang(lang()==="hi"?"en":"hi"); pilotReport(currentPrefill()); });
   $("prAdd").addEventListener("click",()=>{ drows.push(blank()); renderRows(); });
   $("prSave").addEventListener("click",save);
 }
@@ -82,18 +113,18 @@ function updateTotal(){
 }
 async function save(){
   const loc=$("prLoc").value, date=$("prDate").value;
-  if(!loc){ $("prErr").textContent="Pick a location."; return; }
-  if(!date){ $("prErr").textContent="Pick a date."; return; }
+  if(!loc){ $("prErr").textContent=t("Pick a location."); return; }
+  if(!date){ $("prErr").textContent=t("Pick a date."); return; }
   const rows=drows.filter(r=>num(r.acres)>0 || (r.farmer||"").trim());
-  if(!rows.length){ $("prErr").textContent="Add at least one row with acres."; return; }
+  if(!rows.length){ $("prErr").textContent=t("Add at least one row with acres."); return; }
   const total=rows.reduce((s,r)=>s+num(r.acres),0);
   const reason=($("prShort")?$("prShort").value:"").trim();
-  if(total>0 && total<SHORT_PILOT && !reason){ $("prErr").textContent="Add a short-day reason — the day total is under "+SHORT_PILOT+" acres."; return; }
+  if(total>0 && total<SHORT_PILOT && !reason){ $("prErr").textContent=(lang()==="hi"?("कम-एकड़ कारण जोड़ें — दिन का कुल "+SHORT_PILOT+" एकड़ से कम है।"):("Add a short-day reason — the day total is under "+SHORT_PILOT+" acres.")); return; }
   $("prSave").disabled=true;
   const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId, p_reason:(reason||null), p_mill:(($("prMill")&&$("prMill").value.trim())||null) });
   $("prSave").disabled=false;
   if(error){ $("prErr").textContent=error.message; return; }
-  window.OPS.flashTop("Report submitted ✓");
+  window.OPS.flashTop(t("Report submitted ✓"));
   // messaging is independent of approval — draft the WhatsApp message right away
   const locName=(locs.find(l=>String(l.id)===String(loc))||{}).name||"";
   const draft={ entry_date:date, location_name:locName, mill:(($("prMill")&&$("prMill").value.trim())||null), rows:rows };
@@ -103,9 +134,10 @@ async function save(){
 
 async function pilotReports(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Pilot Portal</div><h1>My Reports</h1>
-    <div class="row" style="margin:6px 0"><button class="btn green sm" id="prNew">+ Report acres</button></div>
+  m.innerHTML=`<div class="row" style="justify-content:space-between;align-items:flex-start"><div><div class="eyebrow">${t("Pilot Portal")}</div><h1 style="margin:0">${t("My Reports")}</h1></div>${langToggleHTML()}</div>
+    <div class="row" style="margin:8px 0"><button class="btn green sm" id="prNew">${t("+ Report acres")}</button></div>
     <div id="mrList" class="muted">Loading…</div>`;
+  if($("plLang")) $("plLang").addEventListener("click",()=>{ setLang(lang()==="hi"?"en":"hi"); pilotReports(); });
   $("prNew").addEventListener("click",()=>pilotReport());
   const myPid=await sb().rpc("my_pilot_id").then(r=>r.data).catch(()=>null);
   let q=sb().from("pilot_acre_reports").select("*").order("entry_date",{ascending:false}).order("created_at",{ascending:false});
@@ -113,12 +145,12 @@ async function pilotReports(){
   const { data }=await q;
   const rows=data||[];
   const acresOf=r=>(r.rows||[]).reduce((s,x)=>s+num(x.acres),0);
-  $("mrList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Location</th><th class="num">Acres</th><th>Status</th><th></th></tr></thead>
+  $("mrList").innerHTML = rows.length ? `<div class="card"><div style="overflow:auto"><table><thead><tr><th>${t("Date")}</th><th>${t("Location")}</th><th class="num">${t("Acres")}</th><th>${t("Status")}</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.location_name||"")}</td><td class="num">${acresOf(r).toFixed(1)}</td>
       <td><span class="chip ${chip(r.status)}">${esc(label(r.status))}</span>${r.reject_reason?`<br><span class="small-note" style="color:#a3322a">${esc(r.reject_reason)}</span>`:''}</td>
-      <td><button class="btn sm blue" data-msg="${r.id}">📤 Message</button> ${(r.status==="submitted"||r.status==="rejected")?`<button class="btn sm" data-edit="${r.id}">Edit</button> `:''}${r.status==="submitted"?`<button class="btn sm ghost" data-wd="${r.id}">Withdraw</button>`:''}</td></tr>`).join("")}</tbody></table></div>
-    <p class="muted" style="font-size:12px;margin-top:6px">📤 <b>Message</b> drafts a WhatsApp-style report you can copy or share to the <b>DroCon Pilots' Group</b> and the location's <b>Client Group</b>.</p></div>`
-    : '<div class="card muted">No reports yet. Click “Report acres”.</div>';
+      <td><button class="btn sm blue" data-msg="${r.id}">📤 ${t("Message")}</button> ${(r.status==="submitted"||r.status==="rejected")?`<button class="btn sm" data-edit="${r.id}">${t("Edit")}</button> `:''}${r.status==="submitted"?`<button class="btn sm ghost" data-wd="${r.id}">${t("Withdraw")}</button>`:''}</td></tr>`).join("")}</tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-top:6px">📤 <b>${t("Message")}</b> ${t("drafts a WhatsApp-style report you can copy or share to the DroCon Pilots' Group and the location's Client Group.")}</p></div>`
+    : `<div class="card muted">${t("No reports yet. Click Report acres.")}</div>`;
   $("mrList").querySelectorAll("[data-msg]").forEach(b=>b.addEventListener("click",()=>{ const r=rows.find(x=>x.id===b.getAttribute("data-msg")); if(r) showReportMessage(r); }));
   $("mrList").querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>{ const r=rows.find(x=>x.id===b.getAttribute("data-edit")); pilotReport(r); }));
   $("mrList").querySelectorAll("[data-wd]").forEach(b=>b.addEventListener("click",async()=>{
@@ -134,23 +166,23 @@ function buildReportMessage(r){
   const name=p.full_name||p.email||"Pilot";
   const total=(r.rows||[]).reduce((s,x)=>s+num(x.acres),0);
   const L=[];
-  L.push(name+" — Drone Pilot");
-  L.push("Date - "+fmtDate(r.entry_date));
-  L.push("Location - "+(r.location_name||""));
-  if(r.mill) L.push("Mill / Party - "+r.mill);
-  L.push("Total acres - "+total.toFixed(2));
+  L.push(name+" — "+t("Drone Pilot"));
+  L.push(t("Date")+" - "+fmtDate(r.entry_date));
+  L.push(t("Location")+" - "+(r.location_name||""));
+  if(r.mill) L.push(t("Mill / Party")+" - "+r.mill);
+  L.push(t("Total acres")+" - "+total.toFixed(2));
   L.push("");
-  L.push("Farmer details");
+  L.push(t("Farmer details"));
   L.push("");
   (r.rows||[]).forEach((x,i)=>{
     L.push((i+1)+". "+(x.farmer||"—"));
-    L.push("Acres - "+num(x.acres).toFixed(2));
-    if(x.village) L.push("Village - "+x.village);
-    if(x.crop) L.push("Crop - "+x.crop);
-    L.push("GPS photo - "+(x.gps?"✅ Received":"❌ Pending"));
+    L.push(t("Acres")+" - "+num(x.acres).toFixed(2));
+    if(x.village) L.push(t("Village")+" - "+x.village);
+    if(x.crop) L.push(t("Crop")+" - "+x.crop);
+    L.push(t("GPS photo")+" - "+(x.gps?("✅ "+t("Received")):("❌ "+t("Pending"))));
     L.push("");
   });
-  L.push("Pilot - "+name);
+  L.push(t("Pilot")+" - "+name);
   return L.join("\n");
 }
 function showReportMessage(r){
@@ -158,14 +190,14 @@ function showReportMessage(r){
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px";
   ov.innerHTML=`<div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;margin:0">
-    <h3 style="margin:0 0 4px">Report message</h3>
-    <p class="muted" style="margin-top:0;font-size:12px">Copy or share this to the <b>DroCon Pilots' Group</b> and the location's <b>Client Group</b>. Edit if needed before sending.</p>
+    <h3 style="margin:0 0 4px">${t("Report message")}</h3>
+    <p class="muted" style="margin-top:0;font-size:12px">${t("Copy or share this to the DroCon Pilots' Group and the location's Client Group. Edit if needed before sending.")}</p>
     <textarea id="pmText" style="width:100%;min-height:300px;font-size:13px;line-height:1.4">${esc(text)}</textarea>
     <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
-      <button class="btn green" id="pmCopy">📋 Copy</button>
-      <button class="btn blue" id="pmShare">Share…</button>
-      <button class="btn" id="pmWa">Open WhatsApp</button>
-      <div class="spacer"></div><button class="btn sm" id="pmClose">Close</button></div>
+      <button class="btn green" id="pmCopy">📋 ${t("Copy")}</button>
+      <button class="btn blue" id="pmShare">${t("Share…")}</button>
+      <button class="btn" id="pmWa">${t("Open WhatsApp")}</button>
+      <div class="spacer"></div><button class="btn sm" id="pmClose">${t("Close")}</button></div>
     <div id="pmOut" class="muted" style="font-size:12px;margin-top:6px"></div></div>`;
   document.body.appendChild(ov);
   const q=id=>ov.querySelector(id);
@@ -174,7 +206,7 @@ function showReportMessage(r){
   q("#pmClose").addEventListener("click",close);
   q("#pmCopy").addEventListener("click",async()=>{
     const val=q("#pmText").value;
-    try{ await navigator.clipboard.writeText(val); q("#pmOut").textContent="Copied ✓ — paste into WhatsApp."; }
+    try{ await navigator.clipboard.writeText(val); q("#pmOut").textContent=t("Copied ✓ — paste into WhatsApp."); }
     catch(e){ q("#pmText").select(); try{ document.execCommand("copy"); q("#pmOut").textContent="Copied ✓"; }catch(_){ q("#pmOut").textContent="Select the text and copy manually."; } }
   });
   const sh=q("#pmShare");
