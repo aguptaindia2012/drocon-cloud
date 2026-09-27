@@ -93,7 +93,12 @@ async function save(){
   const { error }=await sb().rpc("submit_pilot_report",{ p_location:loc, p_date:date, p_rows:rows, p_note:$("prNote").value||null, p_id:editingId, p_reason:(reason||null), p_mill:(($("prMill")&&$("prMill").value.trim())||null) });
   $("prSave").disabled=false;
   if(error){ $("prErr").textContent=error.message; return; }
-  window.OPS.flashTop("Report submitted ✓"); editingId=null; pilotReports();
+  window.OPS.flashTop("Report submitted ✓");
+  // messaging is independent of approval — draft the WhatsApp message right away
+  const locName=(locs.find(l=>String(l.id)===String(loc))||{}).name||"";
+  const draft={ entry_date:date, location_name:locName, mill:(($("prMill")&&$("prMill").value.trim())||null), rows:rows };
+  editingId=null; pilotReports();
+  showReportMessage(draft);
 }
 
 async function pilotReports(){
