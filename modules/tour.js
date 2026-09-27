@@ -101,7 +101,7 @@ function updateBanner(){
   markSeen();   // once per build
   const b = document.createElement("div"); b.id="tourBanner";
   b.style.cssText="position:fixed;right:16px;bottom:16px;z-index:300;background:#233;color:#fff;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.3);padding:12px 14px;max-width:300px;font-size:13px";
-  b.innerHTML=`<b>DCB OS updated</b> — build ${esc(String(window.OPS.build||""))}.<div style="margin-top:8px;display:flex;gap:8px"><button class="btn green sm" id="tbGo">Take the tour</button><button class="btn sm" id="tbX" style="color:#fff;border-color:#567">Dismiss</button></div>`;
+  b.innerHTML=`<b>DCB OS updated</b> — build ${esc(String(window.OPS.build||""))}.<div style="margin-top:8px;display:flex;gap:8px"><button class="btn green sm" id="tbGo">Take the tour</button><button class="btn sm" id="tbX" style="background:transparent;color:#fff;border-color:#8ab2a6">Dismiss</button></div>`;
   document.body.appendChild(b);
   $("tbGo").onclick=()=>{ b.remove(); run(); };
   $("tbX").onclick=()=>b.remove();
