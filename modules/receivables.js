@@ -260,7 +260,7 @@ async function load(){
           <select id="cmpMoB" style="width:auto">${moOptStr('')}</select></div>
       </div>
       <div id="catCmpHost" style="margin-top:12px"></div>
-      <p class="muted">Pick any two periods — a whole financial year (Apr–Mar) or a single month within one — to compare each category side by side. Δ shows Period A minus Period B on invoiced value.</p>
+      <p class="muted">Pick any two periods — a whole financial year (Apr–Mar) or a single month within one — to compare each category side by side. Δ shows Period A minus Period B on invoiced value, with the % growth over Period B in brackets (“new” when Period B was zero).</p>
     </div>
     <div class="card rvsec" data-rv="buildup"><h3>How the receivable is built up</h3>
       <table><tbody>
@@ -341,22 +341,23 @@ async function load(){
     const labB=fyLabel(fyB)+" · "+(moB?MONTHNAME[moB]:"Full year");
     const signed=d=>(d>0?"+":"")+money(d);
     const dcol=d=>d>0?"#3e6b20":(d<0?"#a3322a":"#6a7179");
+    const gstr=(d,base)=> base>0 ? ` (${d>=0?"+":""}${(d/base*100).toFixed(1)}%)` : (d>0?" (new)":"");
     let tAi=0,tAr=0,tAo=0,tBi=0,tBr=0,tBo=0;
     const body=showKeys.map(([k,label])=>{ const a=A[k],b=B[k]; tAi+=a.inv;tAr+=a.rec;tAo+=a.recv;tBi+=b.inv;tBr+=b.rec;tBo+=b.recv;
       const d=a.inv-b.inv;
       return `<tr><td>${label}</td>
         <td class="num" style="border-left:2px solid var(--line)">${money(a.inv)}</td><td class="num">${money(a.rec)}</td><td class="num">${money(a.recv)}</td>
         <td class="num" style="border-left:2px solid var(--line)">${money(b.inv)}</td><td class="num">${money(b.rec)}</td><td class="num">${money(b.recv)}</td>
-        <td class="num" style="border-left:2px solid var(--line);color:${dcol(d)};font-weight:600">${signed(d)}</td></tr>`; }).join("");
+        <td class="num" style="border-left:2px solid var(--line);color:${dcol(d)};font-weight:600">${signed(d)}${gstr(d,b.inv)}</td></tr>`; }).join("");
     const dt=tAi-tBi;
     $("catCmpHost").innerHTML=`<div style="overflow:auto"><table><thead>
-      <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">A · ${esc(labA)}</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">B · ${esc(labB)}</th><th rowspan="2" class="num" style="border-left:2px solid var(--line)">Δ Invoiced (A−B)</th></tr>
+      <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">A · ${esc(labA)}</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">B · ${esc(labB)}</th><th rowspan="2" class="num" style="border-left:2px solid var(--line)">Δ Invoiced (A−B, % growth)</th></tr>
       <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th></tr>
     </thead><tbody>${body}
       <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td>
         <td class="num" style="border-left:2px solid var(--line)"><b>${money(tAi)}</b></td><td class="num"><b>${money(tAr)}</b></td><td class="num"><b>${money(tAo)}</b></td>
         <td class="num" style="border-left:2px solid var(--line)"><b>${money(tBi)}</b></td><td class="num"><b>${money(tBr)}</b></td><td class="num"><b>${money(tBo)}</b></td>
-        <td class="num" style="border-left:2px solid var(--line);color:${dcol(dt)}"><b>${signed(dt)}</b></td></tr>
+        <td class="num" style="border-left:2px solid var(--line);color:${dcol(dt)}"><b>${signed(dt)}${gstr(dt,tBi)}</b></td></tr>
     </tbody></table></div>`;
   }
   ["cmpFyA","cmpMoA","cmpFyB","cmpMoB"].forEach(id=>{ const el=$(id); if(el) el.addEventListener("change",renderCompare); });
