@@ -76,20 +76,24 @@ function render(){
       <div id="vrWord"></div>
       <div class="spacer"></div><span class="muted">${rows.length} row(s)</span>
     </div>
-    <div class="card"><h3>Summary by pilot</h3>
-      <table><thead><tr><th>Pilot</th><th class="num">Days</th><th class="num">Acres</th></tr></thead>
+    <div id="vrPanel"></div>`;
+
+  const pilotHTML=()=>`<table><thead><tr><th>Pilot</th><th class="num">Days</th><th class="num">Acres</th></tr></thead>
       <tbody>${Object.entries(byP).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>
         `<tr><td><b>${esc(k)}</b></td><td class="num">${v.days.size}</td><td class="num">${v.acres.toFixed(1)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td colspan="2" class="num"><b>Total</b></td><td class="num"><b>${totA.toFixed(1)}</b></td></tr></tfoot></table></div>
-    <div class="card"><h3>Summary by location</h3>
-      <table><thead><tr><th>Location</th><th class="num">Acres</th></tr></thead>
+      <tfoot><tr><td colspan="2" class="num"><b>Total</b></td><td class="num"><b>${totA.toFixed(1)}</b></td></tr></tfoot></table>`;
+  const locHTML=()=>`<table><thead><tr><th>Location</th><th class="num">Acres</th></tr></thead>
       <tbody>${Object.entries(byL).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>
-        `<tr><td><b>${esc(k)}</b></td><td class="num">${v.acres.toFixed(1)}</td></tr>`).join("")}</tbody></table></div>
-    <div class="card"><h3>Detail</h3>
-      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Location</th><th>Client</th><th class="num">Acres</th></tr></thead>
+        `<tr><td><b>${esc(k)}</b></td><td class="num">${v.acres.toFixed(1)}</td></tr>`).join("")}</tbody></table>`;
+  const detailHTML=()=>`<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Pilot</th><th>Location</th><th>Client</th><th class="num">Acres</th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.entry_date)}</td><td>${esc(r.pilot_name||'')}</td>
         <td>${esc(r.location_name||'')}</td><td>${esc(r.client_name||'')}</td>
-        <td class="num">${num(r.acres)}</td></tr>`).join("")}</tbody></table></div></div>`;
+        <td class="num">${num(r.acres)}</td></tr>`).join("")}</tbody></table></div>`;
+  window.OPS.report.panel("vrPanel",[
+    {key:"pilot",   label:"By pilot",    render:b=>{ b.innerHTML=pilotHTML(); }},
+    {key:"location",label:"By location", render:b=>{ b.innerHTML=locHTML(); }},
+    {key:"detail",  label:"Detail"+(rows.length?` (${rows.length})`:''), render:b=>{ b.innerHTML=detailHTML(); }},
+  ],{ title:"Statement", active:"pilot" });
 
   if($("vrXls")) $("vrXls").addEventListener("click",exportExcel);
   window.OPS.report.wordButton("vrWord","Vendor Acreage Statement — "+((cur&&(cur.firm_name||cur.name))||""), ()=>([
