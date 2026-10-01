@@ -52,30 +52,29 @@ async function view(){
       <div class="stat"><div class="n">${up.length}</div><div class="l">Upcoming orders</div></div>
       <div class="stat"><div class="n">${states.reduce((s,x)=>s+x.a,0).toFixed(0)}</div><div class="l">Acres last 7 days</div></div>
     </div>
-
-    <div class="card"><h3>Receivables aging</h3>
-      <table><thead><tr><th>0–30</th><th>31–60</th><th>61–90</th><th>&gt;90</th></tr></thead>
+    <div id="dbPanel"></div>`;
+  const agingHTML=()=>`<table><thead><tr><th>0–30</th><th>31–60</th><th>61–90</th><th>&gt;90</th></tr></thead>
       <tbody><tr><td>${money(buckets["0-30"])}</td><td>${money(buckets["31-60"])}</td>
         <td style="${buckets["61-90"]>0?'color:#9a5b00;font-weight:700':''}">${money(buckets["61-90"])}</td>
         <td style="${buckets[">90"]>0?'color:#a3322a;font-weight:700':''}">${money(buckets[">90"])}</td></tr></tbody></table>
-      <p class="muted">Detail + record payments in <b>Invoices &amp; Receivables</b>.</p></div>
-
-    <div class="card"><h3>Upcoming orders — follow up</h3>
-      ${up.length?`<table><thead><tr><th>Client</th><th>Region</th><th>Crop</th><th>Starts</th><th class="num">Days</th></tr></thead>
+      <p class="muted">Detail + record payments in <b>Invoices &amp; Receivables</b>.</p>`;
+  const ordersHTML=()=> up.length?`<table><thead><tr><th>Client</th><th>Region</th><th>Crop</th><th>Starts</th><th class="num">Days</th></tr></thead>
       <tbody>${up.map(x=>`<tr><td><b>${esc(x.o.client_name||'')}</b> ${x.d<=15?'<span class="chip rejected">now</span>':''}</td>
         <td>${esc([x.o.city,x.o.state].filter(Boolean).join(", "))}</td><td>${esc(x.o.crop||'')}</td>
         <td>${esc(x.o.start_month||fmtDate(x.sd))}</td><td class="num">${x.d}</td></tr>`).join("")}</tbody></table>`
-      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>'}</div>
-
-    <div class="card"><h3>Daily acreage — last 7 days by state</h3>
-      ${states.length?`<table><thead><tr><th>State</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
+      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>';
+  const stateHTML=()=> states.length?`<table><thead><tr><th>State</th><th class="num">Acres</th><th class="num">Revenue</th></tr></thead>
       <tbody>${states.map(s=>`<tr><td><b>${esc(s.k)}</b></td><td class="num">${s.a.toFixed(1)}</td><td class="num">${money(s.r)}</td></tr>`).join("")}</tbody></table>`
-      :'<div class="muted">No spraying logged in the last 7 days.</div>'}</div>
-
-    <div class="card"><h3>Farmer snapshot — top villages</h3>
-      ${villages.length?`<table><thead><tr><th>Village</th><th class="num">Sprays</th><th class="num">Total acres</th><th class="num">Avg/spray</th></tr></thead>
+      :'<div class="muted">No spraying logged in the last 7 days.</div>';
+  const villagesHTML=()=> villages.length?`<table><thead><tr><th>Village</th><th class="num">Sprays</th><th class="num">Total acres</th><th class="num">Avg/spray</th></tr></thead>
       <tbody>${villages.map(v=>`<tr><td><b>${esc(v.v)}</b></td><td class="num">${v.n}</td><td class="num">${v.t.toFixed(1)}</td><td class="num">${v.avg.toFixed(2)}</td></tr>`).join("")}</tbody></table>`
-      :'<div class="muted">No farmer data yet.</div>'}</div>`;
+      :'<div class="muted">No farmer data yet.</div>';
+  window.OPS.report.panel("dbPanel",[
+    {key:"aging",   label:"Receivables aging", render:b=>{ b.innerHTML=agingHTML(); }},
+    {key:"orders",  label:"Upcoming orders"+(up.length?` (${up.length})`:''), render:b=>{ b.innerHTML=ordersHTML(); }},
+    {key:"state",   label:"Acreage by state", render:b=>{ b.innerHTML=stateHTML(); }},
+    {key:"villages",label:"Top villages", render:b=>{ b.innerHTML=villagesHTML(); }},
+  ],{ title:"Details", active:"aging" });
 }
 
 /* ---------- Agreement Dashboard ---------- */
@@ -96,13 +95,13 @@ async function agreementDash(){
     </div>
     <div class="row" id="agReport" style="margin-bottom:10px"></div>
     <div class="card"><h3>Status mix</h3>${window.OPS.report.canvas("agStatus",520,260)}</div>
-    <div class="card"><h3>By status</h3><table><thead><tr>${STAT.map(s=>`<th>${esc(s)}</th>`).join("")}</tr></thead>
-      <tbody><tr>${STAT.map(s=>`<td>${byS[s]||0}</td>`).join("")}</tr></tbody></table></div>
-    <div class="card"><h3>By category</h3><table><thead><tr><th>Category</th><th class="num">Count</th></tr></thead>
-      <tbody>${Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join("")}</tbody></table></div>
-    <div class="card"><h3>Recent activity</h3><table><thead><tr><th>Title</th><th>Counterparty</th><th>Status</th><th>Updated</th></tr></thead>
-      <tbody>${rows.slice(0,12).map(r=>`<tr><td><b>${esc(r.title)}</b></td><td>${esc(r.counterparty||'')}</td><td>${window.OPS.statusChip(r.status)}</td><td class="muted">${fmtDate(r.updated_at)}</td></tr>`).join("")}</tbody></table></div>`;
+    <div id="adPanel"></div>`;
   window.OPS.report.pie("agStatus", STAT.filter(s=>byS[s]), STAT.filter(s=>byS[s]).map(s=>byS[s]));
+  window.OPS.report.panel("adPanel",[
+    {key:"status",label:"By status",render:b=>{ b.innerHTML=`<table><thead><tr>${STAT.map(s=>`<th>${esc(s)}</th>`).join("")}</tr></thead><tbody><tr>${STAT.map(s=>`<td>${byS[s]||0}</td>`).join("")}</tr></tbody></table>`; }},
+    {key:"category",label:"By category",render:b=>{ b.innerHTML=`<table><thead><tr><th>Category</th><th class="num">Count</th></tr></thead><tbody>${Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join("")}</tbody></table>`; }},
+    {key:"recent",label:"Recent activity",render:b=>{ b.innerHTML=`<table><thead><tr><th>Title</th><th>Counterparty</th><th>Status</th><th>Updated</th></tr></thead><tbody>${rows.slice(0,12).map(r=>`<tr><td><b>${esc(r.title)}</b></td><td>${esc(r.counterparty||'')}</td><td>${window.OPS.statusChip(r.status)}</td><td class="muted">${fmtDate(r.updated_at)}</td></tr>`).join("")}</tbody></table>`; }},
+  ],{ title:"Agreements", active:"recent" });
   window.OPS.report.wordButton("agReport","Agreement Dashboard Report", ()=>([
     {heading:"By status", image:window.OPS.report.img("agStatus"), table:{headers:["Status","Count"], rows:STAT.map(s=>[s,byS[s]||0])}},
     {heading:"By category", table:{headers:["Category","Count"], rows:Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v])}},
@@ -132,19 +131,20 @@ async function bdDash(){
     </div>
     <div class="row" id="bdReport" style="margin-bottom:10px"></div>
     <div class="card"><h3>Quoted vs PO value</h3>${window.OPS.report.canvas("bdChart",520,240)}</div>
-    <div class="card"><h3>Upcoming orders — follow up</h3>
-      ${up.length?`<table><thead><tr><th>Client</th><th>Region</th><th>Crop</th><th>Starts</th><th class="num">Days</th></tr></thead>
+    <div id="bdPanel"></div>`;
+  window.OPS.report.bar("bdChart", ["Quotations","Purchase Orders"], [sum(q),sum(po)], "Value (₹)", "#599533");
+  window.OPS.report.panel("bdPanel",[
+    {key:"orders",label:"Upcoming orders"+(up.length?` (${up.length})`:''),render:b=>{ b.innerHTML= up.length?`<table><thead><tr><th>Client</th><th>Region</th><th>Crop</th><th>Starts</th><th class="num">Days</th></tr></thead>
       <tbody>${up.map(x=>`<tr><td><b>${esc(x.o.client_name||'')}</b> ${x.d<=15?'<span class="chip rejected">now</span>':''}</td>
         <td>${esc([x.o.city,x.o.state].filter(Boolean).join(", "))}</td><td>${esc(x.o.crop||'')}</td>
         <td>${esc(x.o.start_month||fmtDate(x.sd))}</td><td class="num">${x.d}</td></tr>`).join("")}</tbody></table>`
-      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>'}</div>
-    <div class="card"><h3>Quotations &amp; Purchase Orders</h3>
-      ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Type</th><th>Number</th><th>Date</th><th>Party</th><th class="num">Total</th><th>Status</th></tr></thead>
+      :'<div class="muted">No upcoming orders. Add start dates in the Order Tracker.</div>'; }},
+    {key:"docs",label:"Quotations & POs"+(rows.length?` (${rows.length})`:''),render:b=>{ b.innerHTML= rows.length?`<div style="overflow:auto"><table><thead><tr><th>Type</th><th>Number</th><th>Date</th><th>Party</th><th class="num">Total</th><th>Status</th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td>${r.doc_type==="quotation"?'<span class="chip in_review">Quotation</span>':'<span class="chip executed">PO</span>'}</td>
         <td><b>${esc(r.number)}</b></td><td>${fmtDate(r.doc_date)}</td><td>${esc((r.party_snapshot||{}).firmName||(r.party_snapshot||{}).name||'')}</td>
         <td class="num">${money((r.totals||{}).total)}</td><td>${window.OPS.statusChip(r.status||'draft')}</td></tr>`).join("")}</tbody></table></div>`
-      :'<div class="muted">No quotations or purchase orders yet.</div>'}</div>`;
-  window.OPS.report.bar("bdChart", ["Quotations","Purchase Orders"], [sum(q),sum(po)], "Value (₹)", "#599533");
+      :'<div class="muted">No quotations or purchase orders yet.</div>'; }},
+  ],{ title:"Pipeline", active:"orders" });
   window.OPS.report.wordButton("bdReport","Business Development Report", ()=>([
     {heading:"Summary", image:window.OPS.report.img("bdChart"), table:{headers:["Type","Count","Value"], rows:[["Quotations",q.length,money(sum(q))],["Purchase Orders",po.length,money(sum(po))]]}},
     {heading:"Upcoming orders", table:{headers:["Client","Region","Crop","Starts","Days"], rows:up.map(x=>[x.o.client_name||"",[x.o.city,x.o.state].filter(Boolean).join(", "),x.o.crop||"",x.o.start_month||fmtDate(x.sd),x.d])}},
