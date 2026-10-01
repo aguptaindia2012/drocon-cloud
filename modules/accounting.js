@@ -727,39 +727,33 @@ async function position(){
       <div class="stat" style="${(F.length||U.length)?'background:#fbe0de':''}"><div class="n" style="${(F.length||U.length)?'color:#a3322a':''}">${F.length+U.length}</div><div class="l">Red flags</div></div>
     </div>
     <div id="poBank" class="statrow"></div>
-    ${(F.length||U.length)?`<div class="card" style="border-left:4px solid #a3322a"><h3>⚑ Needs attention</h3>
-      ${F.length?`<p class="muted" style="margin:-4px 0 6px"><b>Days closed with a difference</b></p>
+    <div id="poPanel"></div>
+    <div id="poTB"></div>`;
+  loadBankBalances();
+
+  const flagsHTML=()=> (F.length||U.length)?`<div style="border-left:4px solid #a3322a;padding-left:10px">
+      ${F.length?`<p class="muted" style="margin:0 0 6px"><b>Days closed with a difference</b></p>
         <table><thead><tr><th>Date</th><th>Account</th><th class="num">Difference</th><th>Note</th></tr></thead>
         <tbody>${F.map(f=>`<tr><td>${fmtDate(f.close_date)}</td><td>${esc(f.account_name)}</td>
           <td class="num" style="color:#a3322a;font-weight:700">${money(f.difference)}</td><td>${esc(f.note||'')}</td></tr>`).join("")}</tbody></table>`:''}
       ${U.length?`<p class="muted" style="margin:10px 0 6px"><b>Days with movement that were never closed</b></p>
         <table><thead><tr><th>Date</th><th>Account</th></tr></thead>
         <tbody>${U.map(u=>`<tr><td>${fmtDate(u.day)}</td><td>${esc(u.account_name)}</td></tr>`).join("")}</tbody></table>`:''}
-    </div>`:'<div class="callout">No red flags — every day with movement is closed and matched. 🎉</div>'}
-
-    <div class="card"><h3>Receivables ageing</h3>
-      <table><thead><tr><th>0–30</th><th>31–60</th><th>61–90</th><th>&gt;90</th></tr></thead>
-      <tbody><tr>${['0–30','31–60','61–90','>90'].map(b=>`<td class="num" style="${b==='>90'&&age[b]?'color:#a3322a;font-weight:700':''}">${money(age[b]||0)}</td>`).join("")}</tr></tbody></table></div>
-
-    <div class="card"><h3>Payable to vendors</h3>
-      ${P.length?`<div style="overflow:auto"><table><thead><tr><th>Vendor</th><th>Invoice</th><th>Due</th><th class="num">Balance</th><th>Status</th></tr></thead>
-        <tbody>${P.sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||''))).map(r=>`<tr><td><b>${esc(r.vendor_name||'')}</b></td>
-          <td>${esc(r.vendor_invoice_no||'')}</td><td>${r.due_date?fmtDate(r.due_date):'—'}</td>
-          <td class="num"><b>${money(r.balance)}</b></td>
-          <td>${r.status==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>':'<span class="chip issued">'+esc(r.status.replace("_"," "))+'</span>'}</td></tr>`).join("")}</tbody></table></div>`
-        :'<div class="muted">Nothing payable. 🎉</div>'}</div>
-
-    <div class="card"><h3>Advances outstanding</h3>
-      ${A.length?`<table><thead><tr><th>Issued</th><th>To</th><th>Purpose</th><th class="num">Outstanding</th></tr></thead>
-        <tbody>${A.map(a=>`<tr><td>${fmtDate(a.issued_on)}</td><td><b>${esc(a.party_name||'')}</b></td>
-          <td>${esc(a.purpose||'')}</td><td class="num" style="color:#9a5b00;font-weight:700">${money(a.outstanding)}</td></tr>`).join("")}</tbody></table>`
-        :'<div class="muted">No advances outstanding.</div>'}</div>
-    <div class="card"><h3>Payables, payments &amp; balance — trend</h3>
-      <p class="muted" style="margin-top:-4px">Cumulative as-of-date totals are on each legend label. <b>Click a legend entry to show/hide that line</b> — the per-month lines (dashed) are hidden by default.</p>
-      ${window.OPS.report.canvas("poPayTrend",640,280)}</div>
-    <div id="poTB"></div>`;
-  // render the payables trend (mirror of the receivables chart)
-  (function(){
+    </div>`:'<div class="callout" style="margin:0">No red flags — every day with movement is closed and matched. 🎉</div>';
+  const ageHTML=()=>`<table><thead><tr><th>0–30</th><th>31–60</th><th>61–90</th><th>&gt;90</th></tr></thead>
+      <tbody><tr>${['0–30','31–60','61–90','>90'].map(b=>`<td class="num" style="${b==='>90'&&age[b]?'color:#a3322a;font-weight:700':''}">${money(age[b]||0)}</td>`).join("")}</tr></tbody></table>`;
+  const payHTML=()=> P.length?`<div style="overflow:auto"><table><thead><tr><th>Vendor</th><th>Invoice</th><th>Due</th><th class="num">Balance</th><th>Status</th></tr></thead>
+      <tbody>${P.sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||''))).map(r=>`<tr><td><b>${esc(r.vendor_name||'')}</b></td>
+        <td>${esc(r.vendor_invoice_no||'')}</td><td>${r.due_date?fmtDate(r.due_date):'—'}</td>
+        <td class="num"><b>${money(r.balance)}</b></td>
+        <td>${r.status==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>':'<span class="chip issued">'+esc(r.status.replace("_"," "))+'</span>'}</td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="muted">Nothing payable. 🎉</div>';
+  const advHTML=()=> A.length?`<table><thead><tr><th>Issued</th><th>To</th><th>Purpose</th><th class="num">Outstanding</th></tr></thead>
+      <tbody>${A.map(a=>`<tr><td>${fmtDate(a.issued_on)}</td><td><b>${esc(a.party_name||'')}</b></td>
+        <td>${esc(a.purpose||'')}</td><td class="num" style="color:#9a5b00;font-weight:700">${money(a.outstanding)}</td></tr>`).join("")}</tbody></table>`
+      :'<div class="muted">No advances outstanding.</div>';
+  function trendView(body){
+    body.innerHTML=`<p class="muted" style="margin-top:0">Cumulative as-of-date totals are on each legend label. <b>Click a legend entry to show/hide that line</b> — the per-month lines (dashed) are hidden by default.</p>${window.OPS.report.canvas("poPayTrend",640,280)}`;
     const cM=v=>{ v=num(v); const s=v<0?"-":""; v=Math.abs(v);
       return s+(v>=1e7?"₹"+(v/1e7).toFixed(2)+"Cr":v>=1e5?"₹"+(v/1e5).toFixed(2)+"L":v>=1e3?"₹"+(v/1e3).toFixed(1)+"k":"₹"+v.toFixed(0)); };
     const bM=payMonths.map(k=>billedByM[k]||0), pM=payMonths.map(k=>paidByM[k]||0), balM=payMonths.map(k=>(billedByM[k]||0)-(paidByM[k]||0));
@@ -774,7 +768,14 @@ async function position(){
       { label:"Paid / month",     data:pM, color:"#8fce7a", dash:true, hidden:true },
       { label:"Balance / month",  data:balM, color:"#F48A1C", dash:true, hidden:true }
     ]);
-  })();
+  }
+  window.OPS.report.panel("poPanel", [
+    { key:"pay",   label:"Payable to vendors"+(P.length?` (${P.length})`:''), render:b=>{ b.innerHTML=payHTML(); } },
+    { key:"age",   label:"Receivables ageing", render:b=>{ b.innerHTML=ageHTML(); } },
+    { key:"adv",   label:"Advances"+(A.length?` (${A.length})`:''), render:b=>{ b.innerHTML=advHTML(); } },
+    { key:"trend", label:"Trend", render:trendView },
+    { key:"flags", label:"⚑ Red flags"+((F.length+U.length)?` (${F.length+U.length})`:''), render:b=>{ b.innerHTML=flagsHTML(); } },
+  ], { title:"Position detail", active:(F.length||U.length)?"flags":"pay" });
   loadTrialBalance();
 }
 
