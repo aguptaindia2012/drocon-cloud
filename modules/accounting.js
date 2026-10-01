@@ -283,11 +283,26 @@ async function listPayables(){
   if(error){ $("emBody").innerHTML='<div class="card">'+esc(error.message)+'</div>'; return; }
   const outstanding=rows.filter(x=>x.balance>0.005).reduce((s,x)=>s+x.balance,0);
   const list=rows.filter(x=>!_payOnlyDue || x.balance>0.005);
+  // vendor-wise summary
+  const byVendor={};
+  rows.forEach(x=>{ const key=x.p.vendor_id||("name:"+(x.vendor_name||"")); const o=byVendor[key]||(byVendor[key]={name:x.vendor_name||"(unknown)", inv:0, paid:0, credit:0, contra:0, due:0});
+    o.inv+=num(x.p.total); o.paid+=x.paid; o.credit+=x.credit; o.contra+=num(x.contra||0); o.due+=Math.max(0,x.balance); });
+  const vRows=Object.values(byVendor).sort((a,b)=>b.due-a.due || b.inv-a.inv);
+  const tInv=rows.reduce((s,x)=>s+num(x.p.total),0), tPaid=rows.reduce((s,x)=>s+x.paid,0),
+        tCred=rows.reduce((s,x)=>s+x.credit,0), tContra=rows.reduce((s,x)=>s+num(x.contra||0),0);
   $("emBody").innerHTML=`
     <div class="statrow">
       <div class="stat" style="background:#fbe0de"><div class="n" style="color:#a3322a">${money(outstanding)}</div><div class="l">Payable outstanding</div></div>
       <div class="stat"><div class="n">${rows.filter(x=>x.balance>0.005).length}</div><div class="l">Open invoices</div></div>
+      <div class="stat"><div class="n">${vRows.filter(v=>v.due>0.005).length}</div><div class="l">Vendors with dues</div></div>
     </div>
+    <details class="card" style="margin-bottom:8px" open><summary style="cursor:pointer;font-weight:600">Vendor-wise payables</summary>
+      <div style="overflow:auto;margin-top:8px"><table><thead><tr><th>Vendor</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Credit</th><th class="num">Settled</th><th class="num">Outstanding</th></tr></thead>
+      <tbody>${vRows.map(v=>`<tr><td><b>${esc(v.name)}</b></td><td class="num">${money(v.inv)}</td><td class="num">${money(v.paid)}</td><td class="num">${v.credit>0.005?money(v.credit):'—'}</td><td class="num">${v.contra>0.005?money(v.contra):'—'}</td><td class="num" style="${v.due>0.005?'font-weight:700;color:#a3322a':''}">${money(v.due)}</td></tr>`).join("")}
+        <tr style="border-top:2px solid var(--line)"><td><b>Total</b></td><td class="num"><b>${money(tInv)}</b></td><td class="num"><b>${money(tPaid)}</b></td><td class="num"><b>${money(tCred)}</b></td><td class="num"><b>${money(tContra)}</b></td><td class="num"><b>${money(outstanding)}</b></td></tr>
+      </tbody></table></div>
+      <p class="muted" style="font-size:12px">Grouped by vendor · Outstanding = invoiced − paid − credit − settled. Sorted by outstanding.</p>
+    </details>
     <div class="row wrap" style="margin-bottom:8px">
       <label class="muted" style="display:inline"><input type="checkbox" id="pyOnlyDue" style="width:auto" ${_payOnlyDue?'checked':''}> only with balance</label>
       <div class="spacer"></div><span class="muted">Record part or full payments; each one lands on the Day Book.</span></div>

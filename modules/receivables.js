@@ -54,6 +54,11 @@ async function load(){
   const totInvoiced=rows.reduce((s,x)=>s+x.gross,0);
   const totReceived=rows.reduce((s,x)=>s+x.paid,0);
   const totSettled=rows.reduce((s,x)=>s+x.settled,0);
+  // client-wise summary
+  const byClient={};
+  rows.forEach(x=>{ const key=x.r.party_id||("name:"+(x.party||"")); const o=byClient[key]||(byClient[key]={name:x.party||"(unnamed)", inv:0, rec:0, set:0, due:0});
+    o.inv+=x.gross; o.rec+=x.paid; o.set+=x.settled; o.due+=Math.max(0,x.balance); });
+  const clientRows=Object.values(byClient).sort((a,b)=>b.due-a.due || b.inv-a.inv);
   const totCredit=rows.reduce((s,x)=>s+x.credit,0);
   // "advances" = money received/credited BEYOND the invoice value (a negative balance).
   // These are the rows that make Receivable look bigger than Invoiced − Received,
@@ -192,6 +197,13 @@ async function load(){
         <tr style="border-top:2px solid var(--green)"><td><b>Total (all years)</b></td><td class="num"><b>${money(totInvoiced)}</b></td><td class="num"><b>${money(totReceived)}</b></td><td class="num" style="font-weight:700;color:var(--green)"><b>${money(totReceivable)}</b></td><td class="num" style="${overdue>0?'color:#a3322a;font-weight:700':''}"><b>${overdue}</b></td></tr>
       </tbody></table></div>
       <p class="muted">Grouped by the <b>invoice date's</b> financial year (Apr–Mar). <b>Received</b> and <b>Still owed</b> are amounts against invoices raised in that year, so they reconcile within the year. Pending invoicing (un-billed acre work) is not date-tagged and is excluded here.</p>
+    </div>
+    <div class="card"><h3>Client-wise receivables${entity?` — ${esc(entity)}`:''}</h3>
+      <div style="overflow:auto"><table><thead><tr><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Settled</th><th class="num">Outstanding</th></tr></thead>
+      <tbody>${clientRows.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${money(c.inv)}</td><td class="num">${money(c.rec)}</td><td class="num">${c.set>0.005?money(c.set):'—'}</td><td class="num" style="${c.due>0.005?'font-weight:700;color:var(--green)':''}">${money(c.due)}</td></tr>`).join("")}
+        <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td><td class="num"><b>${money(totInvoiced)}</b></td><td class="num"><b>${money(totReceived)}</b></td><td class="num"><b>${money(totSettled)}</b></td><td class="num"><b>${money(totReceivable)}</b></td></tr>
+      </tbody></table></div>
+      <p class="muted">Grouped by client · Outstanding = invoiced − credit notes − received − settled. Sorted by outstanding.</p>
     </div>
     <div class="card"><h3>By revenue category &amp; financial year${entity?` — ${esc(entity)}`:''}</h3>
       <div style="overflow:auto"><table><thead>
