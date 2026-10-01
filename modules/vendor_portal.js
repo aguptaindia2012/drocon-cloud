@@ -64,8 +64,8 @@ async function vendorDashboard(){
       <div class="stat" style="${num(bill.due_to_drocon)>0?'background:#fbe0de':''}"><div class="n" style="${num(bill.due_to_drocon)>0?'color:#a3322a':''}">${money(bill.due_to_drocon)}</div><div class="l">Amount due to DroCon (advances)</div></div>
       <div class="stat"><div class="n">${locs.length}</div><div class="l">Locations</div></div>
     </div>
-    <div class="card"><h3>This week — acres by location &amp; pilot</h3>
-      <p class="muted" style="margin-top:-4px">Last 7 days. A dot (·) means no spray that day.</p>
+    <div id="vdPanel"></div>`;
+  const weekHTML=()=>`<p class="muted" style="margin-top:0">Last 7 days. A dot (·) means no spray that day.</p>
       <div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
       <tbody>
         <tr style="background:var(--charcoal);color:#fff"><td><b>ALL LOCATIONS — daily total</b></td>${dayList.map(d=>`<td class="num"><b>${dayTot[d]?dayTot[d].toFixed(1):'·'}</b></td>`).join("")}<td class="num"><b>${grand.toFixed(1)}</b></td></tr>
@@ -73,23 +73,23 @@ async function vendorDashboard(){
           const locRow=`<tr style="background:var(--grey)"><td><b>${esc(L.name)}</b></td>${dayList.map(d=>`<td class="num">${L.days[d]?L.days[d].toFixed(1):'·'}</td>`).join("")}<td class="num"><b>${tot.toFixed(1)}</b></td></tr>`;
           const pr=Object.keys(L.pilots).sort().map(p=>{ const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
             return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${P[d]!=null?P[d].toFixed(1):'·'}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
-          return locRow+pr; }).join("")}</tbody></table></div></div>
-    <div class="card"><h3>Location summary</h3>
-      <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Started</th><th>Status</th><th class="num">Days</th><th class="num">Acres</th><th class="num">Avg/day</th></tr></thead>
+          return locRow+pr; }).join("")}</tbody></table></div>`;
+  const summaryHTML=()=>`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Started</th><th>Status</th><th class="num">Days</th><th class="num">Acres</th><th class="num">Avg/day</th></tr></thead>
       <tbody>${(summ||[]).map(s=>`<tr><td>${esc(s.location_name||"")}</td><td>${s.start_date?fmtDate(s.start_date):'<span class="muted">—</span>'}</td>
         <td>${s.active?'<span class="chip ok">Active</span>':(s.deactivated_on?('Deactivated '+fmtDate(s.deactivated_on)):'<span class="muted">Inactive</span>')}</td>
-        <td class="num">${s.days_deployed!=null?s.days_deployed:'—'}</td><td class="num">${num(s.acres).toFixed(1)}</td><td class="num">${s.avg_daily!=null?num(s.avg_daily).toFixed(1):'—'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No locations.</td></tr>'}</tbody></table></div></div>
-    <div class="card"><h3>Acre report</h3>
-      <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-vd="month">By Month</button><button class="btn sm" data-vd="loc">By Location</button><button class="btn sm" data-vd="pilot">By Pilot</button></div>
-      <div id="vdDrill"></div></div>`;
+        <td class="num">${s.days_deployed!=null?s.days_deployed:'—'}</td><td class="num">${num(s.acres).toFixed(1)}</td><td class="num">${s.avg_daily!=null?num(s.avg_daily).toFixed(1):'—'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No locations.</td></tr>'}</tbody></table></div>`;
   const dMonthB={get:r=>r.ym,label:ymLabel,sort:"keyDesc",bold:true}, dMonth={get:r=>r.ym,label:ymLabel,sort:"keyDesc"},
         dLoc={get:r=>r.location,sort:"acres",bold:true}, dLocN={get:r=>r.location,sort:"acres"},
         dPil={get:r=>r.pilot,sort:"acres"}, dPilB={get:r=>r.pilot,sort:"acres",bold:true};
   const VIEWS={ month:[[dMonthB,dLocN,dPil],"Month / Location / Pilot"], loc:[[dLoc,dMonth,dPil],"Location / Month / Pilot"], pilot:[[dPilB,dLocN,dMonth],"Pilot / Location / Month"] };
-  function drill(k){ const [defs,hdr]=VIEWS[k]||VIEWS.month; $("vdDrill").innerHTML=vdDrill(drows,defs,"vd"+k,hdr); vdWire($("vdDrill"));
-    document.querySelectorAll("[data-vd]").forEach(b=>b.style.fontWeight=(b.getAttribute("data-vd")===k)?"700":""); }
-  document.querySelectorAll("[data-vd]").forEach(b=>b.addEventListener("click",()=>drill(b.getAttribute("data-vd"))));
-  drill("month");
+  const drillInto=(body,k)=>{ const [defs,hdr]=VIEWS[k]||VIEWS.month; body.innerHTML=vdDrill(drows,defs,"vd"+k,hdr); vdWire(body); };
+  window.OPS.report.panel("vdPanel",[
+    {key:"week",   label:"This week",        render:b=>{ b.innerHTML=weekHTML(); }},
+    {key:"summary",label:"Location summary", render:b=>{ b.innerHTML=summaryHTML(); }},
+    {key:"month",  label:"By Month",   render:b=>drillInto(b,"month")},
+    {key:"loc",    label:"By Location", render:b=>drillInto(b,"loc")},
+    {key:"pilot",  label:"By Pilot",   render:b=>drillInto(b,"pilot")},
+  ],{ title:"Acre views", active:"week" });
 }
 
 /* ---------------------------------------------------------------- VENDOR --- */

@@ -108,8 +108,8 @@ async function clientDashboard(){
       <div class="stat"><div class="n">${locs.length}</div><div class="l">Locations</div></div>
       <div class="stat"><div class="n">${farmers}</div><div class="l">Farmers served</div></div>
     </div>
-    <div class="card"><h3>This week — acres by location &amp; pilot</h3>
-      <p class="muted" style="margin-top:-4px">Last 7 days, all your active locations &amp; pilots. A dot (·) = no spray that day. Underlined numbers have a short-day reason — hover to read it.</p>
+    <div id="cdPanel"></div>`;
+  const weekHTML=()=>`<p class="muted" style="margin-top:0">Last 7 days, all your active locations &amp; pilots. A dot (·) = no spray that day. Underlined numbers have a short-day reason — hover to read it.</p>
       <div style="overflow:auto"><table class="tt-skip"><thead><tr><th>Location / Pilot</th>${dayList.map(d=>`<th class="num">${d.slice(5)}</th>`).join("")}<th class="num">Total</th></tr></thead>
       <tbody>
         <tr style="background:var(--charcoal);color:#fff"><td><b>ALL LOCATIONS — daily total</b></td>${dayList.map(d=>`<td class="num"><b>${dayTot[d]?dayTot[d].toFixed(1):'·'}</b></td>`).join("")}<td class="num"><b>${grand.toFixed(1)}</b></td></tr>
@@ -118,9 +118,8 @@ async function clientDashboard(){
           const pr=Object.keys(L.pilots).sort().map(p=>{ const P=L.pilots[p]; const pt=dayList.reduce((s,d)=>s+(P[d]||0),0);
             return `<tr><td style="padding-left:26px">${esc(p)}</td>${dayList.map(d=>`<td class="num${P[d]==null?' muted':''}">${cell(lid,p,d,P[d]!=null?P[d]:null)}</td>`).join("")}<td class="num">${pt.toFixed(1)}</td></tr>`; }).join("");
           return locRow+pr;
-        }).join("")}</tbody></table></div></div>
-    <div class="card"><h3>Location summary</h3>
-      <p class="muted" style="margin-top:-4px">Per location: when spraying started, whether it's still active, days deployed (first spray → deactivation or today), total acres and the average acres per deployed day.</p>
+        }).join("")}</tbody></table></div>`;
+  const summaryHTML=()=>`<p class="muted" style="margin-top:0">Per location: when spraying started, whether it's still active, days deployed (first spray → deactivation or today), total acres and the average acres per deployed day.</p>
       <div style="overflow:auto"><table><thead><tr><th>Location</th><th>Started</th><th>Status</th><th class="num">Days deployed</th><th class="num">Acres</th><th class="num">Avg/day</th></tr></thead>
       <tbody>${(summ||[]).map(s=>`<tr>
         <td>${esc(s.location_name||"")}</td>
@@ -128,23 +127,20 @@ async function clientDashboard(){
         <td>${s.active?'<span class="chip ok">Active</span>':(s.deactivated_on?('Deactivated '+fmtDate(s.deactivated_on)):'<span class="muted">Inactive</span>')}</td>
         <td class="num">${s.days_deployed!=null?s.days_deployed:'—'}</td>
         <td class="num">${num(s.acres).toFixed(1)}</td>
-        <td class="num">${s.avg_daily!=null?num(s.avg_daily).toFixed(1):'—'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No locations assigned.</td></tr>'}</tbody></table></div></div>
-    <div class="card"><h3>Acre report</h3>
-      <p class="muted" style="margin-top:-4px">Expand any row to drill down.</p>
-      <p class="muted" style="margin-top:-8px;font-size:12px">Grouped by month — open the <b>Entries</b> tab for day-by-day detail.</p>
-      <div class="row" style="gap:6px;margin-bottom:8px"><button class="btn sm" data-drill="month">By Month</button><button class="btn sm" data-drill="loc">By Location</button><button class="btn sm" data-drill="pilot">By Pilot</button></div>
-      <div id="cdDrill"></div></div>`;
+        <td class="num">${s.avg_daily!=null?num(s.avg_daily).toFixed(1):'—'}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">No locations assigned.</td></tr>'}</tbody></table></div>`;
   const ym=r=>r.entry_date?r.entry_date.slice(0,7):'?';
   const dMonthB={get:ym,label:ymLabel,sort:"keyDesc",bold:true}, dMonth={get:ym,label:ymLabel,sort:"keyDesc"},
         dLoc={get:r=>r.location,sort:"rev",bold:true}, dLocN={get:r=>r.location,sort:"rev"},
         dPil={get:r=>r.pilot,sort:"acres"}, dPilB={get:r=>r.pilot,sort:"acres",bold:true};
   const VIEWS={ month:[[dMonthB,dLocN,dPil],"Month / Location / Pilot"], loc:[[dLoc,dMonth,dPil],"Location / Month / Pilot"], pilot:[[dPilB,dLocN,dMonth],"Pilot / Location / Month"] };
-  function drill(kind){ const [defs,hdr]=VIEWS[kind]||VIEWS.month;
-    $("cdDrill").innerHTML=drillTable(drows, defs, "d"+kind, hdr); wireDrills($("cdDrill"));
-    document.querySelectorAll("[data-drill]").forEach(b=>b.style.fontWeight=(b.getAttribute("data-drill")===kind)?"700":"");
-  }
-  document.querySelectorAll("[data-drill]").forEach(b=>b.addEventListener("click",()=>drill(b.getAttribute("data-drill"))));
-  drill("month");
+  const drillInto=(body,kind)=>{ const [defs,hdr]=VIEWS[kind]||VIEWS.month; body.innerHTML=drillTable(drows, defs, "d"+kind, hdr); wireDrills(body); };
+  window.OPS.report.panel("cdPanel",[
+    {key:"week",   label:"This week",        render:b=>{ b.innerHTML=weekHTML(); }},
+    {key:"summary",label:"Location summary", render:b=>{ b.innerHTML=summaryHTML(); }},
+    {key:"month",  label:"By Month",   render:b=>drillInto(b,"month")},
+    {key:"loc",    label:"By Location", render:b=>drillInto(b,"loc")},
+    {key:"pilot",  label:"By Pilot",   render:b=>drillInto(b,"pilot")},
+  ],{ title:"Acre views", active:"week" });
 }
 
 /* --------------------------------------------------------------- ENTRIES --- */
