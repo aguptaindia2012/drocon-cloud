@@ -189,7 +189,16 @@ async function load(){
       ${pendShown?`<div class="stat"><div class="n">${money(pendInvoicing)}</div><div class="l">Pending invoicing</div></div>
       <div class="stat" style="background:#e7f0de;border-color:#c9dcb6"><div class="n" style="color:var(--green)">${money(totToReceive)}</div><div class="l">Total still to receive</div></div>`:''}
     </div>
-    <div class="card"><h3>By financial year${entity?` — ${esc(entity)}`:''}</h3>
+    <div class="card"><div class="row wrap" id="rvBtns" style="gap:6px">
+      <button class="btn sm" data-rv-btn="fy">By financial year</button>
+      <button class="btn sm" data-rv-btn="client">Client-wise</button>
+      <button class="btn sm" data-rv-btn="category">By revenue category</button>
+      <button class="btn sm" data-rv-btn="compare">Compare periods</button>
+      <button class="btn sm" data-rv-btn="buildup">Build-up</button>
+      <button class="btn sm" data-rv-btn="trends">Trends &amp; aging</button>
+      <button class="btn sm" data-rv-btn="top">Top outstanding</button>
+    </div></div>
+    <div class="card rvsec" data-rv="fy"><h3>By financial year${entity?` — ${esc(entity)}`:''}</h3>
       <div style="overflow:auto"><table><thead><tr><th>Financial year</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num">Overdue &gt;30d</th></tr></thead>
       <tbody>
         <tr style="background:#e7f0de"><td><b>${fyLabel(curFY)} (current)</b></td><td class="num"><b>${money(fyCur.inv)}</b></td><td class="num">${money(fyCur.rec)}</td><td class="num" style="font-weight:700;color:var(--green)">${money(fyCur.recv)}</td><td class="num" style="${fyCur.over>0?'color:#a3322a;font-weight:700':''}">${fyCur.over}</td></tr>
@@ -198,14 +207,14 @@ async function load(){
       </tbody></table></div>
       <p class="muted">Grouped by the <b>invoice date's</b> financial year (Apr–Mar). <b>Received</b> and <b>Still owed</b> are amounts against invoices raised in that year, so they reconcile within the year. Pending invoicing (un-billed acre work) is not date-tagged and is excluded here.</p>
     </div>
-    <div class="card"><h3>Client-wise receivables${entity?` — ${esc(entity)}`:''}</h3>
+    <div class="card rvsec" data-rv="client"><h3>Client-wise receivables${entity?` — ${esc(entity)}`:''}</h3>
       <div style="overflow:auto"><table><thead><tr><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Settled</th><th class="num">Outstanding</th></tr></thead>
       <tbody>${clientRows.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${money(c.inv)}</td><td class="num">${money(c.rec)}</td><td class="num">${c.set>0.005?money(c.set):'—'}</td><td class="num" style="${c.due>0.005?'font-weight:700;color:var(--green)':''}">${money(c.due)}</td></tr>`).join("")}
         <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td><td class="num"><b>${money(totInvoiced)}</b></td><td class="num"><b>${money(totReceived)}</b></td><td class="num"><b>${money(totSettled)}</b></td><td class="num"><b>${money(totReceivable)}</b></td></tr>
       </tbody></table></div>
       <p class="muted">Grouped by client · Outstanding = invoiced − credit notes − received − settled. Sorted by outstanding.</p>
     </div>
-    <div class="card"><h3>By revenue category &amp; financial year${entity?` — ${esc(entity)}`:''}</h3>
+    <div class="card rvsec" data-rv="category"><h3>By revenue category &amp; financial year${entity?` — ${esc(entity)}`:''}</h3>
       <div style="overflow:auto"><table><thead>
         <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY)} (current)</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY-1)} (last)</th></tr>
         <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th></tr>
@@ -240,7 +249,7 @@ async function load(){
       </tbody></table></div>
       <p class="muted"><b>Click a category</b> to expand the invoices in it (number, client and amounts). Each invoice is placed by its highest-value line's description + HSN/SAC. If one is in the wrong bucket, use <b>Reconcile to</b> to move that invoice — the choice is saved and the totals here (matching the financial-year card above, bar rounding) update. “Auto-detect” clears a manual override.</p>
     </div>
-    <div class="card"><h3>Compare periods — by revenue category${entity?` — ${esc(entity)}`:''}</h3>
+    <div class="card rvsec" data-rv="compare"><h3>Compare periods — by revenue category${entity?` — ${esc(entity)}`:''}</h3>
       <div class="row wrap" style="gap:18px;align-items:flex-end">
         <div><div class="muted" style="font-size:12px;margin-bottom:2px">Period A</div>
           <select id="cmpFyA" style="width:auto">${fyOptStr(curFY)}</select>
@@ -253,7 +262,7 @@ async function load(){
       <div id="catCmpHost" style="margin-top:12px"></div>
       <p class="muted">Pick any two periods — a whole financial year (Apr–Mar) or a single month within one — to compare each category side by side. Δ shows Period A minus Period B on invoiced value.</p>
     </div>
-    <div class="card"><h3>How the receivable is built up</h3>
+    <div class="card rvsec" data-rv="buildup"><h3>How the receivable is built up</h3>
       <table><tbody>
         <tr><td>Total invoiced</td><td class="num">${money(totInvoiced)}</td></tr>
         <tr><td>Less: credit notes</td><td class="num">− ${money(totCredit)}</td></tr>
@@ -269,16 +278,16 @@ async function load(){
       <p class="muted">Receivable counts only invoices with money <b>still owed</b>. It can exceed “invoiced − received” when some invoices are <b>over-collected</b> (received more than billed) — that surplus is added back above and almost always means a payment was logged against the wrong invoice or entered twice. Review those rows below and fix them in <b>Finance → Payment Status</b> or the Invoice.</p>
       ${pendShown?`<p class="muted"><b>Pending invoicing</b> is approved acre work (${pendRows} row${pendRows===1?'':'s'}) not yet turned into an invoice — the value still to be billed and then collected. Client-rate work is shown <b>incl. 18% GST</b> to match invoice values; farmer-rate work is 0% GST. Raise these in <b>Finance → Acre Invoicing</b>. This figure covers all entities and is shown only in the “All” view.</p>`:''}
     </div>
-    ${overpaid.length?`<div class="card"><h3>⚠ Over-collected invoices (received &gt; billed) — likely bad data</h3>
+    ${overpaid.length?`<div class="card rvsec" data-rv="buildup"><h3>⚠ Over-collected invoices (received &gt; billed) — likely bad data</h3>
       <div style="overflow:auto"><table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Billed</th><th class="num">Credit</th><th class="num">Received</th><th class="num">Over by</th></tr></thead>
       <tbody>${overpaid.map(x=>`<tr><td>${esc(x.r.entity||'DCB')}</td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td><td class="num">${money(x.gross)}</td><td class="num">${money(x.credit)}</td><td class="num">${money(x.paid)}</td><td class="num" style="color:#a3322a;font-weight:700">${money(-x.balance)}</td></tr>`).join("")}</tbody></table></div></div>`:''}
-    <div class="row" id="recReport" style="margin-bottom:8px"></div>
-    <div class="card"><h3>Monthly credit in market (invoiced)</h3>${window.OPS.report.canvas("recCredit",560,240)}</div>
-    <div class="card"><h3>Flow of funds — payments received by month</h3>${window.OPS.report.canvas("recFunds",560,240)}</div>
-    <div class="card"><h3>Invoicing, receipts &amp; receivable — trend</h3>
+    <div class="row rvsec" data-rv="trends" id="recReport" style="margin-bottom:8px"></div>
+    <div class="card rvsec" data-rv="trends"><h3>Monthly credit in market (invoiced)</h3>${window.OPS.report.canvas("recCredit",560,240)}</div>
+    <div class="card rvsec" data-rv="trends"><h3>Flow of funds — payments received by month</h3>${window.OPS.report.canvas("recFunds",560,240)}</div>
+    <div class="card rvsec" data-rv="trends"><h3>Invoicing, receipts &amp; receivable — trend</h3>
       <p class="muted" style="margin-top:-4px">Cumulative as-of-date totals are on each legend label. <b>Click a legend entry to show/hide that line</b> — the per-month lines (dashed) are hidden by default.</p>
       ${window.OPS.report.canvas("recTimeline",640,280)}</div>
-    <div class="card"><h3>Receivables aging</h3>
+    <div class="card rvsec" data-rv="trends"><h3>Receivables aging</h3>
       <table><thead><tr><th>0–30 days</th><th>31–60 days</th><th>61–90 days</th><th>&gt; 90 days</th></tr></thead>
       <tbody><tr>
         <td>${money(buckets["0-30"])}</td><td>${money(buckets["31-60"])}</td>
@@ -287,7 +296,7 @@ async function load(){
       </tr></tbody></table>
       ${window.OPS.report.canvas("recAging",560,220)}
     </div>
-    <div class="card"><h3>Top outstanding</h3>
+    <div class="card rvsec" data-rv="top"><h3>Top outstanding</h3>
       <table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Balance</th><th class="num">Age (d)</th></tr></thead>
       <tbody>${rows.filter(x=>x.balance>0).sort((a,b)=>b.age-a.age).slice(0,15).map(x=>`<tr><td>${esc(x.r.entity||'DCB')}</td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td><td class="num" style="font-weight:700">${money(x.balance)}</td><td class="num" style="${x.age>30?'color:#a3322a;font-weight:700':''}">${x.age}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">Nothing outstanding.</td></tr>'}</tbody></table>
     </div>`;
@@ -384,6 +393,18 @@ async function load(){
     {heading:"Receivables aging", image:window.OPS.report.img("recAging"), table:{headers:["0–30","31–60","61–90",">90"], rows:[[money(buckets["0-30"]),money(buckets["31-60"]),money(buckets["61-90"]),money(buckets[">90"])]]}},
     {heading:"Outstanding invoices", table:{headers:["Entity","Invoice","Date","Client","Balance","Age (d)"], rows:due.map(x=>[x.r.entity||"DCB",x.r.number,fmtDate(x.r.doc_date),x.party,money(x.balance),x.age])}},
   ]));
+
+  // consolidated views: one section visible at a time (keeps all wiring intact)
+  const RV_KEY="dcb_rv_view", rvKeys=["fy","client","category","compare","buildup","trends","top"];
+  function rvShow(k){
+    $("rHost").querySelectorAll("[data-rv]").forEach(el=>{ el.style.display=(el.getAttribute("data-rv")===k)?"":"none"; });
+    $("rHost").querySelectorAll("[data-rv-btn]").forEach(b=>{ const on=b.getAttribute("data-rv-btn")===k; b.classList.toggle("green",on); b.style.fontWeight=on?"700":""; });
+    try{ localStorage.setItem(RV_KEY,k); }catch(e){}
+    setTimeout(()=>{ try{ window.dispatchEvent(new Event("resize")); }catch(e){} }, 30);  // resize charts now visible
+  }
+  $("rHost").querySelectorAll("[data-rv-btn]").forEach(b=>b.addEventListener("click",()=>rvShow(b.getAttribute("data-rv-btn"))));
+  let rvInit; try{ rvInit=localStorage.getItem(RV_KEY); }catch(e){}
+  rvShow(rvKeys.includes(rvInit)?rvInit:"fy");
 }
 
 /* ---------- import invoice tracker (DCB + IBS) — used by the Finance Payment Status tool ---------- */
