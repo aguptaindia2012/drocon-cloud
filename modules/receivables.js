@@ -29,25 +29,31 @@ async function load(){
   const entity=window.OPS._recEntity||"";
   let invQ=sb().from("documents").select("*").eq("doc_type","invoice").order("doc_date",{ascending:false});
   if(entity) invQ=invQ.eq("entity",entity);
-  const [{data:invs},{data:cns},{data:pays}]=await Promise.all([
+  const [{data:invs},{data:cns},{data:pays},{data:sets}]=await Promise.all([
     invQ,
     sb().from("documents").select("id,number,related_doc_id,totals").eq("doc_type","credit_note"),
-    sb().from("payments").select("*") ]);
-  const paidByDoc={}, creditByInv={};
+    sb().from("payments").select("*"),
+    sb().from("settlements").select("amount,a_type,a_id,b_type,b_id") ]);
+  const paidByDoc={}, creditByInv={}, settledByDoc={};
   (pays||[]).forEach(p=>{ paidByDoc[p.document_id]=(paidByDoc[p.document_id]||0)+num(p.amount); });
   (cns||[]).forEach(c=>{ if(c.related_doc_id) creditByInv[c.related_doc_id]=(creditByInv[c.related_doc_id]||0)+num((c.totals||{}).total); });
+  // contra settlements (this receivable netted against a payable — no cash moved)
+  (sets||[]).forEach(s=>{ if(s.a_type==="client_invoice") settledByDoc[s.a_id]=(settledByDoc[s.a_id]||0)+num(s.amount);
+                          if(s.b_type==="client_invoice") settledByDoc[s.b_id]=(settledByDoc[s.b_id]||0)+num(s.amount); });
 
   const rows=(invs||[]).map(r=>{
     const gross=num((r.totals||{}).total); const credit=creditByInv[r.id]||0; const paid=paidByDoc[r.id]||0;
-    const balance=Math.round((gross-credit-paid)*100)/100;
+    const settled=settledByDoc[r.id]||0;
+    const balance=Math.round((gross-credit-paid-settled)*100)/100;
     const age = balance>0 ? daysBetween(r.doc_date) : 0;
-    const status = balance<=0.01 ? "paid" : (paid>0||credit>0 ? "partial" : "issued");
-    return { r, gross, credit, paid, balance, age, status, party:((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"" };
+    const status = balance<=0.01 ? "paid" : ((paid>0||credit>0||settled>0) ? "partial" : "issued");
+    return { r, gross, credit, paid, settled, balance, age, status, party:((r.party_snapshot||{}).firmName)||((r.party_snapshot||{}).name)||"" };
   });
 
   const totReceivable=rows.reduce((s,x)=>s+Math.max(0,x.balance),0);
   const totInvoiced=rows.reduce((s,x)=>s+x.gross,0);
   const totReceived=rows.reduce((s,x)=>s+x.paid,0);
+  const totSettled=rows.reduce((s,x)=>s+x.settled,0);
   const totCredit=rows.reduce((s,x)=>s+x.credit,0);
   // "advances" = money received/credited BEYOND the invoice value (a negative balance).
   // These are the rows that make Receivable look bigger than Invoiced − Received,
@@ -240,7 +246,8 @@ async function load(){
         <tr><td>Total invoiced</td><td class="num">${money(totInvoiced)}</td></tr>
         <tr><td>Less: credit notes</td><td class="num">− ${money(totCredit)}</td></tr>
         <tr><td>Less: amount received</td><td class="num">− ${money(totReceived)}</td></tr>
-        <tr style="border-top:2px solid var(--line)"><td>= Net of all invoices</td><td class="num">${money(totInvoiced-totCredit-totReceived)}</td></tr>
+        ${totSettled>0?`<tr><td>Less: settled against payables (contra, no cash)</td><td class="num">− ${money(totSettled)}</td></tr>`:''}
+        <tr style="border-top:2px solid var(--line)"><td>= Net of all invoices</td><td class="num">${money(totInvoiced-totCredit-totReceived-totSettled)}</td></tr>
         <tr><td>Add back: advances / over-collections${totAdvance>0?' <span class="chip rejected">check data</span>':''}</td><td class="num">+ ${money(totAdvance)}</td></tr>
         <tr style="border-top:2px solid var(--green)"><td><b>= Total receivable (still owed)</b></td><td class="num"><b>${money(totReceivable)}</b></td></tr>
         ${pendShown?`<tr><td>Add: pending invoicing — farmer rate (Bill of Supply, 0% GST)</td><td class="num">+ ${money(pendFarmer)}</td></tr>
