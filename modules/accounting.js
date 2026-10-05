@@ -646,7 +646,11 @@ function advForm(rec){
         <div class="field"><label>Date</label><input type="date" id="sv_on" value="${todayISO()}"></div>
         <div class="field"><label>Note</label><input id="sv_note"></div>
       </div>
-      <div class="small-note">A <b>repayment</b> also needs the money-in entry on the Day Book for the day it was returned.</div>
+      <div class="fgrid" id="sv_cashrow" style="display:none">
+        <div class="field"><label>Deposited into *</label><select id="sv_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("")}</select>
+          <div class="small-note">The account the returned money landed in — this books the money-in on that day's Day Book.</div></div>
+        <div class="field"><label>Mode</label><select id="sv_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
+      </div>
       <div class="row" style="margin-top:8px"><button class="btn green" id="svGo">Record</button></div>
       <div class="err" id="svErr"></div></div>`:''}`;
   $("avBack").addEventListener("click",advances); $("avCancel").addEventListener("click",advances);
@@ -664,14 +668,30 @@ function advForm(rec){
     if(tErr){ $("avErr").textContent="Advance saved, but the payment could not be recorded: "+tErr.message; return; }
     window.OPS.audit("created","advances",ins.id,money(amt)); window.OPS.flashTop("Advance issued ✓"); advances();
   }));
-  if($("svGo")) $("svGo").addEventListener("click",async()=>{
-    const amt=num($("sv_amt").value); if(!(amt>0)){ $("svErr").textContent="Enter an amount."; return; }
+  // show the deposit account/mode only for a cash repayment
+  if($("sv_kind")){
+    const toggleCash=()=>{ if($("sv_cashrow")) $("sv_cashrow").style.display = $("sv_kind").value==="repayment" ? "" : "none"; };
+    $("sv_kind").addEventListener("change",toggleCash); toggleCash();
+  }
+  if($("svGo")) $("svGo").addEventListener("click",()=>window.OPS.once($("svGo"),async()=>{
+    const kind=$("sv_kind").value, amt=num($("sv_amt").value), on=$("sv_on").value||todayISO();
+    if(!(amt>0)){ $("svErr").textContent="Enter an amount."; return; }
     if(amt>num(e.outstanding)+0.005){ $("svErr").textContent="That is more than the outstanding balance."; return; }
-    const { error }=await sb().rpc("settle_advance",{ p_id:rec.id, p_kind:$("sv_kind").value, p_ref:null,
-      p_amount:amt, p_on:$("sv_on").value||todayISO(), p_note:$("sv_note").value||null });
+    if(kind==="repayment" && !$("sv_acct").value){ $("svErr").textContent="Pick the account the returned money landed in."; return; }
+    // record the accounting of the advance (reduces outstanding, closes if done)
+    const { error }=await sb().rpc("settle_advance",{ p_id:rec.id, p_kind:kind, p_ref:null,
+      p_amount:amt, p_on:on, p_note:$("sv_note").value||null });
     if(error){ $("svErr").textContent=error.message; return; }
+    // a cash repayment also books the money-in (Dr bank · Cr Advances Recoverable)
+    if(kind==="repayment"){
+      const { error:cErr }=await sb().from("cash_txns").insert({ account_id:$("sv_acct").value, direction:"in",
+        txn_date:on, amount:amt, mode:$("sv_mode").value, ref_type:"advance", ref_id:String(rec.id),
+        note:$("sv_note").value||("Advance repayment — "+(e.party_name||"")), created_by:window.OPS.me.id });
+      if(cErr){ $("svErr").textContent="Repayment recorded, but the money-in entry failed — add it manually: "+cErr.message; return; }
+    }
+    window.OPS.audit("advance_"+kind,"advances",rec.id,money(amt));
     window.OPS.flashTop("Recorded ✓"); advances();
-  });
+  }));
 }
 
 /* ========================= POSITION ========================= */
