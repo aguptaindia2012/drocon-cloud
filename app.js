@@ -92,6 +92,7 @@ const TOOLS = [
   { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
   { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
   { key:"payment_status",section:"accounting", label:"Client Receipts", gate:"perm" },
+  { key:"vendor_bills",  section:"accounting", label:"Vendor Bills",    gate:"perm" },
   { key:"pay_hub",       section:"accounting", label:"Payments & Settlements", gate:"perm" },
   { key:"day_book",      section:"accounting", label:"Day Book",              gate:"perm" },
   { key:"ledger",        section:"accounting", label:"Ledger",                gate:"perm" },
@@ -753,6 +754,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "257";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "258";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

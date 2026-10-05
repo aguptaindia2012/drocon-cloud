@@ -874,6 +874,9 @@ async function advanceClear(id, bal, back){
 window.OPS.payFlows = Object.assign(window.OPS.payFlows||{}, { vendorPay: vendorPayById, expensePay: expensePayById, advanceClear });
 
 window.OPS.routes.expense_mgmt = expenseMgmt;
+// Vendor Bills — the supplier-invoice ledger, surfaced as its own Accounting tab
+// (mirrors Client Receipts). Opens Expense Management on the payables view.
+window.OPS.routes.vendor_bills = ()=>{ emMode="payable"; return expenseMgmt(); };
 window.OPS.routes.advances     = advances;
 window.OPS.routes.acct_position = position;
 window.OPS.routes.ledger       = ledger;
