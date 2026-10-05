@@ -171,5 +171,15 @@ function editPayment(x, p, back){
   });
 }
 
+// Launcher for the Payments & Settlements hub: open the client-receipt window
+// for a given invoice id, returning to `back` afterwards.
+async function clientReceiptById(docId, back){
+  const rows=await fetchRows();
+  const x=rows.find(z=>String(z.r.id)===String(docId));
+  if(!x){ window.OPS.flashTop && window.OPS.flashTop("Invoice not found or already cleared"); if(back) back(); return; }
+  recordPayment(x, back||view);
+}
+window.OPS.payFlows = Object.assign(window.OPS.payFlows||{}, { clientReceipt: clientReceiptById });
+
 window.OPS.routes.payment_status = view;
 })();

@@ -811,6 +811,22 @@ async function ledger(){
 }
 
 window.OPS.routes.day_book     = dayBook;
+// Launchers for the Payments & Settlements hub — open the existing windows
+// (which already route through window.OPS.pay) for a given item id.
+async function vendorPayById(id, bal, back){
+  await refs();
+  const { data:rec, error }=await sb().from("payables").select("*, vendor:vendor_id(firm_name,name)").eq("id",id).single();
+  if(error||!rec){ window.OPS.flashTop && window.OPS.flashTop("Bill not found"); if(back) back(); return; }
+  const balance = num(bal)>0 ? num(bal) : num(rec.total);
+  payVendor({ p:rec, paid:0, balance, vendor_name:vName(rec.vendor) }, back);
+}
+async function expensePayById(id, back){
+  await refs();
+  const { data:rec }=await sb().from("expenses").select("total").eq("id",id).single();
+  settle("expense", id, rec?num(rec.total):0, back);
+}
+window.OPS.payFlows = Object.assign(window.OPS.payFlows||{}, { vendorPay: vendorPayById, expensePay: expensePayById });
+
 window.OPS.routes.expense_mgmt = expenseMgmt;
 window.OPS.routes.advances     = advances;
 window.OPS.routes.acct_position = position;
