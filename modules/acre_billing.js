@@ -17,6 +17,7 @@ const CLIENT_GST = 18;
 function withRound(sub, gstTotal){ const raw=sub+gstTotal; const total=Math.round(raw); const roundOff=Math.round((total-raw)*100)/100; return { sub, gstTotal, roundOff, total }; }
 
 let side="farmer", rows=[], farmerBySource={}, sel=new Set(), allLocs=[], selClient=null;
+let onlyPending=true, pendingSet=null, pendingLoading=false;   // location pre-filter
 const F = { from:"", to:"" };
 const partyName = c => (c && (c.firm_name || c.name)) || "";
 
@@ -39,7 +40,11 @@ async function view(){
         <div class="spacer"></div>
         <button class="btn sm" id="abCN">↩ Credit note from an acre bill</button>
       </div>
-      <div style="margin-top:10px"><label style="margin-bottom:6px">Locations</label>
+      <div style="margin-top:10px">
+        <label style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <span>Locations</span>
+          <span class="muted" style="font-weight:400;font-size:12px;white-space:nowrap"><input type="checkbox" id="abPending" style="width:auto" ${onlyPending?'checked':''}> only locations with pending billing</span>
+        </label>
         <div id="abLocs" class="muted" style="border:1px solid var(--line);border-radius:8px;padding:8px;max-height:190px;overflow:auto">Loading locations…</div>
       </div>
       <div class="row wrap" style="margin-top:10px">
@@ -50,18 +55,48 @@ async function view(){
       </div>
     </div>
     <div id="abBody" class="muted">Choose the location(s) and period, then click <b>Open unbilled acres</b>.</div>`;
-  $("abSide").addEventListener("change",()=>{ side=$("abSide").value; sel.clear(); renderLocFilter(); $("abBody").innerHTML='<div class="card muted">Component changed — click <b>Open unbilled acres</b> again.</div>'; });
+  $("abSide").addEventListener("change",()=>{ side=$("abSide").value; sel.clear(); refreshPending(); $("abBody").innerHTML='<div class="card muted">Component changed — click <b>Open unbilled acres</b> again.</div>'; });
   $("abCN").addEventListener("click",creditList);
   $("abLoad").addEventListener("click",()=>{ F.from=$("abFrom").value; F.to=$("abTo").value; side=$("abSide").value; load(); });
-  $("abAll").addEventListener("click",()=>{ usableLocs().forEach(l=>sel.add(String(l.id))); renderLocFilter(); });
+  $("abAll").addEventListener("click",()=>{ shownLocs().forEach(l=>sel.add(String(l.id))); renderLocFilter(); });
   $("abNone").addEventListener("click",()=>{ sel.clear(); renderLocFilter(); });
+  $("abPending").addEventListener("change",()=>{ onlyPending=$("abPending").checked; refreshPending(); });
+  // dates affect what's "pending" — recompute the pre-filter when they change
+  $("abFrom").addEventListener("change",()=>{ if(onlyPending) refreshPending(); });
+  $("abTo").addEventListener("change",()=>{ if(onlyPending) refreshPending(); });
 
   const { data, error }=await sb().from("spray_locations")
     .select("id,name,farmer_rate,client_rate,farmer_bill_to,client_bill_to, fbt:farmer_bill_to(firm_name,name), cbt:client_bill_to(firm_name,name)")
     .order("name");
   if(error){ $("abLocs").innerHTML='<span style="color:#a3322a">'+esc(error.message)+'</span>'; return; }
   allLocs=data||[];
-  renderLocFilter();
+  refreshPending();
+}
+
+/* which location_ids still have UNBILLED acres for the chosen component + period
+   (mirrors load()'s server-side filters); drives the "only pending" pre-filter */
+async function refreshPending(){
+  if(!onlyPending){ pendingSet=null; renderLocFilter(); return; }
+  pendingLoading=true; pendingSet=null; renderLocFilter();
+  const ids=usableLocs().map(l=>l.id);
+  const set=new Set();
+  if(ids.length){
+    const from=$("abFrom")?$("abFrom").value:F.from, to=$("abTo")?$("abTo").value:F.to;
+    let q=sb().from("v_acre_billing").select("location_id").in("location_id",ids);
+    if(from) q=q.gte("entry_date",from);
+    if(to)   q=q.lte("entry_date",to);
+    q = side==="farmer" ? q.is("farmer_doc_id",null).eq("farmer_billed_override",false)
+                        : q.is("client_doc_id",null).eq("client_billed_override",false).gt("client_rate",0);
+    const { data }=await q.range(0,9999);
+    (data||[]).forEach(r=>set.add(String(r.location_id)));
+  }
+  pendingSet=set; pendingLoading=false; renderLocFilter();
+}
+
+/* the locations currently shown (usable, optionally narrowed to pending) */
+function shownLocs(){
+  const ok=usableLocs();
+  return (onlyPending && pendingSet) ? ok.filter(l=>pendingSet.has(String(l.id))) : ok;
 }
 
 /* locations that CAN be billed for the chosen component */
@@ -72,15 +107,19 @@ function usableLocs(){
 }
 function renderLocFilter(){
   const host=$("abLocs"); if(!host) return;
-  const ok=usableLocs(), bad=allLocs.filter(l=>!ok.includes(l));
   if(!allLocs.length){ host.innerHTML='<span style="color:#a3322a">No locations yet — create them under <b>Daily Spray Entry → Locations</b>.</span>'; return; }
+  if(pendingLoading){ host.innerHTML='<span class="muted">Checking which locations have pending billing…</span>'; return; }
+  const ok=shownLocs(), bad=allLocs.filter(l=>!usableLocs().includes(l));
+  const emptyMsg = (onlyPending && pendingSet)
+    ? 'No locations have <b>pending billing</b> for this component'+((F.from||$("abFrom").value||$("abTo").value||F.to)?' in this period':'')+'. Uncheck <b>only locations with pending billing</b> to see all.'
+    : 'No location is set up for this component yet.';
   host.innerHTML = (ok.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px">
       ${ok.map(l=>{ const party = side==="farmer" ? l.fbt : l.cbt; const rate = side==="farmer"?l.farmer_rate:l.client_rate;
         return `<label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:0;padding:3px 4px">
           <input type="checkbox" style="width:auto" data-loc="${l.id}" ${sel.has(String(l.id))?'checked':''}>
           <span><b>${esc(l.name)}</b> <span class="muted">· ${esc(partyName(party))} · ${money(rate)}/acre</span></span></label>`; }).join("")}
-    </div>`:'<span style="color:#a3322a">No location is set up for this component yet.</span>')
-    + (bad.length?`<div class="small-note" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
+    </div>`:'<span style="color:#a3322a">'+emptyMsg+'</span>')
+    + (!onlyPending && bad.length?`<div class="small-note" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
         Not billable for the <b>${side==="farmer"?"farmer":"client"}</b> component (needs a rate above 0 <i>and</i> a billing party on the Location):
         ${bad.map(l=>esc(l.name)).join(", ")}</div>`:'');
   host.querySelectorAll("[data-loc]").forEach(cb=>cb.addEventListener("change",()=>{
