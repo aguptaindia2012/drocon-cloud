@@ -534,6 +534,7 @@ function settle(kind, id, suggested, back){
     const settled=num($("st_amt").value); if(!(settled>0)){ $("stErr").textContent="Enter an amount."; return; }
     const on=$("st_tds").checked, tds=on?num($("st_tdsamt").value):0;
     if(tds<0||tds>settled){ $("stErr").textContent="TDS must be between 0 and the amount settled."; return; }
+    if(stSettleB && stSettleB.flush){ const f=stSettleB.flush(); if(f.err){ $("stErr").textContent=f.err; return; } }
     const settleAmt=stSettleB?stSettleB.total():0;
     if(settleAmt>settled-tds+0.01){ $("stErr").textContent="Settlements exceed the amount after TDS."; return; }
     const cash=Math.round((settled-tds-settleAmt)*100)/100;

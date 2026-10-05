@@ -105,6 +105,9 @@ async function form(opts){
   tape();
 
   $("pf_go").addEventListener("click",()=>window.OPS.once($("pf_go"),async()=>{
+    // commit a settle amount that was typed but not "+Add"ed, so it is never
+    // silently dropped into cash
+    if(settleB.flush){ const f=settleB.flush(); if(f.err){ $("pf_err").textContent=f.err; return; } tape(); }
     const cash=cashVal(), t=tds(), st=settleTot(), c=cleared(), bal=num(item.balance);
     if(!(c>0)){ $("pf_err").textContent="Allocate an amount — cash, a settlement, or TDS."; return; }
     if(c>bal+0.01){ $("pf_err").textContent="That exceeds the balance of "+money(bal)+"."; return; }

@@ -131,6 +131,7 @@ function recordPayment(x, back){
     const settled=num($("pAmt").value); if(settled<=0){ $("pErr").textContent="Enter a positive amount."; return; }
     const on=$("pTds").checked; const tds=on?num($("pTdsAmt").value):0;
     if(tds<0 || tds>settled){ $("pErr").textContent="TDS must be between 0 and the amount settled."; return; }
+    if(settleB && settleB.flush){ const f=settleB.flush(); if(f.err){ $("pErr").textContent=f.err; return; } }
     const settleAmt=settleB?settleB.total():0;
     if(settleAmt>settled-tds+0.01){ $("pErr").textContent="Settlements exceed the amount after TDS."; return; }
     const cash=Math.round((settled-tds-settleAmt)*100)/100;

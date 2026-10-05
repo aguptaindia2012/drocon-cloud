@@ -55,14 +55,36 @@ function block(hostId, aItem){
       <button class="btn sm ghost" data-rm="${ix}" type="button">✕</button></div>`).join("");
     $(hostId+"_list").querySelectorAll("[data-rm]").forEach(b=>b.addEventListener("click",()=>{ lines.splice(+b.getAttribute("data-rm"),1); draw(); if(host._onchange) host._onchange(); }));
   }
-  $(hostId+"_add").addEventListener("click",()=>{
-    const ix=$(hostId+"_sel").value; const amt=num($(hostId+"_amt").value);
-    if(ix===""||!(amt>0)){ return; }
-    const b=items[+ix];
-    if(amt>num(b.balance)+0.01){ alert("That exceeds the item's balance of "+money(b.balance)+"."); return; }
-    lines.push({ b, amt }); $(hostId+"_amt").value=""; draw(); if(host._onchange) host._onchange();
-  });
-  return { lines, total:()=>lines.reduce((s,l)=>s+num(l.amt),0), onChange:(fn)=>{ host._onchange=fn; } };
+  // Commit whatever is currently typed in the select+amount as a line.
+  // Returns {ok} / {err} / {empty:true}. `flush()` calls this before save so a
+  // typed-but-not-"+Add"ed amount is never silently dropped into cash.
+  function commitPending(){
+    const ixRaw=$(hostId+"_sel").value, amt=num($(hostId+"_amt").value);
+    if(ixRaw==="" && !(amt>0)) return { empty:true };
+    if(ixRaw===""){ return { err:"Pick an item to settle against (or clear the ₹ amount)." }; }
+    if(!(amt>0)){ return { err:"Enter a settlement amount (or clear the selection)." }; }
+    const b=items[+ixRaw];
+    if(amt>num(b.balance)+0.01){ return { err:"That exceeds the item's balance of "+money(b.balance)+"." }; }
+    lines.push({ b, amt }); $(hostId+"_amt").value=""; $(hostId+"_sel").value=""; draw();
+    if(host._onchange) host._onchange();
+    return { ok:true };
+  }
+  $(hostId+"_add").addEventListener("click",()=>{ const r=commitPending(); if(r.err) alert(r.err); });
+  // Enter in the amount box also adds the line.
+  $(hostId+"_amt").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const r=commitPending(); if(r.err) alert(r.err); } });
+  // visual nudge while an amount sits un-added
+  const nudge=()=>{ const pend=$(hostId+"_sel").value!=="" || num($(hostId+"_amt").value)>0;
+    $(hostId+"_add").classList.toggle("green", pend); };
+  $(hostId+"_sel").addEventListener("change",nudge); $(hostId+"_amt").addEventListener("input",nudge);
+  return {
+    lines,
+    total:()=>lines.reduce((s,l)=>s+num(l.amt),0),
+    onChange:(fn)=>{ host._onchange=fn; },
+    // true if an amount/selection is typed but not yet added as a line
+    hasPending:()=> $(hostId+"_sel").value!=="" || num($(hostId+"_amt").value)>0,
+    // commit a pending entry before save; returns {ok}|{err}|{empty}
+    flush:()=>commitPending()
+  };
 }
 // apply the collected settlement lines for initiator aItem
 async function saveLines(aItem, lines, date, from){
