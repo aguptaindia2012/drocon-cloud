@@ -704,7 +704,9 @@ async function position(){
     sb().from("cash_txns").select("txn_date,amount,tds_amount").eq("ref_type","payable").limit(5000)
   ]);
   loadBankBalances();
-  const P=(pay.data||[]), R=(rec.data||[]).filter(r=>num(r.balance)>0.01), A=(adv.data||[]);
+  // Hide fully-settled rows (incl. no-cash contra settlements, which leave the
+  // row's status unchanged but drop its balance/outstanding to ~0).
+  const P=(pay.data||[]).filter(r=>num(r.balance)>0.01), R=(rec.data||[]).filter(r=>num(r.balance)>0.01), A=(adv.data||[]).filter(r=>num(r.outstanding)>0.01);
   const F=(flag.data||[]), U=(uncl.data||[]);
   const tp=P.reduce((s,r)=>s+num(r.balance),0), tr=R.reduce((s,r)=>s+num(r.balance),0), ta=A.reduce((s,r)=>s+num(r.outstanding),0);
   const bucket=d=>d<=30?'0–30':d<=60?'31–60':d<=90?'61–90':'>90';
