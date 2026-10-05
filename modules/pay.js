@@ -31,31 +31,35 @@ async function form(opts){
   const m=$("main"); const item=opts.item; const dir=opts.dir;
   const inWord = dir==='in' ? 'received into' : 'paid from';
   const cashWord = dir==='in' ? 'in' : 'out';
+  const showCash = !opts.hideCash;   // advances settle-only: no cash / no TDS
+  const showTds  = !opts.hideTds;
   m.innerHTML=`<button class="btn sm" id="pfBack">← Back</button>
     <div class="card" style="margin-top:12px;max-width:560px">
       <h1>${esc(opts.title||(dir==='in'?'Collect payment':'Record payment'))}</h1>
       <p class="muted">${esc(item.party||'')} · ${esc(item.label||'')} · Balance <b>${money(item.balance)}</b></p>
-      <div class="callout">Clear this ${dir==='in'?'receivable':'bill'} with any mix of <b>cash</b>, a <b>settlement</b>
-        against an item owed the other way (no cash moves), and <b>TDS</b>. Nothing is pre-filled as cash — allocate each part explicitly.</div>
+      <div class="callout">${ showCash
+        ? `Clear this ${dir==='in'?'receivable':'bill'} with any mix of <b>cash</b>, a <b>settlement</b>
+           against an item owed the other way (no cash moves)${showTds?`, and <b>TDS</b>`:''}. Nothing is pre-filled as cash — allocate each part explicitly.`
+        : `Settle this ${dir==='in'?'advance':'item'} against something owed the other way — no cash moves. Record cash on its own page.` }</div>
 
       <div class="field full" id="pf_settle"></div>
 
-      <label style="font-size:12px;font-weight:700;display:block;margin:12px 0 4px">
+      ${ showTds ? `<label style="font-size:12px;font-weight:700;display:block;margin:12px 0 4px">
         <input type="checkbox" id="pf_tdschk" style="width:auto"> ${dir==='in'?'Client deducted TDS':'We deducted TDS'}</label>
       <div class="row" id="pf_tdsrow" style="gap:6px;display:none">
         <input id="pf_tdspct" type="number" step="any" placeholder="TDS %" style="max-width:100px">
         <input id="pf_tdsamt" type="number" step="any" placeholder="TDS ₹" style="max-width:130px">
         <span class="muted" style="align-self:center;font-size:12px">defaults to %×balance — edit for a partial clear</span>
-      </div>
+      </div>` : `` }
 
-      <label style="font-size:12px;font-weight:700;display:block;margin:12px 0 4px">Cash ${cashWord}
+      ${ showCash ? `<label style="font-size:12px;font-weight:700;display:block;margin:12px 0 4px">Cash ${cashWord}
         <span class="hint" style="font-weight:400;color:var(--muted)">(money that actually moves through an account)</span></label>
       <div class="row" style="gap:6px;flex-wrap:wrap">
         <input id="pf_cash" type="number" step="any" placeholder="₹ amount" style="max-width:150px">
         <button class="btn sm" id="pf_fill" type="button">Fill remaining</button>
         <select id="pf_acct" style="max-width:230px"><option value="">— ${inWord} —</option></select>
         <select id="pf_mode" style="max-width:140px">${(opts.modes||["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"]).map(x=>`<option>${esc(x)}</option>`).join("")}</select>
-      </div>
+      </div>` : `` }
 
       <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">
         <div><label style="font-size:11px;color:var(--muted);display:block">Date ${dir==='in'?'received':'paid'}</label>
@@ -75,14 +79,16 @@ async function form(opts){
   const settleB = window.OPS.settle.block("pf_settle",
     { type:item.type, id:item.id, label:item.label, side:item.side });
 
-  // accounts to receive / pay from
-  let accts = (opts.accounts && opts.accounts.length) ? opts.accounts : null;
-  if(!accts){ const { data }=await sb().from("cash_accounts").select("id,name,kind").eq("is_active",true).order("kind"); accts=data||[]; }
-  $("pf_acct").innerHTML=`<option value="">— ${inWord} —</option>`+
-    accts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("");
+  // accounts to receive / pay from (only when a cash leg is shown)
+  if(showCash){
+    let accts = (opts.accounts && opts.accounts.length) ? opts.accounts : null;
+    if(!accts){ const { data }=await sb().from("cash_accounts").select("id,name,kind").eq("is_active",true).order("kind"); accts=data||[]; }
+    $("pf_acct").innerHTML=`<option value="">— ${inWord} —</option>`+
+      accts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("");
+  }
 
-  const tds=()=> $("pf_tdschk").checked ? num($("pf_tdsamt").value) : 0;
-  const cashVal=()=> num($("pf_cash").value);
+  const tds=()=> (showTds && $("pf_tdschk") && $("pf_tdschk").checked) ? num($("pf_tdsamt").value) : 0;
+  const cashVal=()=> showCash && $("pf_cash") ? num($("pf_cash").value) : 0;
   const settleTot=()=> settleB.total();
   const cleared=()=> Math.round((cashVal()+tds()+settleTot())*100)/100;
   function tape(){
@@ -95,13 +101,17 @@ async function form(opts){
         : `<b style="color:#3e6b20">Fully cleared.</b>`);
   }
   settleB.onChange(tape);
-  $("pf_tdschk").addEventListener("change",()=>{ $("pf_tdsrow").style.display=$("pf_tdschk").checked?'flex':'none';
-    if($("pf_tdschk").checked && num($("pf_tdspct").value) && !num($("pf_tdsamt").value))
-      $("pf_tdsamt").value=Math.round(num(item.balance)*num($("pf_tdspct").value))/100; tape(); });
-  $("pf_tdspct").addEventListener("input",()=>{ $("pf_tdsamt").value=Math.round(num(item.balance)*num($("pf_tdspct").value))/100; tape(); });
-  $("pf_tdsamt").addEventListener("input",tape);
-  $("pf_cash").addEventListener("input",tape);
-  $("pf_fill").addEventListener("click",()=>{ const rem=Math.round((num(item.balance)-tds()-settleTot())*100)/100; $("pf_cash").value=rem>0?rem:0; tape(); });
+  if(showTds){
+    $("pf_tdschk").addEventListener("change",()=>{ $("pf_tdsrow").style.display=$("pf_tdschk").checked?'flex':'none';
+      if($("pf_tdschk").checked && num($("pf_tdspct").value) && !num($("pf_tdsamt").value))
+        $("pf_tdsamt").value=Math.round(num(item.balance)*num($("pf_tdspct").value))/100; tape(); });
+    $("pf_tdspct").addEventListener("input",()=>{ $("pf_tdsamt").value=Math.round(num(item.balance)*num($("pf_tdspct").value))/100; tape(); });
+    $("pf_tdsamt").addEventListener("input",tape);
+  }
+  if(showCash){
+    $("pf_cash").addEventListener("input",tape);
+    $("pf_fill").addEventListener("click",()=>{ const rem=Math.round((num(item.balance)-tds()-settleTot())*100)/100; $("pf_cash").value=rem>0?rem:0; tape(); });
+  }
   tape();
 
   $("pf_go").addEventListener("click",()=>window.OPS.once($("pf_go"),async()=>{
@@ -111,10 +121,10 @@ async function form(opts){
     const cash=cashVal(), t=tds(), st=settleTot(), c=cleared(), bal=num(item.balance);
     if(!(c>0)){ $("pf_err").textContent="Allocate an amount — cash, a settlement, or TDS."; return; }
     if(c>bal+0.01){ $("pf_err").textContent="That exceeds the balance of "+money(bal)+"."; return; }
-    if(cash>0.005 && !$("pf_acct").value){ $("pf_err").textContent="Pick the account the cash "+(dir==='in'?'landed in':'went out from')+"."; return; }
+    if(cash>0.005 && showCash && !$("pf_acct").value){ $("pf_err").textContent="Pick the account the cash "+(dir==='in'?'landed in':'went out from')+"."; return; }
     if(t<0){ $("pf_err").textContent="TDS cannot be negative."; return; }
-    const payload={ cleared:c, cash, tds:t, tdsPct:$("pf_tdschk").checked?(num($("pf_tdspct").value)||null):null,
-      account:$("pf_acct").value||null, mode:$("pf_mode").value, date:$("pf_date").value||todayISO(),
+    const payload={ cleared:c, cash, tds:t, tdsPct:(showTds && $("pf_tdschk") && $("pf_tdschk").checked)?(num($("pf_tdspct").value)||null):null,
+      account:showCash && $("pf_acct")?($("pf_acct").value||null):null, mode:showCash && $("pf_mode")?$("pf_mode").value:null, date:$("pf_date").value||todayISO(),
       note:$("pf_note").value||null, settleTotal:st, settleLines:settleB.lines,
       settleItem:{ type:item.type, id:item.id, label:item.label, side:item.side } };
     let r; try{ r=await opts.commit(payload); }catch(e){ $("pf_err").textContent=e.message||String(e); return; }

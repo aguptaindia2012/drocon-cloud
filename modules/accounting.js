@@ -825,7 +825,28 @@ async function expensePayById(id, back){
   const { data:rec }=await sb().from("expenses").select("total").eq("id",id).single();
   settle("expense", id, rec?num(rec.total):0, back);
 }
-window.OPS.payFlows = Object.assign(window.OPS.payFlows||{}, { vendorPay: vendorPayById, expensePay: expensePayById });
+// Settle an advance against something we owe (no cash — cash repayments stay on
+// the Advances page). Opens the shared window with only the Settle block.
+async function advanceClear(id, bal, back){
+  const { data:rec, error }=await sb().from("v_advances_open").select("*").eq("id",id).single();
+  if(error||!rec){ window.OPS.flashTop && window.OPS.flashTop("Advance not found"); if(back) back(); return; }
+  const balance = num(bal)>0 ? num(bal) : num(rec.outstanding);
+  window.OPS.pay.form({
+    dir:"in", hideCash:true, hideTds:true,
+    item:{ type:"advance", id, label:(rec.payee_text||rec.purpose||'advance'),
+      party:(rec.party_name||rec.payee_text||''), balance, side:"receivable" },
+    title:"Settle advance", back,
+    commit: async (p)=>{
+      if(!(p.settleTotal>0)) return { error:"Add a settlement against something we owe (a vendor bill / expense)." };
+      try{ await window.OPS.settle.saveLines(p.settleItem, p.settleLines, p.date, "advance"); }
+      catch(e){ return { error:"Settlement failed: "+e.message }; }
+      const { data:ao }=await sb().from("v_advances_open").select("outstanding").eq("id",id).single();
+      if(ao && num(ao.outstanding)<=0.005) await sb().from("advances").update({ status:'settled' }).eq("id",id);
+      window.OPS.audit("advance_settled","advances",id, money(p.settleTotal));
+    }
+  });
+}
+window.OPS.payFlows = Object.assign(window.OPS.payFlows||{}, { vendorPay: vendorPayById, expensePay: expensePayById, advanceClear });
 
 window.OPS.routes.expense_mgmt = expenseMgmt;
 window.OPS.routes.advances     = advances;
