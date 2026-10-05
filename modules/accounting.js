@@ -499,66 +499,49 @@ function payForm(rec){
   });
 }
 
-/* settle a payable or expense — records the money movement on the chosen date */
-function settle(kind, id, suggested, back){
-  const m=$("main");
-  m.innerHTML=`<button class="btn sm" id="stBack">← Cancel</button>
-    <div class="card" style="margin-top:12px;max-width:520px"><h1>Mark paid</h1>
-    <div class="callout warn">Enter the date the money <b>actually left the account</b> — not the date a cheque was handed over.</div>
-    <div class="fgrid">
-      <div class="field"><label>Account *</label><select id="st_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select></div>
-      <div class="field"><label>Date paid *</label><input type="date" id="st_date" value="${todayISO()}"></div>
-      <div class="field"><label>Amount settled *</label><input type="number" step="0.01" id="st_amt" value="${suggested||''}"></div>
-      <div class="field"><label>Mode</label><select id="st_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
-      <div class="field full"><label style="display:inline"><input type="checkbox" id="st_tds" style="width:auto"> We deducted TDS</label></div>
-      <div class="field"><label>TDS %</label><input id="st_tdspct" type="number" step="any" placeholder="e.g. 2" disabled></div>
-      <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="st_tdsamt" type="number" step="any" value="0" disabled></div>
-      <div class="field full" id="st_settle"></div>
-      <div class="field full"><div class="callout" id="st_split" style="margin:0"></div></div>
-      <div class="field full"><label>Note</label><input id="st_note"></div>
-    </div>
-    <div class="row"><button class="btn green" id="stGo">Record payment</button></div>
-    <div class="err" id="stErr"></div></div>`;
-  $("stBack").addEventListener("click",back);
-  const stItem={ type: kind==="payable"?"vendor_payable":"expense", id:id, label:(kind==="payable"?"vendor invoice":"expense"), side:"payable" };
-  let stSettleB=null;
-  const stSync=()=>{ const on=$("st_tds").checked; $("st_tdspct").disabled=!on; $("st_tdsamt").disabled=!on;
-    const settled=num($("st_amt").value), tds=on?num($("st_tdsamt").value):0, settle=stSettleB?stSettleB.total():0, cash=Math.round((settled-tds-settle)*100)/100;
-    $("st_split").innerHTML = `Clearing <b>${money(settled)}</b> = ${tds>0?('TDS '+money(tds)+' + '):''}${settle>0?('settled '+money(settle)+' + '):''}cash out <b>${money(cash)}</b>.`+(tds>0?' <span class="muted">(TDS Payable.)</span>':''); };
-  stSettleB = window.OPS.settle.block("st_settle", stItem); stSettleB.onChange(stSync);
-  $("st_tds").addEventListener("change",stSync);
-  $("st_amt").addEventListener("input",()=>{ if($("st_tds").checked && num($("st_tdspct").value)) $("st_tdsamt").value=Math.round(num($("st_amt").value)*num($("st_tdspct").value))/100; stSync(); });
-  $("st_tdspct").addEventListener("input",()=>{ $("st_tdsamt").value=Math.round(num($("st_amt").value)*num($("st_tdspct").value))/100; stSync(); });
-  $("st_tdsamt").addEventListener("input",stSync); stSync();
-  $("stGo").addEventListener("click",()=>window.OPS.once($("stGo"),async()=>{
-    const settled=num($("st_amt").value); if(!(settled>0)){ $("stErr").textContent="Enter an amount."; return; }
-    const on=$("st_tds").checked, tds=on?num($("st_tdsamt").value):0;
-    if(tds<0||tds>settled){ $("stErr").textContent="TDS must be between 0 and the amount settled."; return; }
-    if(stSettleB && stSettleB.flush){ const f=stSettleB.flush(); if(f.err){ $("stErr").textContent=f.err; return; } }
-    const settleAmt=stSettleB?stSettleB.total():0;
-    if(settleAmt>settled-tds+0.01){ $("stErr").textContent="Settlements exceed the amount after TDS."; return; }
-    const cash=Math.round((settled-tds-settleAmt)*100)/100;
-    const date=$("st_date").value||todayISO();
-    if(cash>0.005 || tds>0){
-      const { error }=await sb().from("cash_txns").insert({ account_id:$("st_acct").value, direction:"out",
-        txn_date:date, amount:cash, tds_pct:on?(num($("st_tdspct").value)||null):null, tds_amount:tds, mode:$("st_mode").value,
-        ref_type:kind, ref_id:String(id), note:$("st_note").value||null, created_by:window.OPS.me.id });
-      if(error){ $("stErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
+/* settle a payable or expense — now via the shared Payment/Settlement window
+   (pay.js). Posting (cash_txns out) + status recompute stay here. */
+async function settle(kind, id, suggested, back){
+  const type = kind==="payable" ? "vendor_payable" : "expense";
+  // real remaining balance so the window can cap it correctly
+  const [{ data:tx },{ data:se },{ data:exp }]=await Promise.all([
+    sb().from("cash_txns").select("amount,tds_amount").eq("ref_type",kind).eq("ref_id",String(id)),
+    sb().from("settlements").select("amount").or(`and(a_type.eq.${type},a_id.eq.${id}),and(b_type.eq.${type},b_id.eq.${id})`),
+    kind==="expense" ? sb().from("expenses").select("payee_text,bill_no,note").eq("id",id).limit(1) : Promise.resolve({ data:null })
+  ]);
+  const paidPrev=(tx||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0);
+  const settledPrev=(se||[]).reduce((s,t)=>s+num(t.amount),0);
+  let bal=Math.round((num(suggested)-paidPrev-settledPrev)*100)/100; if(!(bal>0)) bal=num(suggested);
+  const e=exp&&exp.length?exp[0]:null;
+  const party = e?(e.payee_text||'') : '';
+  const label = e?(e.bill_no||e.note||'expense') : (kind==="payable"?'vendor invoice':'expense');
+  const stItem={ type, id, label, side:"payable" };
+  window.OPS.pay.form({
+    dir:"out", item:{ ...stItem, party, balance:bal },
+    title:"Mark paid", accounts, back,
+    commit: async (p)=>{
+      if(p.cash>0.005 || p.tds>0){
+        const { error }=await sb().from("cash_txns").insert({ account_id:p.account, direction:"out",
+          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode,
+          ref_type:kind, ref_id:String(id), note:p.note||null, created_by:window.OPS.me.id });
+        if(error) return { error:/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message };
+      }
+      if(p.settleTotal>0){
+        try{ await window.OPS.settle.saveLines(p.settleItem, p.settleLines, p.date, kind==="payable"?"vendor":"expense"); }
+        catch(err){ return { error:"Settlement failed: "+err.message }; }
+      }
+      // status from cumulative cleared (cash + TDS + cross-module settlements)
+      const [{ data:all },settleMap]=await Promise.all([
+        sb().from("cash_txns").select("amount,tds_amount").eq("ref_type",kind).eq("ref_id",String(id)),
+        window.OPS.settle.settledBy(type)
+      ]);
+      const paidTot=(all||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0) + num(settleMap[id]||0);
+      const status = paidTot>=num(suggested)-0.005 ? "paid" : (paidTot>0 ? "part_paid" : "unpaid");
+      const tbl = kind==="payable" ? "payables" : "expenses";
+      await sb().from(tbl).update({ status }).eq("id",id);
+      window.OPS.audit("paid",tbl,id, money(p.cash)+(p.tds>0?(" + TDS "+money(p.tds)):"")+(p.settleTotal>0?(" + settled "+money(p.settleTotal)):""));
     }
-    try{ if(settleAmt>0) await window.OPS.settle.saveLines(stItem, stSettleB.lines, date, kind==="payable"?"vendor":"expense"); }
-    catch(e){ $("stErr").textContent="Settlement failed: "+e.message; return; }
-    // status from cumulative settled (cash + TDS + cross-module settlements)
-    const [{ data:all },settleMap]=await Promise.all([
-      sb().from("cash_txns").select("amount,tds_amount").eq("ref_type",kind).eq("ref_id",String(id)),
-      window.OPS.settle.settledBy(stItem.type)
-    ]);
-    const paidTot=(all||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0) + num(settleMap[id]||0);
-    const status = paidTot>=num(suggested)-0.005 ? "paid" : (paidTot>0 ? "part_paid" : "unpaid");
-    const tbl = kind==="payable" ? "payables" : "expenses";
-    await sb().from(tbl).update({ status }).eq("id",id);
-    window.OPS.audit("paid",tbl,id,money(cash)+(tds>0?(" + TDS "+money(tds)):""));
-    window.OPS.flashTop("Payment recorded ✓"); back();
-  }));
+  });
 }
 
 /* ========================= ADVANCES ========================= */
