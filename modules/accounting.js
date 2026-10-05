@@ -651,7 +651,9 @@ function advForm(rec){
           <div class="small-note">The account the returned money landed in — this books the money-in on that day's Day Book.</div></div>
         <div class="field"><label>Mode</label><select id="sv_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
       </div>
-      <div class="row" style="margin-top:8px"><button class="btn green" id="svGo">Record</button></div>
+      <div class="row" style="margin-top:8px"><button class="btn green" id="svGo">Record</button>
+        <div class="spacer"></div>
+        <button class="btn sm" id="svSettle" title="Offset this advance against a vendor bill or expense we owe — no cash moves">↔ Settle against a bill / expense (no cash)</button></div>
       <div class="err" id="svErr"></div></div>`:''}`;
   $("avBack").addEventListener("click",advances); $("avCancel").addEventListener("click",advances);
   if($("avSave")) $("avSave").addEventListener("click",()=>window.OPS.once($("avSave"),async()=>{
@@ -673,6 +675,8 @@ function advForm(rec){
     const toggleCash=()=>{ if($("sv_cashrow")) $("sv_cashrow").style.display = $("sv_kind").value==="repayment" ? "" : "none"; };
     $("sv_kind").addEventListener("change",toggleCash); toggleCash();
   }
+  // cross-module: settle this advance against a vendor bill / expense (no cash)
+  if($("svSettle")) $("svSettle").addEventListener("click",()=>advanceClear(rec.id, num(e.outstanding), advances));
   if($("svGo")) $("svGo").addEventListener("click",()=>window.OPS.once($("svGo"),async()=>{
     const kind=$("sv_kind").value, amt=num($("sv_amt").value), on=$("sv_on").value||todayISO();
     if(!(amt>0)){ $("svErr").textContent="Enter an amount."; return; }
