@@ -9,7 +9,7 @@
 const { $, esc, num, money, fmtDate, todayISO } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const isApprover = ()=> window.OPS.isAdmin() || (window.OPS.isApprover && window.OPS.isApprover());
-let accounts=[], vendors=[], cats=[], acctId="", theDate=todayISO(), emMode="expense";
+let accounts=[], vendors=[], cats=[], acctId="", theDate=todayISO();
 
 async function refs(){
   if(!accounts.length){
@@ -180,18 +180,27 @@ async function flags(){
 async function expenseMgmt(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Finance &amp; Accounting</div><h1>Expense Management</h1>
-    <div class="row wrap" style="margin:10px 0">
-      <button class="btn sm ${emMode==='expense'?'green':''}" id="emExp">Expenses</button>
-      <button class="btn sm ${emMode==='payable'?'green':''}" id="emPay">Supplier (Vendor) Invoices</button>
-      <div class="spacer"></div>
-      <button class="btn green sm" id="emNew">+ New ${emMode==='expense'?'expense':'supplier invoice'}</button>
-    </div>
+    <div class="callout">Direct expenses (fuel, travel, office, etc.). Supplier/vendor bills live under <b>Vendor Bills</b>.</div>
+    <div class="row wrap" style="margin:10px 0"><div class="spacer"></div>
+      <button class="btn green sm" id="emNew">+ New expense</button></div>
     <div id="emBody" class="muted">Loading…</div>`;
   await refs();
-  $("emExp").addEventListener("click",()=>{ emMode="expense"; expenseMgmt(); });
-  $("emPay").addEventListener("click",()=>{ emMode="payable"; expenseMgmt(); });
-  $("emNew").addEventListener("click",()=>emMode==='expense'?expForm(null):payForm(null));
-  emMode==='expense' ? listExpenses() : listPayables();
+  $("emNew").addEventListener("click",()=>expForm(null));
+  listExpenses();
+}
+
+/* Vendor Bills — the supplier-invoice ledger (its own Accounting tab). */
+async function vendorBills(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Finance &amp; Accounting</div><h1>Vendor Bills</h1>
+    <div class="callout">Supplier / vendor invoices — record payments, settle against receivables, and track balances.
+      Clear anything across parties from <b>Payments &amp; Settlements</b>.</div>
+    <div class="row wrap" style="margin:10px 0"><div class="spacer"></div>
+      <button class="btn green sm" id="vbNew">+ New supplier invoice</button></div>
+    <div id="emBody" class="muted">Loading…</div>`;
+  await refs();
+  $("vbNew").addEventListener("click",()=>payForm(null));
+  listPayables();
 }
 
 async function listExpenses(){
@@ -330,8 +339,8 @@ async function listPayables(){
   // back must rebuild the whole Expense Management page — the payment screens
   // replace all of #main, so refilling #emBody alone would target a dead node.
   $("emBody").querySelectorAll("[data-edit]").forEach(el=>el.addEventListener("click",()=>payForm(find(el.getAttribute("data-edit")).p)));
-  $("emBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payVendor(find(b.getAttribute("data-pay")), expenseMgmt)));
-  $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), expenseMgmt)));
+  $("emBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payVendor(find(b.getAttribute("data-pay")), vendorBills)));
+  $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), vendorBills)));
   $("emBody").querySelectorAll("[data-delp]").forEach(b=>b.addEventListener("click",async()=>{
     const x=find(b.getAttribute("data-delp")); if(!x) return;
     if(!confirm("Delete supplier invoice “"+(x.p.vendor_invoice_no||'(no no.)')+"” for "+x.vendor_name+" ("+money(x.p.total)+")?\n\nThis also reverses its ledger entry. Only invoices with no payments/credits can be deleted.")) return;
@@ -499,7 +508,7 @@ function payForm(rec){
       <div class="spacer"></div>
       ${rec&&rec.status!=='paid'?`<button class="btn blue sm" id="pyPay">Mark paid…</button>`:''}</div>
     <div class="err" id="pyErr"></div></div>`;
-  $("pyBack").addEventListener("click",expenseMgmt); $("pyCancel").addEventListener("click",expenseMgmt);
+  $("pyBack").addEventListener("click",vendorBills); $("pyCancel").addEventListener("click",vendorBills);
   $("pyNewVendor").addEventListener("click",ev=>{ ev.preventDefault(); window.OPS.openTool("vendors"); });
   $("pySave").addEventListener("click",async()=>{
     const amt=num($("py_amt").value), gst=num($("py_gst").value);
@@ -514,13 +523,13 @@ function payForm(rec){
     else { out.created_by=window.OPS.me.id; ({error:err}=await sb().from("payables").insert(out)); }
     if(err){ $("pyErr").textContent=err.message; return; }
     window.OPS.audit(rec?"edited":"created","payables",rec?rec.id:"new",out.vendor_invoice_no||"");
-    window.OPS.flashTop("Saved ✓"); expenseMgmt();
+    window.OPS.flashTop("Saved ✓"); vendorBills();
   });
   if($("pyPay")) $("pyPay").addEventListener("click",async()=>{
     const { data }=await sb().from("cash_txns").select("amount").eq("ref_type","payable").eq("ref_id",String(rec.id));
     const paid=(data||[]).reduce((s,t)=>s+num(t.amount),0);
     const bal=Math.round((num(rec.total)-paid)*100)/100;
-    payVendor({ p:rec, paid, balance:bal, vendor_name:vName(rec.vendor||vendors.find(v=>v.id===rec.vendor_id)) }, expenseMgmt);
+    payVendor({ p:rec, paid, balance:bal, vendor_name:vName(rec.vendor||vendors.find(v=>v.id===rec.vendor_id)) }, vendorBills);
   });
 }
 
@@ -874,9 +883,7 @@ async function advanceClear(id, bal, back){
 window.OPS.payFlows = Object.assign(window.OPS.payFlows||{}, { vendorPay: vendorPayById, expensePay: expensePayById, advanceClear });
 
 window.OPS.routes.expense_mgmt = expenseMgmt;
-// Vendor Bills — the supplier-invoice ledger, surfaced as its own Accounting tab
-// (mirrors Client Receipts). Opens Expense Management on the payables view.
-window.OPS.routes.vendor_bills = ()=>{ emMode="payable"; return expenseMgmt(); };
+window.OPS.routes.vendor_bills = vendorBills;
 window.OPS.routes.advances     = advances;
 window.OPS.routes.acct_position = position;
 window.OPS.routes.ledger       = ledger;
