@@ -205,7 +205,7 @@ async function compoff(){
     <div class="row" style="margin:10px 0"><label style="margin:0">Encash in month</label>
       <input id="coMonth" type="month" value="${ym}" style="width:auto">
       <span class="muted" style="font-size:12px">— daily rate = monthly salary ÷ days in this month</span></div>
-    <div class="callout">A comp-off must be used or encashed before the end of the calendar quarter it was earned in. <b style="color:#a11">Red</b> = already lapsed, <b style="color:#b8860b">amber</b> = expires this quarter — encash it now or remind the employee to take it.</div>
+    <div class="callout">A comp-off <b>carries forward until it is used</b> (as a day off) <b>or encashed</b> — it does not lapse. Encash a balance any time, or let the employee take it as leave (absences are netted against the balance automatically).</div>
     <div id="coBody" class="muted">Loading…</div>`;
   $("coMonth").addEventListener("change",()=>{ window.OPS._hrMonth=$("coMonth").value; compoff(); });
   const [{data:emps},{data:credits},{data:absAll}]=await Promise.all([
@@ -228,13 +228,12 @@ async function compoff(){
   const anyEarned=rows.some(r=>r.earned>0 || r.taken>0);
   $("coBody").innerHTML = anyEarned ? `<div style="overflow:auto"><table><thead><tr>
       <th>Employee</th><th class="num">Earned</th><th class="num">Taken</th><th class="num">Covered</th><th class="num">LOP</th><th class="num">Encashed</th>
-      <th class="num">Available</th><th class="num">Lapsable</th><th></th></tr></thead>
+      <th class="num">Available</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`<tr>
       <td><b>${esc(r.e.name)}</b><br><span class="muted">${esc(r.e.designation||'')}</span></td>
       <td class="num">${r.earned}</td><td class="num">${r.taken}</td><td class="num">${r.covered}</td>
       <td class="num">${r.lop?`<span style="color:#a11;font-weight:700">${r.lop}</span>`:'—'}</td><td class="num">${r.encashed}</td>
       <td class="num"><b>${r.available}</b></td>
-      <td class="num">${r.expiring.length?`<span style="color:#b8860b;font-weight:700">${r.expiring.length}</span>`:'—'}${r.lapsedCount?` <span class="muted" title="already lapsed">(+${r.lapsedCount} lost)</span>`:''}</td>
       <td>${r.available?`<button class="btn sm" data-mng="${r.e.id}">Manage</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
     : '<div class="card muted">No comp-offs or leave yet. Comp-offs appear when someone is marked <b>W</b> (worked on a Sunday/holiday) in <b>Attendance</b>; absences (<b>A</b>) draw them down.</div>';
   $("coBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>manageEmp(rows.find(r=>r.e.id===b.getAttribute("data-mng")))));
@@ -246,10 +245,8 @@ function manageEmp(r){
   const today=todayISO(), qEnd=quarterEnd(today);
   const m=$("main");
   const rowFor=c=>{
-    const lapsed=c.expires_on<today, expiring=!lapsed&&c.expires_on<=qEnd;
-    const tag=lapsed?'<span style="color:#a11;font-weight:700">Lapsed</span>':expiring?'<span style="color:#b8860b;font-weight:700">Expires this quarter</span>':'<span class="muted">Open</span>';
     return `<tr><td>${fmtDate(c.earned_on)}</td><td>${c.source==='sunday'?'Sunday':'Holiday'}</td>
-      <td>${fmtDate(c.expires_on)}</td><td>${tag}</td>
+      <td><span class="muted">Carries forward (no expiry)</span></td>
       <td><button class="btn sm" data-encash="${c.id}">Encash ₹${rate}</button> <button class="btn sm ghost" data-remind="${c.id}">Remind</button></td></tr>`;
   };
   m.innerHTML=`<button class="btn sm" id="coBack">← Back to Comp-offs</button>
@@ -257,8 +254,8 @@ function manageEmp(r){
     <p class="muted">Available comp-offs: <b>${r.available}</b> · encashment daily rate for ${ym}: <b>${money(rate)}</b> (monthly ${money(r.e.monthly_salary)} ÷ ${monthDays(ym)} days)</p>
     <div class="row" style="margin:8px 0"><label style="margin:0">Encash / pay via</label>
       <select id="coMode" style="width:auto"><option>Bank</option><option>UPI</option><option>Cash</option></select>
-      ${(r.lapsed.length+r.expiring.length)?`<button class="btn green sm" id="coEncashAll">Encash all ${r.lapsed.length+r.expiring.length} lapsing</button>`:''}</div>
-    <div style="overflow:auto"><table><thead><tr><th>Earned</th><th>Source</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+      ${r.avail.length?`<button class="btn green sm" id="coEncashAll">Encash all ${r.avail.length}</button>`:''}</div>
+    <div style="overflow:auto"><table><thead><tr><th>Earned</th><th>Source</th><th>Expiry</th><th></th></tr></thead>
       <tbody>${r.avail.map(rowFor).join("")}</tbody></table></div></div>`;
   $("coBack").addEventListener("click",compoff);
   const doEncash=async(credit,mode)=>{
@@ -279,10 +276,10 @@ function manageEmp(r){
   m.querySelectorAll("[data-remind]").forEach(b=>b.addEventListener("click",()=>{
     const c=r.avail.find(x=>x.id===b.getAttribute("data-remind")); if(!c) return;
     window.OPS.audit&&window.OPS.audit("reminded","comp_off",c.id,r.e.name);
-    window.OPS.flashTop("Reminder logged — ask "+r.e.name+" to take the comp-off before "+fmtDate(c.expires_on));
+    window.OPS.flashTop("Reminder logged — ask "+r.e.name+" to take the comp-off as a day off, or encash it.");
   }));
   if($("coEncashAll")) $("coEncashAll").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
-    const list=[...r.lapsed,...r.expiring]; const mode=$("coMode").value;
+    const list=r.avail.slice(); const mode=$("coMode").value;
     if(!confirm("Encash "+list.length+" comp-off(s) for "+r.e.name+" at "+money(rate)+" each = "+money(rate*list.length)+" via "+mode+"?")) return;
     for(const c of list) await doEncash(c,mode);
     window.OPS.flashTop("Encashed "+list.length+" comp-off(s) ✓"); compoff();
