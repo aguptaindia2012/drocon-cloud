@@ -348,59 +348,29 @@ async function recomputePayable(id, total){
   await sb().from("payables").update({ status }).eq("id",id);
 }
 
-/* + Payment against a supplier invoice — mirrors Payment Status */
+/* + Payment against a supplier invoice — now via the shared Payment/Settlement
+   window (window.OPS.pay.form). Posting + status recompute stay here. */
 function payVendor(x, back){
-  const m=$("main");
-  m.innerHTML=`<button class="btn sm" id="vpBack">← Back</button>
-    <div class="card" style="margin-top:12px;max-width:520px"><h1>Record payment</h1>
-    <p class="muted">${esc(x.vendor_name)} · Invoice <b>${esc(x.p.vendor_invoice_no||'(no no.)')}</b> · Balance <b>${money(x.balance)}</b></p>
-    <div class="callout warn">Enter the date the money <b>actually left the account</b> — not the date a cheque was handed over.</div>
-    <div class="fgrid">
-      <div class="field"><label>Amount settled *</label><input type="number" step="0.01" id="vp_amt" value="${x.balance>0?x.balance:''}">
-        <div class="small-note">Bill value being cleared (cash + any TDS we withhold).</div></div>
-      <div class="field"><label>Paid from *</label><select id="vp_acct">${accounts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("")}</select></div>
-      <div class="field full"><label style="display:inline"><input type="checkbox" id="vp_tds" style="width:auto"> We deducted TDS</label></div>
-      <div class="field"><label>TDS %</label><input id="vp_tdspct" type="number" step="any" placeholder="e.g. 2" disabled></div>
-      <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="vp_tdsamt" type="number" step="any" value="0" disabled></div>
-      <div class="field full" id="vp_settle"></div>
-      <div class="field full"><div class="callout" id="vp_split" style="margin:0"></div></div>
-      <div class="field"><label>Date paid *</label><input type="date" id="vp_date" value="${todayISO()}"></div>
-      <div class="field"><label>Mode</label><select id="vp_mode">${["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"].map(x=>`<option>${x}</option>`).join("")}</select></div>
-      <div class="field full"><label>Note</label><input id="vp_note"></div>
-    </div>
-    <div class="row"><button class="btn green" id="vpGo">Record payment</button><button class="btn" id="vpCancel">Cancel</button></div>
-    <div class="err" id="vpErr"></div></div>`;
-  $("vpBack").addEventListener("click",back); $("vpCancel").addEventListener("click",back);
   const vpItem={ type:"vendor_payable", id:x.p.id, label:x.p.vendor_invoice_no||'(no no.)', side:"payable" };
-  let vpSettleB=null;
-  const vpSync=()=>{ const on=$("vp_tds").checked; $("vp_tdspct").disabled=!on; $("vp_tdsamt").disabled=!on;
-    const settled=num($("vp_amt").value), tds=on?num($("vp_tdsamt").value):0, settle=vpSettleB?vpSettleB.total():0, cash=Math.round((settled-tds-settle)*100)/100;
-    $("vp_split").innerHTML = `Clearing <b>${money(settled)}</b> = ${tds>0?('TDS '+money(tds)+' + '):''}${settle>0?('settled '+money(settle)+' + '):''}cash out <b>${money(cash)}</b>.`+(tds>0?' <span class="muted">(TDS to TDS Payable.)</span>':''); };
-  vpSettleB = window.OPS.settle.block("vp_settle", vpItem); vpSettleB.onChange(vpSync);
-  $("vp_tds").addEventListener("change",vpSync);
-  $("vp_amt").addEventListener("input",()=>{ if($("vp_tds").checked && num($("vp_tdspct").value)) $("vp_tdsamt").value=Math.round(num($("vp_amt").value)*num($("vp_tdspct").value))/100; vpSync(); });
-  $("vp_tdspct").addEventListener("input",()=>{ $("vp_tdsamt").value=Math.round(num($("vp_amt").value)*num($("vp_tdspct").value))/100; vpSync(); });
-  $("vp_tdsamt").addEventListener("input",vpSync); vpSync();
-  $("vpGo").addEventListener("click",()=>window.OPS.once($("vpGo"),async()=>{
-    const settled=num($("vp_amt").value); if(!(settled>0)){ $("vpErr").textContent="Enter an amount."; return; }
-    const on=$("vp_tds").checked, tds=on?num($("vp_tdsamt").value):0;
-    if(tds<0||tds>settled){ $("vpErr").textContent="TDS must be between 0 and the amount settled."; return; }
-    const settleAmt=vpSettleB?vpSettleB.total():0;
-    if(settleAmt>settled-tds+0.01){ $("vpErr").textContent="Settlements exceed the amount after TDS."; return; }
-    const cash=Math.round((settled-tds-settleAmt)*100)/100;
-    const date=$("vp_date").value||todayISO();
-    if(cash>0.005 || tds>0){
-      const { error }=await sb().from("cash_txns").insert({ account_id:$("vp_acct").value, direction:"out",
-        txn_date:date, amount:cash, tds_pct:on?(num($("vp_tdspct").value)||null):null, tds_amount:tds, mode:$("vp_mode").value,
-        ref_type:"payable", ref_id:String(x.p.id), note:$("vp_note").value||("Payment — "+(x.p.vendor_invoice_no||"")),
-        created_by:window.OPS.me.id });
-      if(error){ $("vpErr").textContent=/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message; return; }
+  window.OPS.pay.form({
+    dir:"out", item:{ ...vpItem, party:x.vendor_name, balance:x.balance },
+    title:"Record payment", accounts:accounts, back,
+    commit: async (p)=>{
+      if(p.cash>0.005 || p.tds>0){
+        const { error }=await sb().from("cash_txns").insert({ account_id:p.account, direction:"out",
+          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode,
+          ref_type:"payable", ref_id:String(x.p.id), note:p.note||("Payment — "+(x.p.vendor_invoice_no||"")),
+          created_by:window.OPS.me.id });
+        if(error) return { error:/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message };
+      }
+      if(p.settleTotal>0){
+        try{ await window.OPS.settle.saveLines(p.settleItem, p.settleLines, p.date, "vendor"); }
+        catch(e){ return { error:"Settlement failed: "+e.message }; }
+      }
+      await recomputePayable(x.p.id, x.p.total);
+      window.OPS.audit("paid","payables",x.p.id, money(p.cash)+(p.tds>0?(" + TDS "+money(p.tds)):"")+(p.settleTotal>0?(" + settled "+money(p.settleTotal)):""));
     }
-    try{ if(settleAmt>0) await window.OPS.settle.saveLines(vpItem, vpSettleB.lines, date, "vendor"); }
-    catch(e){ $("vpErr").textContent="Settlement failed: "+e.message; return; }
-    await recomputePayable(x.p.id, x.p.total);
-    window.OPS.audit("paid","payables",x.p.id,money(cash)+(tds>0?(" + TDS "+money(tds)):"")); window.OPS.flashTop("Payment recorded ✓"); back();
-  }));
+  });
 }
 
 /* Payments ledger for a supplier invoice — list, edit, delete */
