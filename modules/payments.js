@@ -53,8 +53,8 @@ async function gateCorrection(x, action){
 
 async function view(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Accounting</div><h1>Transaction Recording</h1>
-    <div class="callout">Record client receipts here. Each payment can carry <b>TDS</b> (taken first, on the full value) and can <b>settle against</b> an open item owed the other way (a vendor bill, advance, etc.) before any cash. Editing/deleting a payment is a correction — for non-admins it sends the invoice for <b>re-approval</b>. Vendor/expense/advance/salary payments are recorded from their own pages; all of them can settle across modules too.</div>
+  m.innerHTML=`<div class="eyebrow">Accounting</div><h1>Client Receipts</h1>
+    <div class="callout">The full client-invoice ledger — record receipts, correct past payments, and import the invoice tracker. Each receipt can carry <b>TDS</b> (taken first, on the full value) and can <b>settle against</b> an item owed the other way before any cash. Editing/deleting a receipt is a correction — for non-admins it sends the invoice for <b>re-approval</b>. To clear anything from one place (clients, vendors, expenses, advances) in either direction, use <b>Payments &amp; Settlements</b>.</div>
     <div class="row wrap" style="margin:6px 0">
       <label style="margin:0">Entity</label>
       <select id="pEntity" style="width:auto"><option value="">All</option><option>DCB</option><option>IBS</option></select>
@@ -133,7 +133,7 @@ async function managePayments(x, back){
   // "the other side" of a settlement row, from this invoice's perspective
   const other=s=>(s.a_type==="client_invoice"&&String(s.a_id)===String(x.r.id))?{t:s.b_type,l:s.b_label}:{t:s.a_type,l:s.a_label};
   const reload=async()=>{ const rows=await fetchRows(); const nx=rows.find(z=>String(z.r.id)===String(x.r.id)); managePayments(nx||x, back); };
-  m.innerHTML=`<button class="btn sm" id="pBack">← Back to Transaction Recording</button>
+  m.innerHTML=`<button class="btn sm" id="pBack">← Back to Client Receipts</button>
     <div class="card" style="margin-top:12px">
       <h1>Payments &amp; settlements — ${esc(x.r.number)}</h1>
       <p class="muted">${esc(x.party)} · Invoiced ${money(x.gross)}${x.credit>0.005?(' · Credit '+money(x.credit)):''}${settled>0.005?(' · Settled '+money(settled)):''} · Balance <b>${money(x.balance)}</b></p>
