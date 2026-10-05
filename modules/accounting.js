@@ -258,6 +258,13 @@ const payStatusChip = st => st==='paid'?'<span class="chip paid">Paid</span>'
   : st==='part_paid'?'<span class="chip partial">Part paid</span>'
   : st==='cheque_issued'?'<span class="chip in_review">Cheque issued</span>'
   : '<span class="chip issued">Unpaid</span>';
+// chip that distinguishes a no-cash contra settlement from a cash payment
+const payClearChip = x => {
+  if(x.balance<=0.01) return (num(x.contra||0)>0.005 && x.paid<=0.005) ? '<span class="chip paid">Settled</span>' : '<span class="chip paid">Paid</span>';
+  if((x.paid+x.credit+num(x.contra||0))>0.005) return '<span class="chip partial">Part-cleared</span>';
+  if(x.p.status==='cheque_issued') return '<span class="chip in_review">Cheque issued</span>';
+  return '<span class="chip issued">Unpaid</span>';
+};
 
 // balance = total − payments (cash_txns) − vendor credit notes (payable_credits)
 async function loadPayables(){
@@ -307,14 +314,15 @@ async function listPayables(){
       <label class="muted" style="display:inline"><input type="checkbox" id="pyOnlyDue" style="width:auto" ${_payOnlyDue?'checked':''}> only with balance</label>
       <div class="spacer"></div><span class="muted">Record part or full payments; each one lands on the Day Book.</span></div>
     <div id="pyList">${list.length?`<div style="overflow:auto"><table>
-      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Settled</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
       <tbody>${list.map(x=>`<tr><td><b>${esc(x.vendor_name)}</b></td>
         <td class="clickable" data-edit="${x.p.id}" style="text-decoration:underline">${esc(x.p.vendor_invoice_no||'(no no.)')}</td>
         <td>${fmtDate(x.p.invoice_date)}</td><td>${x.p.due_date?fmtDate(x.p.due_date):'—'}</td>
         <td class="num">${money(x.p.total)}</td><td class="num">${money(x.paid)}</td>
+        <td class="num" style="${num(x.contra||0)>0.005?'color:#9a5b00':''}">${num(x.contra||0)>0.005?money(x.contra):'—'}</td>
         <td class="num">${x.credit>0.005?money(x.credit):'—'}</td>
         <td class="num" style="${x.balance>0.005?'font-weight:700':''}">${money(x.balance)}</td>
-        <td>${payStatusChip(x.p.status)}</td>
+        <td>${payClearChip(x)}</td>
         <td>${x.balance>0.005?`<button class="btn green sm" data-pay="${x.p.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.p.id}">Payments</button>${(window.OPS.canDelete()&&x.paid<=0.005&&x.credit<=0.005&&num(x.contra||0)<=0.005)?` <button class="btn sm" data-delp="${x.p.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No supplier invoices'+(_payOnlyDue?' with a balance':'')+'.</div>'}</div>`;
   $("pyOnlyDue").addEventListener("change",()=>{ _payOnlyDue=$("pyOnlyDue").checked; listPayables(); });
@@ -376,25 +384,35 @@ function payVendor(x, back){
 /* Payments ledger for a supplier invoice — list, edit, delete */
 async function managePayable(x, back){
   const m=$("main");
-  const [{data:txns},{data:creds}]=await Promise.all([
+  const [{data:txns},{data:creds},setts]=await Promise.all([
     sb().from("cash_txns").select("*, acct:account_id(name)").eq("ref_type","payable").eq("ref_id",String(x.p.id)).order("txn_date",{ascending:false}),
-    sb().from("payable_credits").select("*").eq("payable_id",x.p.id).order("credit_date",{ascending:false})
+    sb().from("payable_credits").select("*").eq("payable_id",x.p.id).order("credit_date",{ascending:false}),
+    window.OPS.settle.listFor("vendor_payable", x.p.id)
   ]);
-  const list=txns||[], cList=creds||[];
-  const paid=list.reduce((s,t)=>s+num(t.amount),0), credit=cList.reduce((s,c)=>s+num(c.amount),0);
-  const bal=Math.round((num(x.p.total)-paid-credit)*100)/100;
+  const list=txns||[], cList=creds||[], sList=setts||[];
+  const paid=list.reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0), credit=cList.reduce((s,c)=>s+num(c.amount),0);
+  const settled=sList.reduce((s,z)=>s+num(z.amount),0);
+  const bal=Math.round((num(x.p.total)-paid-credit-settled)*100)/100;
+  // "the other side" of a settlement row, from this bill's perspective
+  const other=s=>(s.a_type==="vendor_payable"&&String(s.a_id)===String(x.p.id))?{t:s.b_type,l:s.b_label}:{t:s.a_type,l:s.a_label};
   m.innerHTML=`<button class="btn sm" id="mpBack">← Back</button>
-    <div class="card" style="margin-top:12px"><h1>Payments — ${esc(x.p.vendor_invoice_no||'(no no.)')}</h1>
-    <p class="muted">${esc(x.vendor_name)} · Invoiced ${money(x.p.total)} · Paid ${money(paid)}${credit>0.005?(' · Credit '+money(credit)):''} · Balance <b>${money(bal)}</b></p>
+    <div class="card" style="margin-top:12px"><h1>Payments &amp; settlements — ${esc(x.p.vendor_invoice_no||'(no no.)')}</h1>
+    <p class="muted">${esc(x.vendor_name)} · Invoiced ${money(x.p.total)} · Paid ${money(paid)}${credit>0.005?(' · Credit '+money(credit)):''}${settled>0.005?(' · Settled '+money(settled)):''} · Balance <b>${money(bal)}</b></p>
     <div class="row wrap" style="margin-bottom:8px"><div class="spacer"></div>
-      ${bal>0.005?'<button class="btn green sm" id="mpAdd">+ Payment</button>':''}
+      ${bal>0.005?'<button class="btn green sm" id="mpAdd">+ Payment / settle</button>':''}
       <button class="btn sm" id="mpCredit">＋ Credit note from vendor</button></div>
-    <h3>Payments</h3>
+    <h3>Cash payments</h3>
     ${list.length?`<div style="overflow:auto"><table><thead><tr><th>Date</th><th class="num">Amount</th><th>From</th><th>Mode</th><th>Note</th><th></th></tr></thead>
-      <tbody>${list.map(t=>`<tr><td>${fmtDate(t.txn_date)}</td><td class="num">${money(t.amount)}</td>
+      <tbody>${list.map(t=>`<tr><td>${fmtDate(t.txn_date)}</td><td class="num">${money(num(t.amount)+num(t.tds_amount))}${num(t.tds_amount)>0?` <span class="muted">(incl TDS ${money(t.tds_amount)})</span>`:''}</td>
         <td>${esc((t.acct&&t.acct.name)||'')}</td><td>${esc(t.mode||'')}</td><td>${esc(t.note||'')}</td>
         <td>${window.OPS.canDelete()||t.created_by===window.OPS.me.id?`<button class="btn sm" data-del="${t.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
-      :'<div class="muted">No payments recorded.</div>'}
+      :'<div class="muted">No cash payments recorded.</div>'}
+    ${sList.length?`<h3 style="margin-top:16px">Settlements <span class="muted" style="font-weight:400;font-size:13px">(no cash — offset against what is owed the other way)</span></h3>
+      <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Settled against</th><th class="num">Amount</th><th></th></tr></thead>
+      <tbody>${sList.map(s=>{ const o=other(s); return `<tr><td>${fmtDate(s.settle_date)}</td>
+        <td><b>${esc(o.l||'')}</b> <span class="muted">(${esc(String(o.t).replace(/_/g,' '))})</span></td>
+        <td class="num" style="color:#9a5b00;font-weight:700">${money(s.amount)}</td>
+        <td>${window.OPS.canDelete()?`<button class="btn sm" data-dels="${s.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`; }).join("")}</tbody></table></div>`:''}
     ${cList.length?`<h3 style="margin-top:16px">Credit notes from the vendor</h3>
       <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Credit no.</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>
       <tbody>${cList.map(c=>`<tr><td>${fmtDate(c.credit_date)}</td><td>${esc(c.credit_no||'')}</td>
@@ -420,6 +438,13 @@ async function managePayable(x, back){
     await recomputePayable(x.p.id, x.p.total);
     window.OPS.audit("credit_deleted","payables",x.p.id,money(c.amount));
     window.OPS.flashTop("Credit note removed ✓"); managePayable(x,back);
+  }));
+  m.querySelectorAll("[data-dels]").forEach(b=>b.addEventListener("click",async()=>{
+    const s=sList.find(z=>String(z.id)===b.getAttribute("data-dels")); if(!s||!confirm("Reverse this settlement of "+money(s.amount)+"? It also restores the other item's balance.")) return;
+    try{ await window.OPS.settle.del(s.id); }catch(e){ alert(e.message); return; }
+    await recomputePayable(x.p.id, x.p.total);
+    window.OPS.audit("settlement_deleted","payables",x.p.id,money(s.amount));
+    window.OPS.flashTop("Settlement reversed ✓"); managePayable(x,back);
   }));
 }
 

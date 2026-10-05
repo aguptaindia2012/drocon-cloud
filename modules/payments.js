@@ -71,12 +71,18 @@ async function view(){
   function render(){
     const q=($("pSearch").value||"").toLowerCase().trim(); const onlyDue=$("pOnlyDue").checked;
     const list=rows.filter(x=>(!onlyDue||x.balance>0) && (!q || x.r.number.toLowerCase().includes(q) || x.party.toLowerCase().includes(q)));
-    $("pTable").innerHTML = list.length?`<table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+    const clearChip=r=>{
+      if(r.balance<=0.01) return (r.settled>0.005 && r.paid<=0.005) ? '<span class="chip paid">Settled</span>' : '<span class="chip paid">Paid</span>';
+      if((r.paid+r.settled+r.credit)>0.005) return '<span class="chip partial">Part-cleared</span>';
+      return '<span class="chip issued">Issued</span>';
+    };
+    $("pTable").innerHTML = list.length?`<table><thead><tr><th>Entity</th><th>Invoice</th><th>Date</th><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Settled</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
       <tbody>${list.map(x=>`<tr><td><span class="tag" style="background:${x.r.entity==='IBS'?'var(--blue)':'var(--green)'}">${esc(x.r.entity||'DCB')}</span></td><td><b>${esc(x.r.number)}</b></td><td>${fmtDate(x.r.doc_date)}</td><td>${esc(x.party)}</td>
         <td class="num">${money(x.gross)}</td><td class="num">${money(x.paid)}</td>
+        <td class="num" style="${x.settled>0.005?'color:#9a5b00':''}">${x.settled>0.005?money(x.settled):'—'}</td>
         <td class="num">${x.credit>0.005?money(x.credit):'—'}</td>
         <td class="num" style="${x.balance>0?'font-weight:700':''}">${money(x.balance)}</td>
-        <td>${window.OPS.statusChip(x.status)}${x.r.approval_status==='submitted'?' <span class="chip in_review">in review</span>':''}</td>
+        <td>${clearChip(x)}${x.r.approval_status==='submitted'?' <span class="chip in_review">in review</span>':''}</td>
         <td>${x.balance>0?`<button class="btn green sm" data-pay="${x.r.id}">+ Payment</button> `:''}<button class="btn sm" data-mng="${x.r.id}">Payments</button></td></tr>`).join("")}</tbody></table>`
       : '<div class="card muted">No invoices match.</div>';
     $("pTable").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>recordPayment(rows.find(z=>String(z.r.id)===b.getAttribute("data-pay")),view)));
@@ -118,18 +124,32 @@ function recordPayment(x, back){
 
 async function managePayments(x, back){
   const m=$("main");
-  const { data:pays }=await sb().from("payments").select("*").eq("document_id",x.r.id).order("paid_on",{ascending:false});
-  const list=pays||[];
-  m.innerHTML=`<button class="btn sm" id="pBack">← Back to Payment Status</button>
+  const [{ data:pays }, setts]=await Promise.all([
+    sb().from("payments").select("*").eq("document_id",x.r.id).order("paid_on",{ascending:false}),
+    window.OPS.settle.listFor("client_invoice", x.r.id)
+  ]);
+  const list=pays||[], sList=setts||[];
+  const settled=sList.reduce((s,z)=>s+num(z.amount),0);
+  // "the other side" of a settlement row, from this invoice's perspective
+  const other=s=>(s.a_type==="client_invoice"&&String(s.a_id)===String(x.r.id))?{t:s.b_type,l:s.b_label}:{t:s.a_type,l:s.a_label};
+  const reload=async()=>{ const rows=await fetchRows(); const nx=rows.find(z=>String(z.r.id)===String(x.r.id)); managePayments(nx||x, back); };
+  m.innerHTML=`<button class="btn sm" id="pBack">← Back to Transaction Recording</button>
     <div class="card" style="margin-top:12px">
-      <h1>Payments — ${esc(x.r.number)}</h1>
-      <p class="muted">${esc(x.party)} · Invoiced ${money(x.gross)} · Credit ${money(x.credit)} · Balance <b>${money(x.balance)}</b></p>
+      <h1>Payments &amp; settlements — ${esc(x.r.number)}</h1>
+      <p class="muted">${esc(x.party)} · Invoiced ${money(x.gross)}${x.credit>0.005?(' · Credit '+money(x.credit)):''}${settled>0.005?(' · Settled '+money(settled)):''} · Balance <b>${money(x.balance)}</b></p>
       ${!window.OPS.isAdmin()?'<div class="callout warn">Editing or deleting a payment will send this invoice for re-approval.</div>':''}
-      <div class="row" style="margin-bottom:8px"><div class="spacer"></div>${x.balance>0?'<button class="btn green sm" id="pAdd">+ Payment</button>':''}</div>
+      <div class="row" style="margin-bottom:8px"><div class="spacer"></div>${x.balance>0?'<button class="btn green sm" id="pAdd">+ Payment / settle</button>':''}</div>
+      <h3>Receipts</h3>
       ${list.length?`<table><thead><tr><th>Date</th><th class="num">Amount</th><th>Mode</th><th>Note</th><th></th></tr></thead>
-        <tbody>${list.map(p=>`<tr><td>${fmtDate(p.paid_on)}</td><td class="num">${money(p.amount)}</td><td>${esc(p.mode||'')}</td><td>${esc(p.note||'')}</td>
+        <tbody>${list.map(p=>`<tr><td>${fmtDate(p.paid_on)}</td><td class="num">${money(num(p.amount)+num(p.tds_amount))}${num(p.tds_amount)>0?` <span class="muted">(incl TDS ${money(p.tds_amount)})</span>`:''}</td><td>${esc(p.mode||'')}</td><td>${esc(p.note||'')}</td>
           <td><button class="btn sm" data-edit="${p.id}">Edit</button> ${window.OPS.canDelete()||p.created_by===window.OPS.me.id?`<button class="btn sm" data-del="${p.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`).join("")}</tbody></table>`
-        :'<div class="card muted">No payments recorded.</div>'}
+        :'<div class="muted">No receipts recorded.</div>'}
+      ${sList.length?`<h3 style="margin-top:16px">Settlements <span class="muted" style="font-weight:400;font-size:13px">(no cash — offset against an item we owe)</span></h3>
+        <table><thead><tr><th>Date</th><th>Settled against</th><th class="num">Amount</th><th></th></tr></thead>
+        <tbody>${sList.map(s=>{ const o=other(s); return `<tr><td>${fmtDate(s.settle_date)}</td>
+          <td><b>${esc(o.l||'')}</b> <span class="muted">(${esc(String(o.t).replace(/_/g,' '))})</span></td>
+          <td class="num" style="color:#9a5b00;font-weight:700">${money(s.amount)}</td>
+          <td>${window.OPS.canDelete()?`<button class="btn sm" data-dels="${s.id}" style="color:#a3322a;border-color:#e4b4b4">Delete</button>`:''}</td></tr>`; }).join("")}</tbody></table>`:''}
     </div>`;
   $("pBack").addEventListener("click",back);
   if($("pAdd")) $("pAdd").addEventListener("click",()=>recordPayment(x, ()=>managePayments(x,back)));
@@ -139,7 +159,14 @@ async function managePayments(x, back){
     const { error }=await sb().from("payments").delete().eq("id",p.id); if(error){ alert(error.message); return; }
     x.paid-=num(p.amount); await recomputeStatus(x); await gateCorrection(x,"deleted");
     window.OPS.audit("payment_deleted","document",x.r.id,money(p.amount));
-    window.OPS.flashTop(window.OPS.isAdmin()?"Payment deleted ✓":"Deleted — sent for re-approval"); managePayments(x,back);
+    window.OPS.flashTop(window.OPS.isAdmin()?"Payment deleted ✓":"Deleted — sent for re-approval"); reload();
+  }));
+  m.querySelectorAll("[data-dels]").forEach(b=>b.addEventListener("click",async()=>{
+    const s=sList.find(z=>String(z.id)===b.getAttribute("data-dels")); if(!s||!confirm("Reverse this settlement of "+money(s.amount)+"? It also restores the other item's balance.")) return;
+    try{ await window.OPS.settle.del(s.id); }catch(e){ alert(e.message); return; }
+    await recomputeStatus(x);
+    window.OPS.audit("settlement_deleted","document",x.r.id,money(s.amount));
+    window.OPS.flashTop("Settlement reversed ✓"); reload();
   }));
 }
 
