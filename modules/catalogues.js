@@ -27,14 +27,22 @@ const CATS = {
       {key:"description",label:"Description",type:"textarea",full:true},
     ] },
   spare: { table:"spare_catalogue", label:"Spares", rateKey:"rate_excl_gst", hsnKey:"hsn_code",
-    cols:[["name","Spare"],["rev_category","Rev. Category"],["hsn_code","HSN"],["unit","Unit"],["rate_excl_gst","Rate excl.GST",true],["gst_rate","GST%",true],["_cost","Cost",true],["current_stock","Stock",true]],
+    cols:[["name","Spare"],["product_category","Product Category"],["rev_category","Rev. Category"],["hsn_code","HSN"],["unit","Unit"],
+      ["mrp_incl","MRP (Incl.)",true],["discount","Disc%",true],["offer","Offer",true],["rate_excl_gst","Base Rate",true],
+      ["gst_rate","GST%",true],["pkg_pct","Pkg%",true],["base_cost","Base Cost",true],["current_stock","Stock",true]],
     fields:[
       {key:"name",label:"Spare name",full:true,required:true},
+      {key:"product_category",label:"Product category",placeholder:"e.g. Propellers, Landing Gear, Spraying System"},
       {key:"rev_category",label:"Revenue category",type:"select",options:REV_CATS},
       {key:"hsn_code",label:"HSN Code"},
       {key:"unit",label:"Unit"},
-      {key:"rate_excl_gst",label:"Rate excl. GST (₹)",type:"number"},
+      {key:"mrp_incl",label:"MRP (incl. GST) ₹",type:"number"},
+      {key:"discount",label:"Discount % (off MRP)",type:"number"},
+      {key:"offer",label:"Offer — selling price incl GST ₹",type:"number"},
+      {key:"rate_excl_gst",label:"Base Rate — excl GST ₹",type:"number"},
       {key:"gst_rate",label:"GST %",type:"number"},
+      {key:"pkg_pct",label:"Pkg %",type:"number"},
+      {key:"base_cost",label:"Base cost — Cost + OH + Profit ₹",type:"number"},
       {key:"cost_base",label:"Cost — base (₹)",type:"number"},
       {key:"cost_shipping",label:"Cost — shipping (₹)",type:"number"},
       {key:"description",label:"Description",type:"textarea",full:true},
@@ -63,14 +71,16 @@ async function view(){
   const { data }=await sb().from(cfg.table).select("*").order("name");
   const all=data||[];
   function render(rows){
-    $("cList").innerHTML = rows.length ? `<table><thead><tr>${cfg.cols.map(c=>`<th class="${c[2]?'num':''}">${esc(c[1])}</th>`).join("")}<th></th></tr></thead>
+    const PCT={ gst_rate:1, discount:1, pkg_pct:1 };
+    $("cList").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr>${cfg.cols.map(c=>`<th class="${c[2]?'num':''}">${esc(c[1])}</th>`).join("")}<th></th></tr></thead>
       <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">${cfg.cols.map(c=>{
         let v=r[c[0]];
         if(c[0]==='_cost'){ const t=num(r.cost_base)+num(r.cost_shipping); v = t>0?t:null; }
         if(c[0]==='rev_category'){ v=revLabel(r.rev_category); }
-        else if(c[2]&&c[0]!=='gst_rate'&&c[0]!=='current_stock') v=(v==null?'—':money(v));
-        else if(c[0]==='gst_rate') v=(v==null?'':v+'%'); else if(c[0]==='current_stock') v=(v==null?0:v);
-        return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td>${r.active===false?'<span class="chip" style="background:#eee;color:#888">Disabled</span> ':''}<button class="btn sm" data-tog="${r.id}">${r.active===false?'Enable':'Disable'}</button> <button class="btn sm ghost" data-copy="${r.id}" title="Duplicate this item">⧉ Copy</button> <span class="muted">edit ›</span></td></tr>`).join("")}</tbody></table>`
+        else if(PCT[c[0]]) v=(v==null||v===''?'':num(v)+'%');
+        else if(c[0]==='current_stock') v=(v==null?0:v);
+        else if(c[2]) v=(v==null||v===''?'—':money(v));
+        return `<td class="${c[2]?'num':''}">${esc(v==null?'':v)}</td>`; }).join("")}<td>${r.active===false?'<span class="chip" style="background:#eee;color:#888">Disabled</span> ':''}<button class="btn sm" data-tog="${r.id}">${r.active===false?'Enable':'Disable'}</button> <button class="btn sm ghost" data-copy="${r.id}" title="Duplicate this item">⧉ Copy</button> <span class="muted">edit ›</span></td></tr>`).join("")}</tbody></table></div>`
       : '<div class="card muted">No items yet.</div>';
     $("cList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("button")) return; form(all.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
     $("cList").querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation();
@@ -126,7 +136,7 @@ function form(rec, seed){
         const v=e[f.key]==null?"":e[f.key];
         const inner=f.type==="textarea"?`<textarea id="cf_${f.key}">${esc(v)}</textarea>`
           :f.type==="select"?`<select id="cf_${f.key}">${(f.options||[]).map(o=>`<option value="${esc(o[0])}"${String(v)===String(o[0])?' selected':''}>${esc(o[1])}</option>`).join("")}</select>`
-          :`<input id="cf_${f.key}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':''} value="${esc(v)}">`;
+          :`<input id="cf_${f.key}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':''} ${f.placeholder?`placeholder="${esc(f.placeholder)}"`:''} value="${esc(v)}">`;
         return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}${f.required?' *':''}</label>${inner}</div>`;
       }).join("")}</div>
       <div class="row"><button class="btn green" id="cSave">${rec?"Save":"Create"}</button>
