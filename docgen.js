@@ -158,12 +158,15 @@ function generateWord(doc){
   children.push(new D.Paragraph({text:"",spacing:{after:80}}));
 
   // ---- Line items table ----
-  const heads = ["S.No.","Description","HSN/SAC","GST%","Qty","Rate","Per","Disc%","Amount"];
-  const colW   = [520, 3200, 900, 620, 620, 1100, 700, 640, 1300];
+  // For spare lines the Rate column carries MRP (excl GST) and the Offer column
+  // shows the base rate after discount (MRP − Disc%); other lines leave Offer blank.
+  const heads = ["S.No.","Description","HSN/SAC","GST%","Qty","Rate / MRP","Per","Disc%","Offer","Amount"];
+  const colW   = [480, 2600, 820, 560, 560, 1050, 560, 560, 1000, 1410];
   const headRow=new D.TableRow({tableHeader:true,children:heads.map((h,i)=>cell(h,{w:colW[i],bold:true,color:"FFFFFF",fill:GREEN,size:17}))});
   const itemRows=(doc.items||[]).map((it,idx)=>{
     const qty=Number(it.qty)||0, rate=Number(it.rate)||0, disc=Number(it.disc)||0;
-    const amount=qty*rate*(1-disc/100);
+    const offer=rate*(1-disc/100);
+    const amount=qty*offer;
     const descParas=[ new D.Paragraph({children:[run(it.desc,{size:17})],spacing:{after:0}}) ];
     if(it.sub) descParas.push(new D.Paragraph({children:[run(it.sub,{size:15,italics:true,color:"6a6a6a"})],spacing:{after:0}}));
     return new D.TableRow({children:[
@@ -175,7 +178,8 @@ function generateWord(doc){
       cell(rate?inr(rate):"",{w:colW[5],size:17}),
       cell(safe(it.per),{w:colW[6],size:17}),
       cell(disc?disc+"%":"",{w:colW[7],size:17}),
-      cell(inr(amount),{w:colW[8],size:17}),
+      cell(it._spare?inr(offer):"",{w:colW[8],size:17}),
+      cell(inr(amount),{w:colW[9],size:17}),
     ]});
   });
   // totals rows
@@ -183,8 +187,8 @@ function generateWord(doc){
   function totalRow(label,val,opts){ opts=opts||{};
     return new D.TableRow({children:[
       cell("",{w:colW[0],noBorder:true}),
-      cell([new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(label,{bold:true,size:17,color:opts.color})]})],{w:colW[1]+colW[2]+colW[3]+colW[4]+colW[5]+colW[6]+colW[7],span:7,fill:opts.fill}),
-      cell([new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(val,{bold:true,size:17,color:opts.color})]})],{w:colW[8],fill:opts.fill}),
+      cell([new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(label,{bold:true,size:17,color:opts.color})]})],{w:colW[1]+colW[2]+colW[3]+colW[4]+colW[5]+colW[6]+colW[7]+colW[8],span:8,fill:opts.fill}),
+      cell([new D.Paragraph({alignment:D.AlignmentType.RIGHT,children:[run(val,{bold:true,size:17,color:opts.color})]})],{w:colW[9],fill:opts.fill}),
     ]});
   }
   const allRows=[headRow,...itemRows];

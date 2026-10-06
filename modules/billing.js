@@ -232,7 +232,7 @@ function editor(){
       ${CAT_ONLY?`<div class="callout">Lines must be picked from the <b>approved Catalogue</b> — description, HSN/SAC and GST% come from the catalogue and can't be typed. Adjust only quantity, rate and discount. Item not there? <b>Manage catalogue →</b> (new items need approval).</div>`:''}
       <datalist id="hsnList">${HSN_LIST.map(h=>`<option value="${h}">`).join("")}</datalist>
       <div style="overflow:auto"><table class="linetable" id="dItems"><thead><tr>
-        <th style="min-width:200px">Description</th><th>HSN/SAC</th><th class="num">GST%</th><th class="num">Qty</th><th class="num">Rate</th><th>Per</th><th class="num">Disc%</th><th class="num">Amount</th><th></th>
+        <th style="min-width:200px">Description</th><th>HSN/SAC</th><th class="num">GST%</th><th class="num">Qty</th><th class="num">Rate / MRP(excl)</th><th>Per</th><th class="num">Disc%</th><th class="num">Offer</th><th class="num">Amount</th><th></th>
       </tr></thead><tbody></tbody></table></div>
       <div class="row" style="margin-top:6px">
         ${CAT_ONLY?'':'<button class="btn sm" id="dAddItem">+ Blank line</button>'}
@@ -301,7 +301,7 @@ function renderItems(){
   const roH=lock?' readonly':''; const bgH=lock?';background:#f4f5f2':'';
   const tb=$("dItems").querySelector("tbody");
   tb.innerHTML=D.items.map((it,i)=>{
-    const amt=num(it.qty)*num(it.rate)*(1-num(it.disc)/100);
+    const offer=num(it.rate)*(1-num(it.disc)/100); const amt=num(it.qty)*offer;
     return `<tr>
       <td><input data-i="${i}" data-k="desc" value="${esc(it.desc||'')}"${roD}><input data-i="${i}" data-k="sub" placeholder="(sub-line, optional)" value="${esc(it.sub||'')}" style="font-size:11px;margin-top:2px"></td>
       <td><input data-i="${i}" data-k="hsn" list="hsnList" value="${esc(it.hsn||'')}" style="width:90px${bgH}"${roH}></td>
@@ -310,14 +310,17 @@ function renderItems(){
       <td><input data-i="${i}" data-k="rate" type="number" step="any" value="${num(it.rate)}" style="width:90px;text-align:right"></td>
       <td><input data-i="${i}" data-k="per" value="${esc(it.per||'')}" style="width:60px"></td>
       <td><input data-i="${i}" data-k="disc" type="number" step="any" value="${num(it.disc)}" style="width:55px;text-align:right"></td>
+      <td class="num" data-offer="${i}">${it._spare?money(offer):'—'}</td>
       <td class="num">${money(amt)}</td><td class="x" data-del="${i}">✕</td></tr>`;
   }).join("");
   tb.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
     const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
     D.items[i][k]=(k==="desc"||k==="sub"||k==="hsn"||k==="per")?inp.value:num(inp.value);
-    // update only amount + totals without losing focus
-    const row=inp.closest("tr"); const amt=num(D.items[i].qty)*num(D.items[i].rate)*(1-num(D.items[i].disc)/100);
-    row.children[7].textContent=money(amt); renderTotals();
+    // update offer + amount + totals without losing focus
+    const row=inp.closest("tr"); const r=D.items[i];
+    const offer=num(r.rate)*(1-num(r.disc)/100); const amt=num(r.qty)*offer;
+    if(r._spare) row.children[7].textContent=money(offer);
+    row.children[8].textContent=money(amt); renderTotals();
   }));
   tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ D.items.splice(+x.getAttribute("data-del"),1); if(!D.items.length && !lock) D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); }));
   renderTotals();
@@ -392,7 +395,15 @@ async function loadPickers(cfg){
     // margin panel and approval review only; never printed on the document.
     const cost={ _cb:num(s.cost_base), _cs:num(s.cost_shipping) };
     if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0},cost));
-    else D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:num(s.gst_rate),qty:1,rate:num(s.rate_excl_gst),per:s.unit||"",disc:0, _spareId:s.id},cost));
+    else {
+      const g=num(s.gst_rate);
+      // Approach A: Rate column = MRP (excl GST), Disc% reduces it to the Offer
+      // (base rate). Falls back to the plain base rate for spares with no MRP set.
+      let rate, disc;
+      if(num(s.mrp_incl)>0){ rate=Math.round((num(s.mrp_incl)/(1+g/100))*100)/100; disc=num(s.discount)||0; }
+      else { rate=num(s.rate_excl_gst); disc=0; }
+      D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:g,qty:1,rate,per:s.unit||"",disc, _spareId:s.id, _spare:true, _mrpIncl:num(s.mrp_incl)||null},cost));
+    }
     // stamp the document's Revenue category from the catalogue item (first one wins; still editable)
     if(s.rev_category && !(D.data&&D.data.rev_category)){ D.data=D.data||{}; D.data.rev_category=s.rev_category; if($("dRevCat")) $("dRevCat").value=s.rev_category; }
     $("dCatPick").value=""; renderItems(); });
