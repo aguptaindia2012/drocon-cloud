@@ -299,27 +299,39 @@ function renderItems(){
   const lock=(TYPE==='invoice'||TYPE==='quotation');   // catalogue-driven fields are read-only
   const roD=lock?' readonly style="background:#f4f5f2"':'';
   const roH=lock?' readonly':''; const bgH=lock?';background:#f4f5f2':'';
+  // normalise any legacy (build-264) spare line — rate=MRP(excl), disc=discount —
+  // to the exact-paise model: rate=base rate, disc=0, MRP/Disc as display fields.
+  (D.items||[]).forEach(it=>{ if(it._spare && num(it.disc)>0 && it._mrpExcl==null){
+    it._mrpExcl=num(it.rate); it._discPct=num(it.disc);
+    it.rate=Math.round(num(it.rate)*(1-num(it.disc)/100)*100)/100; it.disc=0; } });
   const tb=$("dItems").querySelector("tbody");
   tb.innerHTML=D.items.map((it,i)=>{
-    const offer=num(it.rate)*(1-num(it.disc)/100); const amt=num(it.qty)*offer;
+    const isSpare=!!it._spare; const rate=num(it.rate), disc=num(it.disc);
+    const offer=rate*(1-disc/100); const amt=num(it.qty)*offer;   // offer = per-unit taxable
+    // For spares: MRP(excl) & Disc% are read-only reference; Base Rate (Offer) is editable.
+    const mrpCell  = isSpare ? `<span class="num">${it._mrpExcl!=null?money(it._mrpExcl):'—'}</span>`
+                             : `<input data-i="${i}" data-k="rate" type="number" step="any" value="${rate}" style="width:90px;text-align:right">`;
+    const discCell = isSpare ? `<span>${it._discPct!=null?num(it._discPct)+'%':'—'}</span>`
+                             : `<input data-i="${i}" data-k="disc" type="number" step="any" value="${disc}" style="width:55px;text-align:right">`;
+    const offerCell= isSpare ? `<input data-i="${i}" data-k="rate" type="number" step="any" value="${rate}" style="width:90px;text-align:right">`
+                             : `<span class="num">${money(offer)}</span>`;
     return `<tr>
       <td><input data-i="${i}" data-k="desc" value="${esc(it.desc||'')}"${roD}><input data-i="${i}" data-k="sub" placeholder="(sub-line, optional)" value="${esc(it.sub||'')}" style="font-size:11px;margin-top:2px"></td>
       <td><input data-i="${i}" data-k="hsn" list="hsnList" value="${esc(it.hsn||'')}" style="width:90px${bgH}"${roH}></td>
       <td><input data-i="${i}" data-k="gst" type="number" step="any" value="${num(it.gst)}" style="width:55px;text-align:right${bgH}"${roH}></td>
       <td><input data-i="${i}" data-k="qty" type="number" step="any" value="${num(it.qty)}" style="width:60px;text-align:right"></td>
-      <td><input data-i="${i}" data-k="rate" type="number" step="any" value="${num(it.rate)}" style="width:90px;text-align:right"></td>
+      <td class="num">${mrpCell}</td>
       <td><input data-i="${i}" data-k="per" value="${esc(it.per||'')}" style="width:60px"></td>
-      <td><input data-i="${i}" data-k="disc" type="number" step="any" value="${num(it.disc)}" style="width:55px;text-align:right"></td>
-      <td class="num" data-offer="${i}">${it._spare?money(offer):'—'}</td>
+      <td class="num">${discCell}</td>
+      <td class="num">${offerCell}</td>
       <td class="num">${money(amt)}</td><td class="x" data-del="${i}">✕</td></tr>`;
   }).join("");
   tb.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
     const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
     D.items[i][k]=(k==="desc"||k==="sub"||k==="hsn"||k==="per")?inp.value:num(inp.value);
-    // update offer + amount + totals without losing focus
     const row=inp.closest("tr"); const r=D.items[i];
     const offer=num(r.rate)*(1-num(r.disc)/100); const amt=num(r.qty)*offer;
-    if(r._spare) row.children[7].textContent=money(offer);
+    if(!r._spare) row.children[7].textContent=money(offer);   // non-spare: Offer is computed
     row.children[8].textContent=money(amt); renderTotals();
   }));
   tb.querySelectorAll("[data-del]").forEach(x=>x.addEventListener("click",()=>{ D.items.splice(+x.getAttribute("data-del"),1); if(!D.items.length && !lock) D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); }));
@@ -397,12 +409,15 @@ async function loadPickers(cfg){
     if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0},cost));
     else {
       const g=num(s.gst_rate);
-      // Approach A: Rate column = MRP (excl GST), Disc% reduces it to the Offer
-      // (base rate). Falls back to the plain base rate for spares with no MRP set.
-      let rate, disc;
-      if(num(s.mrp_incl)>0){ rate=Math.round((num(s.mrp_incl)/(1+g/100))*100)/100; disc=num(s.discount)||0; }
-      else { rate=num(s.rate_excl_gst); disc=0; }
-      D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:g,qty:1,rate,per:s.unit||"",disc, _spareId:s.id, _spare:true, _mrpIncl:num(s.mrp_incl)||null},cost));
+      // Exact-paise: the taxable rate IS the catalogue Base Rate (excl GST), so the
+      // amount and GST match the rate card exactly. MRP(excl) and Disc% ride along
+      // as display-only reference (they do NOT change the amount). disc kept 0.
+      const mrpExcl = num(s.mrp_incl)>0 ? Math.round((num(s.mrp_incl)/(1+g/100))*100)/100 : null;
+      let base = num(s.rate_excl_gst);
+      if(!(base>0)) base = num(s.offer)>0 ? Math.round((num(s.offer)/(1+g/100))*100)/100
+                          : (mrpExcl!=null ? Math.round(mrpExcl*(1-(num(s.discount)||0)/100)*100)/100 : 0);
+      D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:g,qty:1,rate:base,per:s.unit||"",disc:0,
+        _spareId:s.id, _spare:true, _mrpExcl:mrpExcl, _discPct:num(s.discount)||null},cost));
     }
     // stamp the document's Revenue category from the catalogue item (first one wins; still editable)
     if(s.rev_category && !(D.data&&D.data.rev_category)){ D.data=D.data||{}; D.data.rev_category=s.rev_category; if($("dRevCat")) $("dRevCat").value=s.rev_category; }

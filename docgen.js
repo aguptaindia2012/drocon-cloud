@@ -165,8 +165,12 @@ function generateWord(doc){
   const headRow=new D.TableRow({tableHeader:true,children:heads.map((h,i)=>cell(h,{w:colW[i],bold:true,color:"FFFFFF",fill:GREEN,size:17}))});
   const itemRows=(doc.items||[]).map((it,idx)=>{
     const qty=Number(it.qty)||0, rate=Number(it.rate)||0, disc=Number(it.disc)||0;
-    const offer=rate*(1-disc/100);
+    const isSpare=!!it._spare;
+    const offer=rate*(1-disc/100);          // per-unit taxable (base rate for spares)
     const amount=qty*offer;
+    // spares show MRP(excl) & Disc% as reference; fall back for legacy lines
+    const mrpExcl = it._mrpExcl!=null ? Number(it._mrpExcl) : rate;
+    const discPct = it._discPct!=null ? Number(it._discPct) : disc;
     const descParas=[ new D.Paragraph({children:[run(it.desc,{size:17})],spacing:{after:0}}) ];
     if(it.sub) descParas.push(new D.Paragraph({children:[run(it.sub,{size:15,italics:true,color:"6a6a6a"})],spacing:{after:0}}));
     return new D.TableRow({children:[
@@ -175,10 +179,10 @@ function generateWord(doc){
       cell(safe(it.hsn),{w:colW[2],size:17}),
       cell((it.gst!=null?it.gst+"%":""),{w:colW[3],size:17}),
       cell(qty?String(qty):"",{w:colW[4],size:17}),
-      cell(rate?inr(rate):"",{w:colW[5],size:17}),
+      cell(isSpare?inr(mrpExcl):(rate?inr(rate):""),{w:colW[5],size:17}),
       cell(safe(it.per),{w:colW[6],size:17}),
-      cell(disc?disc+"%":"",{w:colW[7],size:17}),
-      cell(it._spare?inr(offer):"",{w:colW[8],size:17}),
+      cell(isSpare?(discPct?discPct+"%":""):(disc?disc+"%":""),{w:colW[7],size:17}),
+      cell(isSpare?inr(offer):"",{w:colW[8],size:17}),
       cell(inr(amount),{w:colW[9],size:17}),
     ]});
   });
