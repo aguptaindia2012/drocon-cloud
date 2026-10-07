@@ -168,9 +168,12 @@ function generateWord(doc){
     const isSpare=!!it._spare;
     const offer=rate*(1-disc/100);          // per-unit taxable (base rate for spares)
     const amount=qty*offer;
-    // spares show MRP(excl) & Disc% as reference; fall back for legacy lines
+    // spares show MRP(excl) & the EFFECTIVE Disc% (derived from the base rate, so
+    // any further discount the team gave is reflected); fall back for legacy lines
     const mrpExcl = it._mrpExcl!=null ? Number(it._mrpExcl) : rate;
-    const discPct = it._discPct!=null ? Number(it._discPct) : disc;
+    const discPct = (isSpare && Number(it._mrpExcl)>0)
+      ? Math.round((1 - rate/Number(it._mrpExcl))*10000)/100
+      : (it._discPct!=null ? Number(it._discPct) : disc);
     const descParas=[ new D.Paragraph({children:[run(it.desc,{size:17})],spacing:{after:0}}) ];
     if(it.sub) descParas.push(new D.Paragraph({children:[run(it.sub,{size:15,italics:true,color:"6a6a6a"})],spacing:{after:0}}));
     return new D.TableRow({children:[

@@ -308,10 +308,13 @@ function renderItems(){
   tb.innerHTML=D.items.map((it,i)=>{
     const isSpare=!!it._spare; const rate=num(it.rate), disc=num(it.disc);
     const offer=rate*(1-disc/100); const amt=num(it.qty)*offer;   // offer = per-unit taxable
-    // For spares: MRP(excl) & Disc% are read-only reference; Base Rate (Offer) is editable.
+    // For spares: MRP(excl) is the read-only anchor; Disc% and Base Rate (Offer)
+    // are linked EDITABLE fields (edit either — the team can offer more discount).
+    const md=num(it._mrpExcl);
+    const dDisc = md>0 ? Math.round((1-rate/md)*10000)/100 : null;   // discount implied by the current base rate
     const mrpCell  = isSpare ? `<span class="num">${it._mrpExcl!=null?money(it._mrpExcl):'—'}</span>`
                              : `<input data-i="${i}" data-k="rate" type="number" step="any" value="${rate}" style="width:90px;text-align:right">`;
-    const discCell = isSpare ? `<span>${it._discPct!=null?num(it._discPct)+'%':'—'}</span>`
+    const discCell = isSpare ? `<input data-i="${i}" data-k="sdisc" type="number" step="any" value="${dDisc!=null?dDisc:''}" ${md>0?'':'disabled title="Set MRP on the catalogue to discount by %"'} style="width:55px;text-align:right">`
                              : `<input data-i="${i}" data-k="disc" type="number" step="any" value="${disc}" style="width:55px;text-align:right">`;
     const offerCell= isSpare ? `<input data-i="${i}" data-k="rate" type="number" step="any" value="${rate}" style="width:90px;text-align:right">`
                              : `<span class="num">${money(offer)}</span>`;
@@ -328,8 +331,20 @@ function renderItems(){
   }).join("");
   tb.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",()=>{
     const i=+inp.getAttribute("data-i"), k=inp.getAttribute("data-k");
-    D.items[i][k]=(k==="desc"||k==="sub"||k==="hsn"||k==="per")?inp.value:num(inp.value);
     const row=inp.closest("tr"); const r=D.items[i];
+    if(k==="sdisc"){
+      // spare: Disc% edited → recompute Base Rate from MRP(excl); reflect in Offer input
+      const md=num(r._mrpExcl);
+      if(md>0){ r.rate=Math.round(md*(1-num(inp.value)/100)*100)/100;
+        const oi=row.querySelector('[data-k="rate"]'); if(oi) oi.value=r.rate; }
+    } else {
+      r[k]=(k==="desc"||k==="sub"||k==="hsn"||k==="per")?inp.value:num(inp.value);
+      if(k==="rate" && r._spare){
+        // spare: Base Rate (Offer) edited → reflect the implied discount back into Disc%
+        const md=num(r._mrpExcl), di=row.querySelector('[data-k="sdisc"]');
+        if(md>0 && di && document.activeElement!==di) di.value=Math.round((1-num(r.rate)/md)*10000)/100;
+      }
+    }
     const offer=num(r.rate)*(1-num(r.disc)/100); const amt=num(r.qty)*offer;
     if(!r._spare) row.children[7].textContent=money(offer);   // non-spare: Offer is computed
     row.children[8].textContent=money(amt); renderTotals();
