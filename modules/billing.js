@@ -236,7 +236,10 @@ function editor(){
       </tr></thead><tbody></tbody></table></div>
       <div class="row" style="margin-top:6px">
         ${CAT_ONLY?'':'<button class="btn sm" id="dAddItem">+ Blank line</button>'}
-        <select id="dCatPick" style="max-width:340px"><option value="">+ Add from catalogue…</option></select>
+        <div id="dCatBox" style="position:relative;max-width:360px;flex:1;min-width:220px">
+          <input id="dCatSearch" placeholder="+ Add from catalogue — type to search…" autocomplete="off" style="width:100%">
+          <div id="dCatList" style="display:none;position:absolute;z-index:30;left:0;right:0;margin-top:2px;max-height:280px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14)"></div>
+        </div>
         ${CAT_ONLY?'<button class="btn sm" id="dCatMgr" type="button">Item not listed? Manage catalogue →</button>':''}</div>
 
       <div id="dTotals"></div>
@@ -412,21 +415,22 @@ async function loadPickers(cfg){
   const [{data:svc},{data:spr}]=await Promise.all([
     sb().from("service_catalogue").select("*").eq("active",true).order("name"),
     sb().from("spare_catalogue").select("*").eq("active",true).order("name") ]);
-  const opt=[];
-  (svc||[]).forEach(s=>opt.push(`<option value="svc:${s.id}">[Service] ${esc(s.name)}${s.default_rate?(" — "+money(s.default_rate)):""}</option>`));
-  (spr||[]).forEach(s=>opt.push(`<option value="spr:${s.id}">[Spare] ${esc(s.name)}${s.rate_excl_gst?(" — "+money(s.rate_excl_gst)):""}</option>`));
-  $("dCatPick").innerHTML='<option value="">+ Add from catalogue…</option>'+opt.join("");
-  $("dCatPick").addEventListener("change",()=>{ const v=$("dCatPick").value; if(!v) return; const [kind,id]=v.split(":");
-    const s=(kind==="svc"?svc:spr).find(x=>x.id===id);
-    // _cb/_cs are the INTERNAL cost snapshot (base + shipping) — used for the
-    // margin panel and approval review only; never printed on the document.
+  // Searchable combobox of catalogue items (type to filter; ↑/↓/Enter to pick).
+  const cat=[];
+  (svc||[]).forEach(s=>cat.push({ kind:"svc", id:s.id, label:"[Service] "+s.name+(s.default_rate?(" — "+money(s.default_rate)):""),
+    hay:("service "+(s.name||"")+" "+(s.hsn_sac||"")+" "+(s.rev_category||"")).toLowerCase() }));
+  (spr||[]).forEach(s=>cat.push({ kind:"spr", id:s.id, label:"[Spare] "+s.name+(s.rate_excl_gst?(" — "+money(s.rate_excl_gst)):""),
+    hay:("spare "+(s.name||"")+" "+(s.hsn_code||"")+" "+(s.product_category||"")+" "+(s.rev_category||"")).toLowerCase() }));
+
+  function addCat(kind,id){
+    const s=(kind==="svc"?svc:spr).find(x=>x.id===id); if(!s) return;
+    // _cb/_cs are the INTERNAL cost snapshot (base + shipping) — margin/approval only.
     const cost={ _cb:num(s.cost_base), _cs:num(s.cost_shipping) };
     if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0},cost));
     else {
       const g=num(s.gst_rate);
-      // Exact-paise: the taxable rate IS the catalogue Base Rate (excl GST), so the
-      // amount and GST match the rate card exactly. MRP(excl) and Disc% ride along
-      // as display-only reference (they do NOT change the amount). disc kept 0.
+      // Exact-paise: taxable rate IS the catalogue Base Rate (excl GST); MRP(excl) &
+      // Disc% ride along for display (do NOT change the amount). disc kept 0.
       const mrpExcl = num(s.mrp_incl)>0 ? Math.round((num(s.mrp_incl)/(1+g/100))*100)/100 : null;
       let base = num(s.rate_excl_gst);
       if(!(base>0)) base = num(s.offer)>0 ? Math.round((num(s.offer)/(1+g/100))*100)/100
@@ -434,9 +438,39 @@ async function loadPickers(cfg){
       D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:g,qty:1,rate:base,per:s.unit||"",disc:0,
         _spareId:s.id, _spare:true, _mrpExcl:mrpExcl, _discPct:num(s.discount)||null},cost));
     }
-    // stamp the document's Revenue category from the catalogue item (first one wins; still editable)
+    // stamp the document's Revenue category from the catalogue item (first wins; editable)
     if(s.rev_category && !(D.data&&D.data.rev_category)){ D.data=D.data||{}; D.data.rev_category=s.rev_category; if($("dRevCat")) $("dRevCat").value=s.rev_category; }
-    $("dCatPick").value=""; renderItems(); });
+    renderItems();
+  }
+
+  const box=$("dCatSearch"), listEl=$("dCatList");
+  let curList=[], hi=-1;
+  function highlight(){ listEl.querySelectorAll("[data-ix]").forEach((d,ix)=>{ d.style.background= ix===hi?'var(--soft-green)':''; }); }
+  function ensureVisible(){ const el=listEl.querySelector('[data-ix="'+hi+'"]'); if(el) el.scrollIntoView({block:"nearest"}); }
+  function renderCatList(q){
+    q=(q||"").toLowerCase().trim();
+    const words=q?q.split(/\s+/):[];
+    curList = (q ? cat.filter(c=>words.every(w=>c.hay.includes(w))) : cat).slice(0,60);
+    hi = curList.length?0:-1;
+    if(!curList.length){ listEl.innerHTML='<div style="padding:8px 10px" class="muted">No catalogue match. <b>Manage catalogue →</b> to add it.</div>'; listEl.style.display='block'; return; }
+    listEl.innerHTML=curList.map((c,ix)=>`<div data-ix="${ix}" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f0f0f0">${esc(c.label)}</div>`).join("");
+    listEl.style.display='block'; highlight();
+    listEl.querySelectorAll("[data-ix]").forEach(d=>{
+      d.addEventListener("mousedown",e=>{ e.preventDefault(); pick(+d.getAttribute("data-ix")); });
+      d.addEventListener("mouseenter",()=>{ hi=+d.getAttribute("data-ix"); highlight(); });
+    });
+  }
+  function pick(ix){ const c=curList[ix]; if(!c) return; addCat(c.kind,c.id); box.value=""; listEl.style.display='none'; box.focus(); }
+  box.addEventListener("focus",()=>renderCatList(box.value));
+  box.addEventListener("input",()=>renderCatList(box.value));
+  box.addEventListener("keydown",e=>{
+    if(listEl.style.display==='none'){ if(e.key==="ArrowDown"){ renderCatList(box.value); } return; }
+    if(e.key==="ArrowDown"){ e.preventDefault(); hi=Math.min(curList.length-1,hi+1); highlight(); ensureVisible(); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); hi=Math.max(0,hi-1); highlight(); ensureVisible(); }
+    else if(e.key==="Enter"){ if(hi>=0){ e.preventDefault(); pick(hi); } }
+    else if(e.key==="Escape"){ listEl.style.display='none'; }
+  });
+  box.addEventListener("blur",()=>{ setTimeout(()=>{ if(listEl) listEl.style.display='none'; },150); });
   // party picker — active parties only (keep the one already on this document)
   if(cfg.pickFrom){
     let pq=sb().from(cfg.pickFrom).select("*").order("firm_name");
