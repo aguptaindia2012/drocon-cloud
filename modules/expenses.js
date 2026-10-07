@@ -343,9 +343,9 @@ async function expenseReview(){
     const st=$("erStatus").value;
     let q=sb().from("expense_claims").select("*").order("created_at",{ascending:false});
     if(st) q=q.eq("status",st);
-    const [{ data },{ data:tx }]=await Promise.all([ q, sb().from("cash_txns").select("ref_id,amount,tds_amount").eq("ref_type","expense_claim") ]);
+    const [{ data },{ data:tx },settleMap]=await Promise.all([ q, sb().from("cash_txns").select("ref_id,amount,tds_amount").eq("ref_type","expense_claim"), window.OPS.settle.settledBy("expense_claim") ]);
     const paidBy={}; (tx||[]).forEach(t=>paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount)+num(t.tds_amount));
-    const rows=(data||[]).map(r=>{ r._paid=paidBy[r.id]||0; r._bal=Math.round((num(r.total)-r._paid)*100)/100; return r; });
+    const rows=(data||[]).map(r=>{ r._paid=paidBy[r.id]||0; r._settled=num((settleMap||{})[r.id]||0); r._bal=Math.round((num(r.total)-r._paid-r._settled)*100)/100; return r; });
     $("erBody").innerHTML = rows.length ? rows.map(cardHTML).join("") : '<div class="card muted">Nothing here.</div>';
     rows.forEach(wire);
   };
@@ -385,7 +385,7 @@ function cardHTML(r){
       ${r.status==="submitted"?`<button class="btn green sm" data-act="approve" data-id="${r.id}">Approve</button>
         <button class="btn sm" data-act="reject" data-id="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button>`:''}
       ${(r.status==="approved"||r.status==="part_paid")?`<button class="btn green sm" data-act="pay" data-id="${r.id}">Record payment…</button>
-        <span class="muted" style="font-size:12px">Paid ${money(r._paid||0)} · Balance <b>${money(r._bal!=null?r._bal:r.total)}</b></span>`:''}
+        <span class="muted" style="font-size:12px">Paid ${money(r._paid||0)}${r._settled>0.005?(' · Settled '+money(r._settled)):''} · Balance <b>${money(r._bal!=null?r._bal:r.total)}</b></span>`:''}
     </div></div>`;
 }
 function wire(r){
@@ -418,53 +418,39 @@ function wire(r){
   }));
 }
 
-/* Pay an approved claim — partial allowed, TDS optional; posts via cash_txns
-   (Dr Employee Expenses / Cr Bank / Cr TDS Payable). */
+/* Pay an approved claim — via the shared Payment/Settlement window so a claim can
+   be cleared by cash, TDS, and/or a settlement (e.g. an advance owed back to us).
+   Posts via cash_txns (Dr Employee Expenses / Cr Bank / Cr TDS Payable). */
 function payExpenseClaim(r){
-  const m=$("main"); const bal=(r._bal!=null?r._bal:num(r.total));
-  m.innerHTML=`<button class="btn sm" id="epBack">← Back to Expense Claims</button>
-    <div class="card" style="margin-top:12px;max-width:520px"><h1>Pay expense claim</h1>
-      <p class="muted">${esc(typeLabel(r.claim_type))} · ${esc(r.employee_name||"")} · Balance <b>${money(bal)}</b></p>
-      <div class="fgrid">
-        <div class="field"><label>Amount settled *</label><input id="ep_amt" type="number" step="any" value="${bal}"></div>
-        <div class="field"><label>Paid from *</label><select id="ep_acct"><option value="">— loading —</option></select></div>
-        <div class="field"><label>Date</label><input id="ep_date" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Mode</label><select id="ep_mode"><option>Bank</option><option>UPI</option><option>Cash</option></select></div>
-        <div class="field full"><label style="display:inline"><input type="checkbox" id="ep_tds" style="width:auto"> Deduct TDS</label></div>
-        <div class="field"><label>TDS %</label><input id="ep_tdspct" type="number" step="any" disabled></div>
-        <div class="field"><label>TDS amount ₹ <span class="muted">(verify)</span></label><input id="ep_tdsamt" type="number" step="any" value="0" disabled></div>
-        <div class="field full"><div class="callout" id="ep_split" style="margin:0"></div></div>
-      </div>
-      <div class="row"><button class="btn green" id="ep_go">Record payment</button><button class="btn" id="ep_cancel">Cancel</button></div>
-      <div class="err" id="ep_err"></div></div>`;
-  $("epBack").addEventListener("click",expenseReview); $("ep_cancel").addEventListener("click",expenseReview);
-  sb().from("cash_accounts").select("id,name,kind").eq("is_active",true).order("kind").then(({data})=>{
-    $("ep_acct").innerHTML=(data||[]).map(a=>`<option value="${a.id}">${esc(a.name)}${a.kind==='cash'?' (cash)':''}</option>`).join("")||'<option value="">— no accounts —</option>'; });
-  const sync=()=>{ const on=$("ep_tds").checked; $("ep_tdspct").disabled=!on; $("ep_tdsamt").disabled=!on;
-    const s=num($("ep_amt").value), t=on?num($("ep_tdsamt").value):0, c=Math.round((s-t)*100)/100;
-    $("ep_split").innerHTML = on?`Settling <b>${money(s)}</b> = paid <b>${money(c)}</b> + TDS <b>${money(t)}</b> (TDS Payable).`:`Paid: <b>${money(s)}</b>`; };
-  $("ep_tds").addEventListener("change",sync);
-  $("ep_amt").addEventListener("input",()=>{ if($("ep_tds").checked&&num($("ep_tdspct").value)) $("ep_tdsamt").value=Math.round(num($("ep_amt").value)*num($("ep_tdspct").value))/100; sync(); });
-  $("ep_tdspct").addEventListener("input",()=>{ $("ep_tdsamt").value=Math.round(num($("ep_amt").value)*num($("ep_tdspct").value))/100; sync(); });
-  $("ep_tdsamt").addEventListener("input",sync); sync();
-  $("ep_go").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
-    const settled=num($("ep_amt").value); if(settled<=0){ $("ep_err").textContent="Enter an amount."; return; }
-    if(!$("ep_acct").value){ $("ep_err").textContent="Pick the account the money left."; return; }
-    const on=$("ep_tds").checked, tds=on?num($("ep_tdsamt").value):0;
-    if(tds<0||tds>settled){ $("ep_err").textContent="TDS must be between 0 and the amount."; return; }
-    const cash=Math.round((settled-tds)*100)/100;
-    const { error }=await sb().from("cash_txns").insert({ account_id:$("ep_acct").value, direction:"out",
-      txn_date:$("ep_date").value||todayISO(), amount:cash, tds_pct:on?(num($("ep_tdspct").value)||null):null, tds_amount:tds, mode:$("ep_mode").value,
-      ref_type:"expense_claim", ref_id:String(r.id), note:typeLabel(r.claim_type)+" — "+(r.employee_name||""), created_by:window.OPS.me.id });
-    if(error){ $("ep_err").textContent=/duplicate|just recorded/i.test(error.message)?"That exact payment was just recorded.":error.message; return; }
-    const { data:all }=await sb().from("cash_txns").select("amount,tds_amount").eq("ref_type","expense_claim").eq("ref_id",String(r.id));
-    const paid=(all||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0);
-    const status = paid>=num(r.total)-0.005 ? "paid" : "part_paid";
-    const patch={ status }; if(status==="paid") patch.paid_at=new Date().toISOString();
-    await sb().from("expense_claims").update(patch).eq("id",r.id);
-    window.OPS.audit&&window.OPS.audit("expense_paid","expense_claims",r.id,money(cash)+(tds>0?(" + TDS "+money(tds)):""));
-    window.OPS.flashTop("Payment recorded ✓"); expenseReview();
-  }));
+  const bal=(r._bal!=null?r._bal:num(r.total));
+  const item={ type:"expense_claim", id:r.id, label:typeLabel(r.claim_type), party:r.employee_name||"", balance:bal, side:"payable" };
+  window.OPS.pay.form({
+    dir:"out", item, title:"Pay expense claim",
+    modes:["Bank","UPI","NEFT/RTGS","Cheque","Cash","Other"],
+    back:expenseReview,
+    commit: async (p)=>{
+      if(p.cash>0.005 || p.tds>0){
+        const { error }=await sb().from("cash_txns").insert({ account_id:p.account, direction:"out",
+          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode,
+          ref_type:"expense_claim", ref_id:String(r.id), note:p.note||(typeLabel(r.claim_type)+" — "+(r.employee_name||"")), created_by:window.OPS.me.id });
+        if(error) return { error:/duplicate|just recorded/i.test(error.message)?"That exact payment was just recorded.":error.message };
+      }
+      if(p.settleTotal>0){
+        try{ await window.OPS.settle.saveLines(p.settleItem, p.settleLines, p.date, "expense_claim"); }
+        catch(e){ return { error:"Settlement failed: "+e.message }; }
+      }
+      // status from cash (incl TDS) + cross-module settlements
+      const [{ data:all },settleMap]=await Promise.all([
+        sb().from("cash_txns").select("amount,tds_amount").eq("ref_type","expense_claim").eq("ref_id",String(r.id)),
+        window.OPS.settle.settledBy("expense_claim")
+      ]);
+      const paid=(all||[]).reduce((s,t)=>s+num(t.amount)+num(t.tds_amount),0) + num((settleMap||{})[r.id]||0);
+      const status = paid>=num(r.total)-0.005 ? "paid" : "part_paid";
+      const patch={ status }; if(status==="paid") patch.paid_at=new Date().toISOString();
+      await sb().from("expense_claims").update(patch).eq("id",r.id);
+      window.OPS.audit&&window.OPS.audit("expense_paid","expense_claims",r.id,money(p.cash)+(p.tds>0?(" + TDS "+money(p.tds)):"")+(p.settleTotal>0?(" + settled "+money(p.settleTotal)):""));
+    }
+  });
 }
 
 window.OPS.routes.my_expenses    = myExpenses;
