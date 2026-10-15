@@ -287,9 +287,14 @@ function importCSV(){
     const need={};
     recs.forEach(r=>{ const n=(r.location||"").trim(); if(!n) return; const k=n.toLowerCase();
       if(!byName[k] && !need[k]) need[k]={ name:n, state:r.state||null, district:r.district||null, rate:num(r.rate)||null }; });
-    for(const k in need){ const t=need[k];
-      const { data, error }=await sb().from("spray_locations").insert({ name:t.name, state:t.state, district:t.district, rates:{default:t.rate} }).select().single();
-      if(!error && data) byName[k]=data; }
+    const needList=Object.keys(need).map(k=>({ name:need[k].name, state:need[k].state, district:need[k].district, rates:{default:need[k].rate} }));
+    if(needList.length){
+      // Location writes are locked down (maker-checker); the CSV import creates
+      // its missing locations via the admin-only bulk RPC.
+      const { data:created, error:cErr }=await sb().rpc("admin_bulk_create_locations",{ p_rows:needList });
+      if(cErr){ alert("Could not create the new locations from this sheet (admin only): "+cErr.message); return; }
+      (created||[]).forEach(c=>{ const k=(c.name||"").toLowerCase().trim(); byName[k]={ id:c.id, name:c.name, rates:{ default:(need[k]||{}).rate||null } }; });
+    }
     // build entries
     const entries=[];
     recs.forEach(r=>{ const n=(r.location||"").trim(); if(!n) return; const loc=byName[n.toLowerCase()]; if(!loc) return;
