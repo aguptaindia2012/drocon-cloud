@@ -187,6 +187,7 @@ function renderAssign(p){
   const active=list.find(a=>a.status==="active");
   const free=locations.filter(l=>!l.is_locked);
   host.innerHTML=`<h3>Location assignment</h3>
+    <div class="small-note" style="margin:-6px 0 8px">Assigning or closing a location needs a <b>second team member's approval</b> before it takes effect.</div>
     ${active?`<div class="callout"><b>Currently at ${esc((active.loc&&active.loc.name)||'')}</b>
         since ${fmtDate(active.start_date)}.
         <div class="row wrap" style="margin-top:8px;gap:8px;align-items:flex-end">
@@ -219,13 +220,26 @@ function renderAssign(p){
 
   host.querySelectorAll("[data-pause]").forEach(b=>b.addEventListener("click",()=>rpc("pause_pilot_assignment",{p_id:b.getAttribute("data-pause")},p)));
   host.querySelectorAll("[data-react]").forEach(b=>b.addEventListener("click",()=>rpc("reactivate_pilot_assignment",{p_id:b.getAttribute("data-react")},p)));
-  host.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>{
-    if(!confirm("Close this location for the pilot? No further acre data can be entered for it.")) return;
-    rpc("close_pilot_assignment",{p_id:b.getAttribute("data-close"),p_note:null,p_end_date:($("clEnd")&&$("clEnd").value)||null},p); }));
+  host.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",async()=>{
+    if(!confirm("Request to close this location for the pilot? It is closed only after a second member approves.")) return;
+    const id=b.getAttribute("data-close"); const a=(assigns[p.id]||[]).find(x=>String(x.id)===String(id));
+    await submitLocChange(a?a.location_id:null,"pilot_end",{ assignment_id:id, end_date:($("clEnd")&&$("clEnd").value)||null },
+      "Close pilot "+(p.name||"")+" @ "+((a&&a.loc&&a.loc.name)||"location"),p); }));
   if($("asGo")) $("asGo").addEventListener("click",async()=>{
     const loc=$("asLoc").value; if(!loc){ alert("Choose a location."); return; }
-    rpc("assign_pilot_location",{p_pilot:p.id,p_location:loc,p_start:$("asStart").value||todayISO()},p);
+    const locTxt=$("asLoc").selectedOptions[0]?$("asLoc").selectedOptions[0].textContent:"";
+    const start=$("asStart").value||todayISO();
+    await submitLocChange(loc,"pilot_assign",{ pilot_id:p.id, start_date:start },
+      "Assign pilot "+(p.name||"")+" → "+locTxt+" from "+start,p);
   });
+}
+// Pilot assignment / close now go through Location maker-checker approval.
+async function submitLocChange(locationId, kind, payload, summary, p){
+  const { error }=await sb().rpc("submit_location_change",
+    { p_location_id:locationId, p_kind:kind, p_payload:payload, p_summary:summary, p_approver:null });
+  if(error){ alert(error.message); return; }
+  window.OPS.refreshReviewCount && window.OPS.refreshReviewCount();
+  window.OPS.flashTop("Submitted for approval ✓"); renderAssign(p);
 }
 async function rpc(fn,args,p){
   const { error }=await sb().rpc(fn,args);

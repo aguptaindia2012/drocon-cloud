@@ -232,6 +232,12 @@ function summaryHTML(it){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">${kv("Farmer ₹/acre",c.farmer_rate)}${kv("Client ₹/acre",c.client_rate)}</div>`;
     if(r.kind==="crop_rate_delete")
       return `<p class="muted">Delete a crop-specific rate row on <b>${esc(loc.name||"")}</b>.</p>`;
+    if(r.kind==="pilot_assign")
+      return `<p class="muted">Assign a pilot to <b>${esc(loc.name||"")}</b> — effective only on approval.</p>
+        <div>${kv("Details",r.summary)}${kv("Start date",c.start_date)}</div>`;
+    if(r.kind==="pilot_end")
+      return `<p class="muted" style="color:#a3322a">Close a pilot's assignment at <b>${esc(loc.name||"")}</b> — permanent on approval.</p>
+        <div>${kv("Details",r.summary)}${kv("End date",c.end_date)}</div>`;
     if(r.kind==="delete")
       return `<p class="muted" style="color:#a3322a">Delete location <b>${esc(loc.name||"")}</b> — permanent on approval (existing entries remain).</p>`;
     return `<p class="muted">${esc(r.kind)}</p>`;
