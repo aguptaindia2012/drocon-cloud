@@ -7,16 +7,34 @@
 (function(){
 const { $, esc, num, money, fmtDate, todayISO } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
-let locations=[], clients=[];
+let locations=[], clients=[], profiles=[], pendingReqs=[];
 const cName = c => (c && (c.firm_name || c.name)) || "";
 const isApprover = ()=> window.OPS.isAdmin() || (window.OPS.isApprover && window.OPS.isApprover());
+const me = ()=> window.OPS.me;
 
 async function loadLocations(){
-  const [l,c]=await Promise.all([
+  const [l,c,pr,cr]=await Promise.all([
     sb().from("spray_locations").select("*, client:client_id(firm_name,name), fbt:farmer_bill_to(firm_name,name), cbt:client_bill_to(firm_name,name)").order("name"),
-    sb().from("clients").select("id,firm_name,name,is_active").order("firm_name")
+    sb().from("clients").select("id,firm_name,name,is_active").order("firm_name"),
+    sb().from("profiles").select("id,full_name,email,role").order("full_name"),
+    sb().from("location_change_requests").select("id,location_id,kind,summary,submitted_by").eq("status","submitted")
   ]);
-  locations=l.data||[]; clients=c.data||[];
+  locations=l.data||[]; clients=c.data||[]; profiles=pr.data||[]; pendingReqs=cr.data||[];
+}
+function pendingFor(locId){ return pendingReqs.filter(r=>String(r.location_id||"")===String(locId||"")); }
+function approverOpts(){ return profiles.filter(p=>p.id!==me().id).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)} (${esc(p.role)})</option>`).join(""); }
+
+// Submit a location change for maker-checker approval (never writes the live
+// tables directly — the approve RPC applies it). Reads the form's approver pick.
+async function submitChange(locationId, kind, payload, summary){
+  const approver = $("lApprover") ? ($("lApprover").value||null) : null;
+  const { data, error }=await sb().rpc("submit_location_change",
+    { p_location_id:locationId, p_kind:kind, p_payload:payload, p_summary:summary, p_approver:approver });
+  if(error) return { error:error.message };
+  try{ if(approver) await sb().from("notifications").insert({ user_id:approver, message:"Location approval needed: "+summary }); }catch(e){}
+  window.OPS.refreshNotifs && window.OPS.refreshNotifs();
+  window.OPS.refreshReviewCount && window.OPS.refreshReviewCount();
+  return { id:data };
 }
 // client <option>s: active only, plus the one already selected (if now inactive)
 function clientOpts(selId){ return clients.filter(c=>c.is_active!==false || c.id===selId)
@@ -27,7 +45,8 @@ async function view(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Daily Spray Entry</div><h1>Locations</h1>
     <div class="callout">Every location belongs to a <b>Client</b> — create the client first under <b>Finance → Client</b>.
-      Locking a location freezes it: no new pilots can be assigned and it disappears from the entry drop-downs, which keeps the lists short and prevents wrong entries.</div>
+      Any <b>create, edit, rate change or crop rate</b> needs a <b>second team member's approval</b> before it takes effect. Locking a location freezes it (approver only).</div>
+    ${pendingReqs.length?`<div class="callout warn">⏳ <b>${pendingReqs.length}</b> location change(s) awaiting approval. <a href="#" id="lGoReview" style="font-weight:600">Open review queue →</a></div>`:''}
     <div class="row wrap" style="margin-bottom:8px;gap:8px">
       <input id="lSearch" placeholder="Search locations…" style="max-width:280px">
       <select id="lStatus" style="width:auto"><option value="">All status</option><option value="open" selected>Open</option><option value="locked">Locked</option></select>
@@ -35,6 +54,7 @@ async function view(){
       <div class="spacer"></div><button class="btn green sm" id="lNew">+ New location</button></div>
     <div id="lList" class="muted">Loading…</div>`;
   $("lNew").addEventListener("click",()=>locForm(null));
+  if($("lGoReview")) $("lGoReview").addEventListener("click",e=>{ e.preventDefault(); window.OPS.openTool("reviews"); });
   const cl=$("lClient"); if(cl) cl.innerHTML='<option value="">All clients</option>'+clients.map(c=>`<option value="${c.id}">${esc(cName(c))}</option>`).join("");
   function renderRows(rows){
     $("lList").innerHTML = rows.length?`<div style="overflow:auto"><table><thead><tr><th>Location</th><th>Client</th><th>District / State</th><th class="num">Farmer ₹</th><th class="num">Client ₹</th><th>Status</th></tr></thead>
@@ -43,7 +63,7 @@ async function view(){
         <td>${esc([l.district,l.state].filter(Boolean).join(", "))}</td>
         <td class="num">${l.farmer_rate!=null?money(l.farmer_rate):'—'}</td>
         <td class="num">${num(l.client_rate)>0?money(l.client_rate):'<span class="muted">0</span>'}</td>
-        <td>${l.is_locked?'<span class="chip executed">🔒 Locked</span>':'<span class="chip approved">Open</span>'}${isApprover()?` <button class="btn sm" data-tog="${l.id}">${l.is_locked?'Unlock':'Lock'}</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
+        <td>${l.is_locked?'<span class="chip executed">🔒 Locked</span>':'<span class="chip approved">Open</span>'}${pendingFor(l.id).length?' <span class="chip in_review" title="Changes awaiting approval">⏳ pending</span>':''}${isApprover()?` <button class="btn sm" data-tog="${l.id}">${l.is_locked?'Unlock':'Lock'}</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No locations match this filter.</div>';
     $("lList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("button")) return; locForm(locations.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
     $("lList").querySelectorAll("[data-tog]").forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleLock(locations.find(x=>String(x.id)===b.getAttribute("data-tog"))); }));
@@ -86,6 +106,7 @@ function locForm(rec){
   m.innerHTML=`<button class="btn sm" id="lBack">← Back to Locations</button>
     <div class="card" style="margin-top:12px"><div class="eyebrow">Daily Spray Entry</div><h1>${rec?"Edit":"New"} location</h1>
     ${locked?'<div class="callout warn">🔒 <b>This location is locked.</b> Details cannot be edited and no pilots can be assigned. An approver must unlock it first.</div>':''}
+    ${rec&&pendingFor(rec.id).length?`<div class="callout warn">⏳ This location has <b>${pendingFor(rec.id).length}</b> change(s) awaiting approval. You can still propose more — each is reviewed separately.</div>`:''}
     <div class="fgrid">
       <div class="field"><label>Client * <a href="#" id="lNewClient" style="font-weight:400">+ new client</a></label><select id="lClient" ${locked?'disabled':''}>
         <option value="">— select client —</option>
@@ -112,10 +133,13 @@ function locForm(rec){
         ${clientOpts(e.client_bill_to)}
       </select><div class="small-note">18% GST · Marketing Expense / Subsidy</div></div>
     </div>
-    <div class="row wrap"><button class="btn green" id="lSave" ${locked?'disabled':''}>${rec?"Save":"Create"}</button><button class="btn" id="lCancel">Cancel</button>
+    <div class="row wrap" style="align-items:center"><button class="btn green" id="lSave" ${locked?'disabled':''}>${rec?"Submit changes for approval":"Submit new location for approval"}</button><button class="btn" id="lCancel">Cancel</button>
+      <label class="muted" style="margin:0 0 0 8px">Reviewer</label>
+      <select id="lApprover" style="width:auto;max-width:220px"><option value="">Any approver</option>${approverOpts()}</select>
       <div class="spacer"></div>
       ${rec&&isApprover()?`<button class="btn sm" id="lLock">${locked?'🔓 Unlock location':'🔒 Lock location'}</button>`:''}
-      ${rec&&window.OPS.canDelete()&&!locked?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}</div>
+      ${rec&&window.OPS.canDelete()&&!locked?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Request delete</button>':''}</div>
+    <div class="small-note">Changes don't take effect until a <b>different team member</b> approves them.</div>
     <div class="err" id="lErr"></div></div>
     ${rec?'<div class="card" id="lCropRates"><h3>Crop-specific rates</h3><div class="muted">Loading…</div></div>':''}
     ${rec?'<div class="card" id="lPilots"><h3>Pilots at this location</h3><div class="muted">Loading…</div></div>':''}`;
@@ -137,15 +161,18 @@ function locForm(rec){
     const farmerTo=$("lFarmerTo").value||null, clientTo=$("lClientTo").value||null;
     if(!farmerTo){ $("lErr").textContent="Select who the farmer rate is billed to."; return; }
     if(clientRate>0 && !clientTo){ $("lErr").textContent="The client rate is above 0 — choose who it is billed to, or set the rate to 0."; return; }
-    const out={ name, client_id, district:$("lDist").value||null, state:$("lState").value||null,
+    const payload={ name, client_id, district:$("lDist").value||null, state:$("lState").value||null,
       farmer_rate: farmerRate||null, client_rate: clientRate||0,
       farmer_bill_to: farmerTo, client_bill_to: clientRate>0?clientTo:null,
       rates: { default: farmerRate||null } };   // keep the legacy field in step
-    if(rec){ const { error }=await sb().from("spray_locations").update(out).eq("id",rec.id); if(error){ $("lErr").textContent=error.message; return; } window.OPS.audit("edited","spray_locations",rec.id,name); }
-    else { out.created_by=window.OPS.me.id; const { error }=await sb().from("spray_locations").insert(out); if(error){ $("lErr").textContent=error.message; return; } window.OPS.audit("created","spray_locations",name,name); }
-    window.OPS.flashTop("Saved ✓"); view();
+    const summary=(rec?"Edit location — ":"New location — ")+name;
+    const r=await submitChange(rec?rec.id:null, rec?"edit":"create", payload, summary);
+    if(r.error){ $("lErr").textContent=r.error; return; }
+    window.OPS.flashTop("Submitted for approval ✓"); view();
   });
-  if($("lDel")) $("lDel").addEventListener("click",async()=>{ if(!confirm("Delete location? (existing entries remain)"))return; await sb().from("spray_locations").delete().eq("id",rec.id); window.OPS.audit("deleted","spray_locations",rec.id,""); view(); });
+  if($("lDel")) $("lDel").addEventListener("click",async()=>{ if(!confirm("Request deletion of this location? It is removed only after a second member approves."))return;
+    const r=await submitChange(rec.id,"delete",{},"Delete location — "+(rec.name||"")); if(r.error){ alert(r.error); return; }
+    window.OPS.flashTop("Delete request submitted ✓"); view(); });
 }
 
 /* crop-wise, effective-dated rates for this location */
@@ -175,14 +202,18 @@ async function loadCropRates(rec){
     const f=$("crF").value, c=$("crC").value;
     if(f===""&&c===""){ alert("Enter at least one rate."); return; }
     if(!$("crFrom").value){ alert("Pick the effective-from date."); return; }
-    const { error }=await sb().from("location_crop_rates").insert({ location_id:rec.id, crop_id:$("crCrop").value||null,
-      farmer_rate:f===""?null:num(f), client_rate:c===""?null:num(c), effective_from:$("crFrom").value, created_by:window.OPS.me.id });
-    if(error){ alert(error.message); return; }
-    window.OPS.flashTop("Rate added ✓"); loadCropRates(rec);
+    const cropSel=$("crCrop"); const cropName=cropSel&&cropSel.selectedOptions[0]?cropSel.selectedOptions[0].textContent:"All crops";
+    const payload={ crop_id:$("crCrop").value||null, farmer_rate:f===""?null:num(f), client_rate:c===""?null:num(c), effective_from:$("crFrom").value };
+    const summary="Crop rate — "+cropName+" from "+$("crFrom").value+" @ "+(rec.name||"");
+    const r=await submitChange(rec.id,"crop_rate_add",payload,summary);
+    if(r.error){ alert(r.error); return; }
+    window.OPS.flashTop("Crop rate submitted for approval ✓ — it goes live once approved."); loadCropRates(rec);
   });
   host.querySelectorAll("[data-delcr]").forEach(b=>b.addEventListener("click",async()=>{
-    if(!confirm("Delete this rate row?")) return;
-    await sb().from("location_crop_rates").delete().eq("id",b.getAttribute("data-delcr")); loadCropRates(rec);
+    if(!confirm("Request deletion of this crop rate? It is removed only after approval.")) return;
+    const r=await submitChange(rec.id,"crop_rate_delete",{ rate_id:b.getAttribute("data-delcr") },"Delete a crop rate @ "+(rec.name||""));
+    if(r.error){ alert(r.error); return; }
+    window.OPS.flashTop("Delete request submitted ✓");
   }));
 }
 

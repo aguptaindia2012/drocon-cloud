@@ -24,6 +24,7 @@ const TYPES = {
     title:r=>{ const c=r.pending_changes||{}; const d=(c.entry_date!=null?c.entry_date:r.entry_date)||"";
       const p=(c.pilot_name!=null?c.pilot_name:r.pilot_name)||""; const a=(c.acres!=null?c.acres:r.acres);
       return (d?String(d).slice(0,10):"")+(p?(" · "+p):"")+(a!=null?(" · "+a+" ac"):""); } },
+  location_change_requests: { label:"Location change", title:r=>r.summary||r.kind||"Location change" },
 };
 let invSpares={};   // id -> name cache for the inventory review summary
 /* Internal margin from the cost snapshot on each line (base + shipping).
@@ -60,6 +61,7 @@ async function approve(table, id, title){
   if(table==="agreements"){ const { error }=await sb().rpc("approve_agreement",{p_id:id,p_note:null}); if(error){ alert(error.message); return false; } }
   else if(table==="inventory_moves"){ const { error }=await sb().rpc("approve_inventory_edit",{p_id:id}); if(error){ alert(error.message); return false; } }
   else if(table==="acre_entries"){ const { error }=await sb().rpc("approve_acre_edit",{p_id:id}); if(error){ alert(error.message); return false; } }
+  else if(table==="location_change_requests"){ const { error }=await sb().rpc("approve_location_change",{p_id:id}); if(error){ alert(error.message); return false; } }
   else { const { error }=await sb().from(table).update({ approval_status:"approved", approved_by:me().id, approved_at:new Date().toISOString() }).eq("id",id); if(error){ alert(error.message); return false; } }
   window.OPS.audit("approved",table,id,title||""); window.OPS.flashTop("Approved ✓"); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
@@ -67,6 +69,7 @@ async function reject(table, id, note, title){
   if(table==="agreements"){ const { error }=await sb().rpc("reject_agreement",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
   else if(table==="inventory_moves"){ const { error }=await sb().rpc("reject_inventory_edit",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
   else if(table==="acre_entries"){ const { error }=await sb().rpc("reject_acre_edit",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
+  else if(table==="location_change_requests"){ const { error }=await sb().rpc("reject_location_change",{p_id:id,p_note:note||null}); if(error){ alert(error.message); return false; } }
   else { const { error }=await sb().from(table).update({ approval_status:"rejected", approved_by:me().id, approved_at:new Date().toISOString(), reject_note:note||null }).eq("id",id); if(error){ alert(error.message); return false; } }
   window.OPS.audit("rejected",table,id,note||""); window.OPS.flashTop("Rejected"); window.OPS.refreshReviewCount&&window.OPS.refreshReviewCount(); return true;
 }
@@ -120,7 +123,13 @@ async function reviewQueue(){
     if(!admin) q=q.eq("assigned_approver",me().id);
     const { data }=await q; return (data||[]).map(r=>({table:"agreements",r}));
   }
-  const groups=await Promise.all([ pendingAgs(), pending("documents"), pending("clients"), pending("vendors"), pending("bom_designs"), pending("inventory_moves"), pending("acre_entries") ]);
+  // location change requests use their own status + maker-checker (never your own)
+  async function pendingLocChanges(){
+    let q=sb().from("location_change_requests").select("*, loc:location_id(*)").eq("status","submitted").neq("submitted_by",me().id);
+    if(!admin) q=q.eq("assigned_approver",me().id);
+    const { data }=await q; return (data||[]).map(r=>({table:"location_change_requests",r}));
+  }
+  const groups=await Promise.all([ pendingAgs(), pending("documents"), pending("clients"), pending("vendors"), pending("bom_designs"), pending("inventory_moves"), pending("acre_entries"), pendingLocChanges() ]);
   const items=[].concat(...groups);
   // preload spare names for any inventory items so the summary can name them
   try{
@@ -202,6 +211,31 @@ function summaryHTML(it){
       <tbody>${rowsDef.map(([lab,k])=>{ const changed=String(cur[k]??"")!==String(prop[k]??"");
         return `<tr${changed?' style="background:#fff7e6"':''}><td>${esc(lab)}</td><td>${esc(cur[k]??"")}</td><td>${changed?"<b>"+esc(prop[k]??"")+"</b>":esc(prop[k]??"")}</td></tr>`; }).join("")}</tbody></table>`;
   }
+  if(it.table==="location_change_requests"){
+    const r=it.r, c=r.payload||{}, loc=r.loc||{};
+    if(r.kind==="create"){
+      return `<p class="muted">New location — it is created only when you approve.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">
+          ${kv("Name",c.name)}${kv("District",c.district)}${kv("State",c.state)}
+          ${kv("Farmer rate",c.farmer_rate)}${kv("Client rate",c.client_rate)}</div>`;
+    }
+    if(r.kind==="edit"){
+      const rowsDef=[["Name","name"],["District","district"],["State","state"],["Farmer rate","farmer_rate"],["Client rate","client_rate"]];
+      return `<p class="muted">Proposed edit to <b>${esc(loc.name||"")}</b> — takes effect only on approval.</p>
+        <table class="tight" style="margin-top:6px"><thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead>
+        <tbody>${rowsDef.map(([lab,k])=>{ const has=Object.prototype.hasOwnProperty.call(c,k); const cur=loc[k], prop=c[k];
+          const changed=has && String(cur??"")!==String(prop??"");
+          return `<tr${changed?' style="background:#fff7e6"':''}><td>${esc(lab)}</td><td>${esc(cur??"")}</td><td>${has?(changed?"<b>"+esc(prop??"")+"</b>":esc(prop??"")):'<span class="muted">unchanged</span>'}</td></tr>`; }).join("")}</tbody></table>`;
+    }
+    if(r.kind==="crop_rate_add")
+      return `<p class="muted">Add a crop-specific rate to <b>${esc(loc.name||"")}</b> — effective <b>${esc(c.effective_from||"")}</b>.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px">${kv("Farmer ₹/acre",c.farmer_rate)}${kv("Client ₹/acre",c.client_rate)}</div>`;
+    if(r.kind==="crop_rate_delete")
+      return `<p class="muted">Delete a crop-specific rate row on <b>${esc(loc.name||"")}</b>.</p>`;
+    if(r.kind==="delete")
+      return `<p class="muted" style="color:#a3322a">Delete location <b>${esc(loc.name||"")}</b> — permanent on approval (existing entries remain).</p>`;
+    return `<p class="muted">${esc(r.kind)}</p>`;
+  }
   return '<p class="muted">No summary available.</p>';
 }
 async function loadChanges(it){
@@ -209,7 +243,8 @@ async function loadChanges(it){
   const variants=({ documents:["document","documents"], agreements:["agreement","agreements"],
     clients:["client","clients"], vendors:["vendor","vendors"], bom_designs:["bom_design","bom_designs","bom"],
     inventory_moves:["inventory_move","inventory_moves"],
-    acre_entries:["acre_entry","acre_entries"] }[it.table])||[it.table];
+    acre_entries:["acre_entry","acre_entries"],
+    location_change_requests:["location_change_requests"] }[it.table])||[it.table];
   const { data }=await sb().from("audit_log").select("*").in("entity",variants).eq("entity_id",String(it.r.id)).order("created_at",{ascending:false}).limit(8);
   const rows=data||[]; if(!rows.length){ host.innerHTML=""; return; }
   const ps=await listProfilesCached();
@@ -254,6 +289,7 @@ function openItem(it){
   else if(it.table==="bom_designs"){ window.OPS.openTool("bom"); }
   else if(it.table==="inventory_moves"){ window.OPS.openTool("inventory"); }
   else if(it.table==="acre_entries"){ window.OPS.openTool("entries"); }
+  else if(it.table==="location_change_requests"){ window.OPS.openTool("locations"); }
 }
 
 window.OPS.approvals = { submit, approve, reject, bar };
