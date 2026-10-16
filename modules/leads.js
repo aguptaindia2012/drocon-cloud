@@ -16,8 +16,8 @@ const ST_LABEL = Object.fromEntries(STATUSES);
 const OPEN = s => s!=="won" && s!=="lost";
 const SRC_ICON = { whatsapp:"🟢", phone:"📞", facebook:"📘", instagram:"📸", referral:"🤝", walk_in:"🚶", website:"🌐", other:"•" };
 
-let leads=[], profiles=[], loadErr="";
-let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list" };
+let leads=[], profiles=[], inbox=[], loadErr="";
+let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list", tab:"tracker" };
 const nameOf = id => { const p=profiles.find(x=>x.id===id); return p?(p.full_name||p.email):""; };
 const digits = s => String(s||"").replace(/[^\d]/g,"");
 // store a clean number: digits only, STD "0" prefix dropped (keeps a country code if present)
@@ -53,13 +53,22 @@ async function ensureSession(){
 }
 async function load(){
   await ensureSession();
-  const [lres, pres]=await Promise.all([
+  const [lres, pres, ires]=await Promise.all([
     sb().from("leads").select("*").order("created_at",{ascending:false}).limit(5000),
-    sb().from("profiles").select("id,full_name,email,role").order("full_name")
+    sb().from("profiles").select("id,full_name,email,role").order("full_name"),
+    sb().from("meta_leads_inbox").select("*").eq("status","new").order("received_at",{ascending:false}).limit(2000)
   ]);
   loadErr = lres.error ? lres.error.message : "";
-  leads = lres.data||[]; profiles = pres.data||[];
+  leads = lres.data||[]; profiles = pres.data||[]; inbox = ires.data||[];
 }
+function tabBar(){ return `<div class="row" style="gap:0;margin-bottom:10px">
+  <button class="btn sm ${F.tab!=='inbox'?'green':''}" id="tbTracker">Leads tracker</button>
+  <button class="btn sm ${F.tab==='inbox'?'green':''}" id="tbInbox">📥 Meta inbox${inbox.length?` (${inbox.length})`:''}</button></div>`; }
+function wireTabs(){
+  if($("tbTracker")) $("tbTracker").addEventListener("click",()=>{ F.tab='tracker'; route(); });
+  if($("tbInbox"))   $("tbInbox").addEventListener("click",()=>{ F.tab='inbox'; route(); });
+}
+function route(){ F.tab==='inbox' ? paintInbox() : paint(); }
 function diagLine(){
   const ext = (window.OPS.isExternal && window.OPS.isExternal());
   const who = (me() && (me().email||me().full_name)) || "—";
@@ -72,16 +81,17 @@ function diagLine(){
 // Route entry: always pull fresh from the server, THEN paint. (The bug was that
 // opening the tab only painted from an empty in-memory array — data showed only
 // after a manual Refresh or after creating a lead.)
-async function view(){ $("main").innerHTML='<div class="muted" style="padding:20px">Loading leads…</div>'; await load(); paint(); }
+async function view(){ $("main").innerHTML='<div class="muted" style="padding:20px">Loading leads…</div>'; await load(); route(); }
 function paint(){
   const m=$("main");
-  m.innerHTML=`<div class="eyebrow">Business Development</div><h1>Leads &amp; Follow-ups</h1>
+  m.innerHTML=`<div class="eyebrow">Business Development</div><h1>Leads &amp; Follow-ups</h1>${tabBar()}
     <div class="callout">Log every enquiry — WhatsApp, call, Facebook, Instagram, referral, walk-in. Keep it quick:
       <b>nothing is mandatory</b>. Open a lead to add follow-up notes and set the next follow-up date; the dashboard below reminds you what's due.</div>
     <div id="ldDash" class="statrow"></div>
     <div class="row wrap" style="margin:10px 0;gap:8px;align-items:center">
       <button class="btn green sm" id="ldNew">+ New lead</button>
       <button class="btn sm" id="ldRefresh" title="Reload from the server">↻ Refresh</button>
+      ${(window.OPS.isAdmin&&window.OPS.isAdmin())?'<button class="btn sm" id="ldMeta" title="Facebook/Instagram Lead Ads">⚙ Meta leads</button>':''}
       <div class="row" style="gap:0"><button class="btn sm ${F.layout!=='board'?'green':''}" id="ldListBtn">☰ List</button><button class="btn sm ${F.layout==='board'?'green':''}" id="ldBoardBtn">▦ Pipeline</button></div>
       <input id="ldQ" placeholder="Search name / phone / interest / city…" style="max-width:260px" value="${esc(F.q)}">
       ${F.layout==='board'?'':`<select id="ldStatus" style="width:auto"><option value="">All status</option>${STATUSES.map(([k,l])=>`<option value="${k}" ${F.status===k?'selected':''}>${esc(l)}</option>`).join("")}</select>`}
@@ -94,6 +104,7 @@ function paint(){
     <div id="ldList" class="muted">Loading…</div>`;
   $("ldNew").addEventListener("click",()=>editLead(null));
   $("ldRefresh").addEventListener("click",async()=>{ $("ldList").innerHTML='<div class="muted">Loading…</div>'; await load(); renderDash(); draw(); });
+  if($("ldMeta")) $("ldMeta").addEventListener("click",metaPanel);
   $("ldListBtn").addEventListener("click",()=>{ if(F.layout!=='list'){ F.layout='list'; paint(); } });
   $("ldBoardBtn").addEventListener("click",()=>{ if(F.layout!=='board'){ F.layout='board'; paint(); } });
   $("ldQ").addEventListener("input",()=>{ F.q=$("ldQ").value; draw(); });
@@ -101,7 +112,35 @@ function paint(){
   $("ldSource").addEventListener("change",()=>{ F.source=$("ldSource").value; draw(); });
   $("ldOwner").addEventListener("change",()=>{ F.owner=$("ldOwner").value; draw(); });
   if($("ldClear")) $("ldClear").addEventListener("click",()=>{ F.bucket=""; paint(); });
+  wireTabs();
   renderDash(); draw();
+}
+
+/* ---- Meta inbox sub-tab: review + transfer into the tracker ---- */
+function paintInbox(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">Business Development</div><h1>Leads</h1>${tabBar()}
+    <div class="callout">New Facebook / Instagram <b>Lead Ads</b> arrive here. Review a lead, then
+      <b>Transfer to DCB lead tracker</b> — it opens a prefilled lead for you to complete and save.</div>
+    ${inbox.length?`<div style="overflow:auto"><table><thead><tr><th>Received</th><th>Name</th><th>Phone</th><th>Interest</th><th></th></tr></thead>
+      <tbody>${inbox.map(x=>`<tr>
+        <td>${fmtDate(x.received_at)}</td><td><b>${esc(x.name||'(no name)')}</b>${x.city?`<br><span class="muted" style="font-size:12px">${esc(x.city)}</span>`:''}</td>
+        <td>${esc(x.phone||'')}</td>
+        <td>${esc(x.interest||'')}${x.email?`<br><span class="muted" style="font-size:12px">${esc(x.email)}</span>`:''}</td>
+        <td style="white-space:nowrap"><button class="btn green sm" data-xfer="${x.id}">→ Transfer to tracker</button>
+          <button class="btn sm" data-dismiss="${x.id}" style="color:#a3322a;border-color:#e4b4b4">Dismiss</button></td></tr>`).join("")}</tbody></table></div>`
+      :'<div class="card muted">No new Meta leads. '+((window.OPS.isAdmin&&window.OPS.isAdmin())?'Set up the integration from the tracker → <b>⚙ Meta leads</b>.':'')+'</div>'}`;
+  wireTabs();
+  m.querySelectorAll("[data-xfer]").forEach(b=>b.addEventListener("click",()=>{ const x=inbox.find(z=>String(z.id)===b.getAttribute("data-xfer")); if(x) transfer(x); }));
+  m.querySelectorAll("[data-dismiss]").forEach(b=>b.addEventListener("click",async()=>{
+    const x=inbox.find(z=>String(z.id)===b.getAttribute("data-dismiss")); if(!x||!confirm("Dismiss this Meta lead? It won't be added to the tracker."))return;
+    const { error }=await sb().from("meta_leads_inbox").update({ status:'dismissed', handled_by:me().id, handled_at:new Date().toISOString() }).eq("id",x.id);
+    if(error){ alert(error.message); return; }
+    window.OPS.flashTop("Dismissed"); view();
+  }));
+}
+function transfer(x){
+  editLead(null, { name:x.name, phone:x.phone, interest:x.interest, city:x.city, source:'facebook', status:'new', _inboxId:x.id });
 }
 function draw(){ if($("ldDiag")) $("ldDiag").innerHTML=diagLine(); F.layout==='board' ? renderBoard() : render(); }
 
@@ -228,7 +267,8 @@ function editLead(rec){
       notes:$("le_notes").value.trim()||null, updated_at:new Date().toISOString() };
     if(!rec && !out.name && !out.phone && !out.interest){ $("leErr").textContent="Add at least a name, phone, or what they want."; return; }
     if(rec){ const { error }=await sb().from("leads").update(out).eq("id",rec.id); if(error){ $("leErr").textContent=error.message; return; } }
-    else { out.created_by=me().id; const { error }=await sb().from("leads").insert(out); if(error){ $("leErr").textContent=error.message; return; } }
+    else { out.created_by=me().id; const { data:ins, error }=await sb().from("leads").insert(out).select("id").single(); if(error){ $("leErr").textContent=error.message; return; }
+      if(e && e._inboxId && ins){ try{ await sb().from("meta_leads_inbox").update({ status:'transferred', transferred_lead_id:ins.id, handled_by:me().id, handled_at:new Date().toISOString() }).eq("id",e._inboxId); }catch(_){} } }
     window.OPS.flashTop("Saved ✓"); view();
   });
   if($("leDel")) $("leDel").addEventListener("click",async()=>{ if(!confirm("Delete this lead and its follow-ups?"))return;
@@ -293,6 +333,44 @@ async function detail(l){
     await sb().from("leads").update({ status, next_follow_up:next, last_contacted:todayISO(), updated_at:new Date().toISOString() }).eq("id",l.id);
     window.OPS.flashTop("Follow-up saved ✓"); await load();
     const fresh=leads.find(x=>String(x.id)===String(l.id)); detail(fresh||l);
+  });
+}
+
+/* ---- admin: Meta Lead Ads integration config ---- */
+async function metaPanel(){
+  const m=$("main");
+  const { data:cfg }=await sb().from("meta_lead_config").select("*").eq("id",1).maybeSingle();
+  const c=cfg||{};
+  const base=(window.DCB_CONFIG&&window.DCB_CONFIG.SUPABASE_URL)?window.DCB_CONFIG.SUPABASE_URL.replace(/\/+$/,''):'https://<your-project-ref>.supabase.co';
+  const hook=base+"/functions/v1/meta-leads-webhook";
+  m.innerHTML=`<button class="btn sm" id="mBack">← Back to Leads</button>
+    <div class="card" style="margin-top:12px;max-width:760px"><h1>Meta Lead Ads integration</h1>
+      <p class="muted">Facebook / Instagram <b>Lead Ad</b> (Instant Form) submissions arrive in the <b>📥 Meta inbox</b> sub-tab for the team to review and transfer into the tracker.</p>
+      <div class="fgrid">
+        <div class="field full"><label>Default owner for incoming leads</label>
+          <select id="m_owner"><option value="">— unassigned —</option>${profiles.map(p=>`<option value="${p.id}" ${c.default_owner===p.id?'selected':''}>${esc(p.full_name||p.email)}</option>`).join("")}</select></div>
+        <div class="field"><label>Source label</label><input id="m_src" value="${esc(c.source_label||'facebook')}"></div>
+        <div class="field"><label style="display:inline"><input type="checkbox" id="m_en" style="width:auto" ${c.enabled!==false?'checked':''}> Integration enabled</label></div>
+      </div>
+      <div class="row"><button class="btn green" id="m_save">Save</button></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Last webhook event: <b>${c.last_event_at?fmtDate(c.last_event_at):'—'}</b> · Last lead received: <b>${c.last_lead_at?fmtDate(c.last_lead_at):'—'}</b></div>
+      <hr style="margin:14px 0">
+      <h3 style="margin:0 0 6px">One-time setup (admin)</h3>
+      <ol class="muted" style="font-size:13px;line-height:1.7;padding-left:18px">
+        <li>Deploy the function: <code>supabase functions deploy meta-leads-webhook --no-verify-jwt</code></li>
+        <li>Set secrets: <code>supabase secrets set DCB_SERVICE_KEY=… META_VERIFY_TOKEN=… META_APP_SECRET=… META_PAGE_TOKEN=…</code></li>
+        <li>In your Meta App → <b>Webhooks → Page</b>, Callback URL:<br>
+          <code style="word-break:break-all;background:#f4f5f2;padding:2px 4px">${esc(hook)}</code><br>
+          Verify token = the <b>META_VERIFY_TOKEN</b> you set · subscribe the <b>leadgen</b> field.</li>
+        <li>Subscribe your Facebook Page to the app, and get <b>leads_retrieval</b> Advanced Access via App Review.</li>
+        <li>Submit a test lead from Meta's <b>Lead Ads Testing Tool</b> — it should appear in the <b>📥 Meta inbox</b> within seconds.</li>
+      </ol>
+    </div>`;
+  $("mBack").addEventListener("click",view);
+  $("m_save").addEventListener("click",async()=>{
+    const { error }=await sb().from("meta_lead_config").update({ default_owner:$("m_owner").value||null, source_label:$("m_src").value||'facebook', enabled:$("m_en").checked }).eq("id",1);
+    if(error){ alert(error.message); return; }
+    window.OPS.flashTop("Saved ✓"); metaPanel();
   });
 }
 
