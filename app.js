@@ -67,6 +67,7 @@ const TOOLS = [
   { key:"vendor_report",   section:"trackers", label:"Vendor Statement",  gate:"perm" },
   // (Farmer Bulk Entry is a sub-sub tab under Entries → Farmer sprays)
   // Business Development — Authorized Partners home, orders + sales documents
+  { key:"leads",            section:"order", label:"Leads (BD Tracker)", gate:"perm" },
   { key:"bd_dashboard",     section:"order", label:"Ongoing Sales",   gate:"perm" },
   { key:"partners",         section:"order", label:"Authorized Partners",      gate:"all" },
   { key:"ap_rates",         section:"order", label:"Authorized Partner Rates", gate:"perm" },
@@ -755,6 +756,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "272";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "273";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
