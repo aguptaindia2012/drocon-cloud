@@ -20,6 +20,8 @@ let leads=[], profiles=[], loadErr="";
 let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list" };
 const nameOf = id => { const p=profiles.find(x=>x.id===id); return p?(p.full_name||p.email):""; };
 const digits = s => String(s||"").replace(/[^\d]/g,"");
+// store a clean number: digits only, STD "0" prefix dropped (keeps a country code if present)
+const cleanPhone = s => { const d=digits(s).replace(/^0+/,""); return d||null; };
 function waLink(phone){
   let d=digits(phone); if(!d) return null;
   d=d.replace(/^0+/,"");                 // drop the STD "0" prefix people often add
@@ -218,7 +220,7 @@ function editLead(rec){
       <div class="err" id="leErr"></div></div>`;
   $("leBack").addEventListener("click",view); $("leCancel").addEventListener("click",view);
   $("leSave").addEventListener("click",async()=>{
-    const out={ name:$("le_name").value.trim()||null, phone:$("le_phone").value.trim()||null,
+    const out={ name:$("le_name").value.trim()||null, phone:cleanPhone($("le_phone").value),
       source:$("le_source").value||null, owner:$("le_owner").value||(rec?e.owner:me().id)||null,
       interest:$("le_interest").value.trim()||null, city:$("le_city").value.trim()||null,
       est_value:$("le_value").value===""?null:num($("le_value").value),
