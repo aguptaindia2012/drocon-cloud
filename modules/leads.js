@@ -17,7 +17,7 @@ const OPEN = s => s!=="won" && s!=="lost";
 const SRC_ICON = { whatsapp:"🟢", phone:"📞", facebook:"📘", instagram:"📸", referral:"🤝", walk_in:"🚶", website:"🌐", other:"•" };
 
 let leads=[], profiles=[];
-let F = { bucket:"", q:"", status:"", source:"", owner:"" };
+let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list" };
 const nameOf = id => { const p=profiles.find(x=>x.id===id); return p?(p.full_name||p.email):""; };
 const digits = s => String(s||"").replace(/[^\d]/g,"");
 function waLink(phone){ let d=digits(phone); if(!d) return null; if(d.length===10) d="91"+d; return "https://wa.me/"+d; }
@@ -49,8 +49,9 @@ async function view(){
     <div id="ldDash" class="statrow"></div>
     <div class="row wrap" style="margin:10px 0;gap:8px;align-items:center">
       <button class="btn green sm" id="ldNew">+ New lead</button>
-      <input id="ldQ" placeholder="Search name / phone / interest / city…" style="max-width:280px" value="${esc(F.q)}">
-      <select id="ldStatus" style="width:auto"><option value="">All status</option>${STATUSES.map(([k,l])=>`<option value="${k}" ${F.status===k?'selected':''}>${esc(l)}</option>`).join("")}</select>
+      <div class="row" style="gap:0"><button class="btn sm ${F.layout!=='board'?'green':''}" id="ldListBtn">☰ List</button><button class="btn sm ${F.layout==='board'?'green':''}" id="ldBoardBtn">▦ Pipeline</button></div>
+      <input id="ldQ" placeholder="Search name / phone / interest / city…" style="max-width:260px" value="${esc(F.q)}">
+      ${F.layout==='board'?'':`<select id="ldStatus" style="width:auto"><option value="">All status</option>${STATUSES.map(([k,l])=>`<option value="${k}" ${F.status===k?'selected':''}>${esc(l)}</option>`).join("")}</select>`}
       <select id="ldSource" style="width:auto"><option value="">All sources</option>${SOURCES.map(([k,l])=>`<option value="${k}" ${F.source===k?'selected':''}>${esc(l)}</option>`).join("")}</select>
       <select id="ldOwner" style="width:auto"><option value="">All owners</option>${profiles.map(p=>`<option value="${p.id}" ${F.owner===p.id?'selected':''}>${esc(p.full_name||p.email)}</option>`).join("")}</select>
       ${F.bucket?`<button class="btn sm" id="ldClear">✕ ${esc({overdue:"Overdue",today:"Due today",week:"This week",nodate:"No date set",later:"Upcoming"}[F.bucket]||F.bucket)}</button>`:''}
@@ -58,13 +59,16 @@ async function view(){
     </div>
     <div id="ldList" class="muted">Loading…</div>`;
   $("ldNew").addEventListener("click",()=>editLead(null));
-  $("ldQ").addEventListener("input",()=>{ F.q=$("ldQ").value; render(); });
-  $("ldStatus").addEventListener("change",()=>{ F.status=$("ldStatus").value; render(); });
-  $("ldSource").addEventListener("change",()=>{ F.source=$("ldSource").value; render(); });
-  $("ldOwner").addEventListener("change",()=>{ F.owner=$("ldOwner").value; render(); });
+  $("ldListBtn").addEventListener("click",()=>{ if(F.layout!=='list'){ F.layout='list'; view(); } });
+  $("ldBoardBtn").addEventListener("click",()=>{ if(F.layout!=='board'){ F.layout='board'; view(); } });
+  $("ldQ").addEventListener("input",()=>{ F.q=$("ldQ").value; draw(); });
+  if($("ldStatus")) $("ldStatus").addEventListener("change",()=>{ F.status=$("ldStatus").value; draw(); });
+  $("ldSource").addEventListener("change",()=>{ F.source=$("ldSource").value; draw(); });
+  $("ldOwner").addEventListener("change",()=>{ F.owner=$("ldOwner").value; draw(); });
   if($("ldClear")) $("ldClear").addEventListener("click",()=>{ F.bucket=""; view(); });
-  renderDash(); render();
+  renderDash(); draw();
 }
+function draw(){ F.layout==='board' ? renderBoard() : render(); }
 
 function renderDash(){
   const b={ overdue:0, today:0, week:0, nodate:0 };
@@ -109,6 +113,52 @@ function render(){
     : '<div class="card muted">No leads match. '+(leads.length?'Clear filters, or ':'')+'<a href="#" id="ldAddHere">add a lead</a>.</div>';
   $("ldList").querySelectorAll("tr[data-id]").forEach(tr=>tr.addEventListener("click",e=>{ if(e.target.closest("a")) return; detail(leads.find(x=>String(x.id)===tr.getAttribute("data-id"))); }));
   if($("ldAddHere")) $("ldAddHere").addEventListener("click",e=>{ e.preventDefault(); editLead(null); });
+}
+
+/* ---- pipeline / kanban board by status (drag a card to change status) ---- */
+function boardMatches(l){
+  if(F.source && l.source!==F.source) return false;
+  if(F.owner && String(l.owner||"")!==F.owner) return false;
+  if(F.bucket && bucketOf(l)!==F.bucket) return false;
+  const q=F.q.toLowerCase().trim();
+  if(q && ![l.name,l.phone,l.interest,l.city].some(v=>String(v||"").toLowerCase().includes(q))) return false;
+  return true;
+}
+function renderBoard(){
+  const list=leads.filter(boardMatches);
+  if($("ldCount")) $("ldCount").textContent = list.length+" of "+leads.length+" leads · drag a card to change status";
+  const by={}; STATUSES.forEach(([k])=>by[k]=[]); list.forEach(l=>{ (by[l.status]||(by[l.status]=[])).push(l); });
+  const t=todayISO();
+  const card=l=>{ const n=l.next_follow_up; const col=n?(n<t?'#a3322a':(n===t?'#9a5b00':'')):'';
+    return `<div class="lead-card" draggable="true" data-id="${l.id}" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;cursor:grab">
+      <div style="font-weight:700">${esc(l.name||'(no name)')}</div>
+      <div class="muted" style="font-size:12px">${SRC_ICON[l.source]||''} ${esc(SRC_LABEL[l.source]||'')}${l.phone?(' · '+esc(l.phone)):''}</div>
+      ${l.interest?`<div style="font-size:12px;margin-top:2px">${esc(l.interest)}</div>`:''}
+      ${n?`<div style="font-size:12px;margin-top:4px;${col?('color:'+col+';font-weight:700'):''}">⏰ ${fmtDate(n)}</div>`:''}
+    </div>`; };
+  $("ldList").innerHTML=`<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;align-items:flex-start">
+    ${STATUSES.map(([k,lab])=>`<div class="kcol" data-status="${k}" style="min-width:230px;flex:0 0 230px;background:var(--cream,#f6f6f0);border-radius:10px;padding:8px">
+      <div style="font-weight:700;margin-bottom:6px">${esc(lab)} <span class="muted" style="font-weight:400">(${by[k].length})</span></div>
+      <div class="kbody" style="min-height:40px">${by[k].map(card).join("")}</div>
+    </div>`).join("")}</div>`;
+  $("ldList").querySelectorAll(".lead-card").forEach(c=>{
+    c.addEventListener("click",()=>detail(leads.find(x=>String(x.id)===c.getAttribute("data-id"))));
+    c.addEventListener("dragstart",e=>{ e.dataTransfer.setData("text/plain",c.getAttribute("data-id")); c.style.opacity=".4"; });
+    c.addEventListener("dragend",()=>{ c.style.opacity="1"; });
+  });
+  $("ldList").querySelectorAll(".kcol").forEach(col=>{
+    col.addEventListener("dragover",e=>{ e.preventDefault(); col.style.outline="2px dashed var(--green)"; });
+    col.addEventListener("dragleave",()=>{ col.style.outline=""; });
+    col.addEventListener("drop",async e=>{ e.preventDefault(); col.style.outline="";
+      const id=e.dataTransfer.getData("text/plain"), status=col.getAttribute("data-status");
+      const l=leads.find(x=>String(x.id)===String(id)); if(!l || l.status===status) return;
+      l.status=status;   // optimistic move
+      renderDash(); renderBoard();
+      const { error }=await sb().from("leads").update({ status, updated_at:new Date().toISOString() }).eq("id",id);
+      if(error){ alert(error.message); await load(); renderDash(); renderBoard(); }
+      else window.OPS.flashTop("Moved to "+(ST_LABEL[status]||status)+" ✓");
+    });
+  });
 }
 
 /* ---- add / edit a lead (nothing mandatory) ---- */
