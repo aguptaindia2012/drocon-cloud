@@ -236,8 +236,8 @@ function renderBoard(){
 }
 
 /* ---- add / edit a lead (nothing mandatory) ---- */
-function editLead(rec){
-  const e=rec||{}; const m=$("main");
+function editLead(rec, seed){
+  const e=rec||seed||{}; const m=$("main");
   m.innerHTML=`<button class="btn sm" id="leBack">← Back to Leads</button>
     <div class="card" style="margin-top:12px;max-width:620px"><h1>${rec?"Edit lead":"New lead"}</h1>
       <p class="muted">Fill in whatever you have — you can save with just a name or phone and add the rest later.</p>
