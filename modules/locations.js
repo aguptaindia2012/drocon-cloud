@@ -28,6 +28,7 @@ function approverOpts(){ return profiles.filter(p=>p.id!==me().id).map(p=>`<opti
 // tables directly — the approve RPC applies it). Reads the form's approver pick.
 async function submitChange(locationId, kind, payload, summary){
   const approver = $("lApprover") ? ($("lApprover").value||null) : null;
+  if(!approver) return { error:"Select a reviewer (a different team member) to approve this change." };
   const { data, error }=await sb().rpc("submit_location_change",
     { p_location_id:locationId, p_kind:kind, p_payload:payload, p_summary:summary, p_approver:approver });
   if(error) return { error:error.message };
@@ -134,8 +135,8 @@ function locForm(rec){
       </select><div class="small-note">18% GST · Marketing Expense / Subsidy</div></div>
     </div>
     <div class="row wrap" style="align-items:center"><button class="btn green" id="lSave" ${locked?'disabled':''}>${rec?"Submit changes for approval":"Submit new location for approval"}</button><button class="btn" id="lCancel">Cancel</button>
-      <label class="muted" style="margin:0 0 0 8px">Reviewer</label>
-      <select id="lApprover" style="width:auto;max-width:220px"><option value="">Any approver</option>${approverOpts()}</select>
+      <label class="muted" style="margin:0 0 0 8px">Reviewer *</label>
+      <select id="lApprover" style="width:auto;max-width:220px"><option value="">— select reviewer —</option>${approverOpts()}</select>
       <div class="spacer"></div>
       ${rec&&isApprover()?`<button class="btn sm" id="lLock">${locked?'🔓 Unlock location':'🔒 Lock location'}</button>`:''}
       ${rec&&window.OPS.canDelete()&&!locked?'<button class="btn sm" id="lDel" style="color:#a3322a;border-color:#e4b4b4">Request delete</button>':''}</div>

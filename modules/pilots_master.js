@@ -8,17 +8,20 @@
 (function(){
 const { $, esc, fmtDate, todayISO } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
-let vendors=[], locations=[], pilots=[], assigns={};   // pilot_id -> [assignments]
+let vendors=[], locations=[], pilots=[], assigns={}, profiles=[];   // pilot_id -> [assignments]
+const me = ()=> window.OPS.me;
+const approverOpts = ()=> profiles.filter(p=>p.id!==me().id).map(p=>`<option value="${p.id}">${esc(p.full_name||p.email)} (${esc(p.role)})</option>`).join("");
 
 const vName = v => (v && (v.firm_name || v.name)) || "";
 const locName = l => l ? (l.name + (l.is_locked?" 🔒":"")) : "";
 
 async function loadRefs(){
-  const [v,l]=await Promise.all([
+  const [v,l,pr]=await Promise.all([
     sb().from("vendors").select("id,firm_name,name,is_active").order("firm_name"),
-    sb().from("spray_locations").select("id,name,is_locked,client_id, client:client_id(firm_name,name)").order("name")
+    sb().from("spray_locations").select("id,name,is_locked,client_id, client:client_id(firm_name,name)").order("name"),
+    sb().from("profiles").select("id,full_name,email,role").order("full_name")
   ]);
-  vendors=v.data||[]; locations=l.data||[];
+  vendors=v.data||[]; locations=l.data||[]; profiles=pr.data||[];
 }
 
 /* ----------------------------- list ----------------------------- */
@@ -187,7 +190,12 @@ function renderAssign(p){
   const active=list.find(a=>a.status==="active");
   const free=locations.filter(l=>!l.is_locked);
   host.innerHTML=`<h3>Location assignment</h3>
-    <div class="small-note" style="margin:-6px 0 8px">Assigning or closing a location needs a <b>second team member's approval</b> before it takes effect.</div>
+    <div class="row wrap" style="align-items:center;gap:6px;margin:-6px 0 8px">
+      <span class="small-note" style="margin:0">Assigning or closing a location needs a <b>second team member's approval</b>.</span>
+      <div class="spacer"></div>
+      <label class="muted" style="margin:0">Reviewer *</label>
+      <select id="paApprover" style="width:auto;max-width:220px"><option value="">— select reviewer —</option>${approverOpts()}</select>
+    </div>
     ${active?`<div class="callout"><b>Currently at ${esc((active.loc&&active.loc.name)||'')}</b>
         since ${fmtDate(active.start_date)}.
         <div class="row wrap" style="margin-top:8px;gap:8px;align-items:flex-end">
@@ -235,9 +243,13 @@ function renderAssign(p){
 }
 // Pilot assignment / close now go through Location maker-checker approval.
 async function submitLocChange(locationId, kind, payload, summary, p){
+  const approver = $("paApprover") ? ($("paApprover").value||null) : null;
+  if(!approver){ alert("Select a reviewer (a different team member) to approve this."); return; }
   const { error }=await sb().rpc("submit_location_change",
-    { p_location_id:locationId, p_kind:kind, p_payload:payload, p_summary:summary, p_approver:null });
+    { p_location_id:locationId, p_kind:kind, p_payload:payload, p_summary:summary, p_approver:approver });
   if(error){ alert(error.message); return; }
+  try{ await sb().from("notifications").insert({ user_id:approver, message:"Location approval needed: "+summary }); }catch(e){}
+  window.OPS.refreshNotifs && window.OPS.refreshNotifs();
   window.OPS.refreshReviewCount && window.OPS.refreshReviewCount();
   window.OPS.flashTop("Submitted for approval ✓"); renderAssign(p);
 }
