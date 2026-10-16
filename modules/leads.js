@@ -61,7 +61,11 @@ function diagLine(){
     + `</div>`;
 }
 
-async function view(){
+// Route entry: always pull fresh from the server, THEN paint. (The bug was that
+// opening the tab only painted from an empty in-memory array — data showed only
+// after a manual Refresh or after creating a lead.)
+async function view(){ $("main").innerHTML='<div class="muted" style="padding:20px">Loading leads…</div>'; await load(); paint(); }
+function paint(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Business Development</div><h1>Leads &amp; Follow-ups</h1>
     <div class="callout">Log every enquiry — WhatsApp, call, Facebook, Instagram, referral, walk-in. Keep it quick:
@@ -82,13 +86,13 @@ async function view(){
     <div id="ldList" class="muted">Loading…</div>`;
   $("ldNew").addEventListener("click",()=>editLead(null));
   $("ldRefresh").addEventListener("click",async()=>{ $("ldList").innerHTML='<div class="muted">Loading…</div>'; await load(); renderDash(); draw(); });
-  $("ldListBtn").addEventListener("click",()=>{ if(F.layout!=='list'){ F.layout='list'; view(); } });
-  $("ldBoardBtn").addEventListener("click",()=>{ if(F.layout!=='board'){ F.layout='board'; view(); } });
+  $("ldListBtn").addEventListener("click",()=>{ if(F.layout!=='list'){ F.layout='list'; paint(); } });
+  $("ldBoardBtn").addEventListener("click",()=>{ if(F.layout!=='board'){ F.layout='board'; paint(); } });
   $("ldQ").addEventListener("input",()=>{ F.q=$("ldQ").value; draw(); });
   if($("ldStatus")) $("ldStatus").addEventListener("change",()=>{ F.status=$("ldStatus").value; draw(); });
   $("ldSource").addEventListener("change",()=>{ F.source=$("ldSource").value; draw(); });
   $("ldOwner").addEventListener("change",()=>{ F.owner=$("ldOwner").value; draw(); });
-  if($("ldClear")) $("ldClear").addEventListener("click",()=>{ F.bucket=""; view(); });
+  if($("ldClear")) $("ldClear").addEventListener("click",()=>{ F.bucket=""; paint(); });
   renderDash(); draw();
 }
 function draw(){ if($("ldDiag")) $("ldDiag").innerHTML=diagLine(); F.layout==='board' ? renderBoard() : render(); }
@@ -103,7 +107,7 @@ function renderDash(){
     card("today","Due today",b.today,"#fff0db","#9a5b00")+
     card("week","Due this week",b.week,"","")+
     card("nodate","No date set",b.nodate,"","");
-  $("ldDash").querySelectorAll("[data-b]").forEach(c=>c.addEventListener("click",()=>{ F.bucket = F.bucket===c.getAttribute("data-b")?"":c.getAttribute("data-b"); view(); }));
+  $("ldDash").querySelectorAll("[data-b]").forEach(c=>c.addEventListener("click",()=>{ F.bucket = F.bucket===c.getAttribute("data-b")?"":c.getAttribute("data-b"); paint(); }));
 }
 
 function matches(l){
@@ -217,11 +221,11 @@ function editLead(rec){
     if(!rec && !out.name && !out.phone && !out.interest){ $("leErr").textContent="Add at least a name, phone, or what they want."; return; }
     if(rec){ const { error }=await sb().from("leads").update(out).eq("id",rec.id); if(error){ $("leErr").textContent=error.message; return; } }
     else { out.created_by=me().id; const { error }=await sb().from("leads").insert(out); if(error){ $("leErr").textContent=error.message; return; } }
-    window.OPS.flashTop("Saved ✓"); await load(); view();
+    window.OPS.flashTop("Saved ✓"); view();
   });
   if($("leDel")) $("leDel").addEventListener("click",async()=>{ if(!confirm("Delete this lead and its follow-ups?"))return;
     const { error }=await sb().from("leads").delete().eq("id",rec.id); if(error){ alert(error.message); return; }
-    window.OPS.flashTop("Deleted ✓"); await load(); view(); });
+    window.OPS.flashTop("Deleted ✓"); view(); });
 }
 
 /* ---- lead detail: info + follow-up log + quick log ---- */
