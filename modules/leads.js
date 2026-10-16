@@ -17,7 +17,7 @@ const OPEN = s => s!=="won" && s!=="lost";
 const SRC_ICON = { whatsapp:"🟢", phone:"📞", facebook:"📘", instagram:"📸", referral:"🤝", walk_in:"🚶", website:"🌐", other:"•" };
 
 let leads=[], profiles=[], inbox=[], loadErr="";
-let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list", tab:"tracker" };
+let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list", tab:"tracker", inboxFilter:"new" };
 const nameOf = id => { const p=profiles.find(x=>x.id===id); return p?(p.full_name||p.email):""; };
 const digits = s => String(s||"").replace(/[^\d]/g,"");
 // store a clean number: digits only, STD "0" prefix dropped (keeps a country code if present)
@@ -56,14 +56,15 @@ async function load(){
   const [lres, pres, ires]=await Promise.all([
     sb().from("leads").select("*").order("created_at",{ascending:false}).limit(5000),
     sb().from("profiles").select("id,full_name,email,role").order("full_name"),
-    sb().from("meta_leads_inbox").select("*").eq("status","new").order("received_at",{ascending:false}).limit(2000)
+    sb().from("meta_leads_inbox").select("*").order("received_at",{ascending:false}).limit(5000)
   ]);
   loadErr = lres.error ? lres.error.message : "";
   leads = lres.data||[]; profiles = pres.data||[]; inbox = ires.data||[];
 }
-function tabBar(){ return `<div class="row" style="gap:0;margin-bottom:10px">
+const newCount = ()=> inbox.filter(x=>x.status==='new').length;
+function tabBar(){ const n=newCount(); return `<div class="row" style="gap:0;margin-bottom:10px">
   <button class="btn sm ${F.tab!=='inbox'?'green':''}" id="tbTracker">Leads tracker</button>
-  <button class="btn sm ${F.tab==='inbox'?'green':''}" id="tbInbox">📥 Meta inbox${inbox.length?` (${inbox.length})`:''}</button></div>`; }
+  <button class="btn sm ${F.tab==='inbox'?'green':''}" id="tbInbox">📥 Meta inbox${n?` (${n})`:''}</button></div>`; }
 function wireTabs(){
   if($("tbTracker")) $("tbTracker").addEventListener("click",()=>{ F.tab='tracker'; route(); });
   if($("tbInbox"))   $("tbInbox").addEventListener("click",()=>{ F.tab='inbox'; route(); });
@@ -116,27 +117,47 @@ function paint(){
   renderDash(); draw();
 }
 
-/* ---- Meta inbox sub-tab: review + transfer into the tracker ---- */
+/* ---- Meta inbox sub-tab: review + transfer; keeps a full audit trail ---- */
+const iChip = s => s==='transferred' ? '<span class="chip paid">Transferred</span>'
+  : s==='dismissed' ? '<span class="chip rejected">Dismissed</span>'
+  : '<span class="chip issued">New</span>';
 function paintInbox(){
   const m=$("main");
+  const counts={ new:0, transferred:0, dismissed:0 }; inbox.forEach(x=>{ if(counts[x.status]!=null) counts[x.status]++; });
+  const f=F.inboxFilter;
+  const list=inbox.filter(x=> f==='all' ? true : x.status===f);
+  const fbtn=(k,lab)=>`<button class="btn sm ${f===k?'green':''}" data-if="${k}">${lab}${k!=='all'&&counts[k]?` (${counts[k]})`:''}</button>`;
   m.innerHTML=`<div class="eyebrow">Business Development</div><h1>Leads</h1>${tabBar()}
-    <div class="callout">New Facebook / Instagram <b>Lead Ads</b> arrive here. Review a lead, then
-      <b>Transfer to DCB lead tracker</b> — it opens a prefilled lead for you to complete and save.</div>
-    ${inbox.length?`<div style="overflow:auto"><table><thead><tr><th>Received</th><th>Name</th><th>Phone</th><th>Interest</th><th></th></tr></thead>
-      <tbody>${inbox.map(x=>`<tr>
+    <div class="callout">Facebook / Instagram <b>Lead Ads</b> arrive here. <b>Transfer</b> opens a prefilled lead to complete;
+      <b>Dismiss</b> drops it. Nothing is deleted — transferred & dismissed stay listed so you can audit that every lead was captured.</div>
+    <div class="row" style="gap:6px;margin-bottom:8px">${fbtn('new','New')}${fbtn('transferred','Transferred')}${fbtn('dismissed','Dismissed')}${fbtn('all','All')}</div>
+    ${list.length?`<div style="overflow:auto"><table><thead><tr><th>Received</th><th>Name</th><th>Phone</th><th>Interest</th><th>Status</th><th></th></tr></thead>
+      <tbody>${list.map(x=>`<tr>
         <td>${fmtDate(x.received_at)}</td><td><b>${esc(x.name||'(no name)')}</b>${x.city?`<br><span class="muted" style="font-size:12px">${esc(x.city)}</span>`:''}</td>
         <td>${esc(x.phone||'')}</td>
         <td>${esc(x.interest||'')}${x.email?`<br><span class="muted" style="font-size:12px">${esc(x.email)}</span>`:''}</td>
-        <td style="white-space:nowrap"><button class="btn green sm" data-xfer="${x.id}">→ Transfer to tracker</button>
-          <button class="btn sm" data-dismiss="${x.id}" style="color:#a3322a;border-color:#e4b4b4">Dismiss</button></td></tr>`).join("")}</tbody></table></div>`
-      :'<div class="card muted">No new Meta leads. '+((window.OPS.isAdmin&&window.OPS.isAdmin())?'Set up the integration from the tracker → <b>⚙ Meta leads</b>.':'')+'</div>'}`;
+        <td>${iChip(x.status)}${x.handled_by?`<br><span class="muted" style="font-size:11px">by ${esc(nameOf(x.handled_by))}${x.handled_at?(' · '+fmtDate(x.handled_at)):''}</span>`:''}</td>
+        <td style="white-space:nowrap">${x.status==='new'
+            ?`<button class="btn green sm" data-xfer="${x.id}">→ Transfer</button> <button class="btn sm" data-dismiss="${x.id}" style="color:#a3322a;border-color:#e4b4b4">Dismiss</button>`
+            :x.status==='transferred'
+              ?(x.transferred_lead_id?`<button class="btn sm" data-open="${x.transferred_lead_id}">Open lead →</button>`:'<span class="muted">—</span>')
+              :`<button class="btn sm" data-reopen="${x.id}">↩ Reopen</button>`}</td></tr>`).join("")}</tbody></table></div>`
+      :`<div class="card muted">No ${f==='all'?'':esc(f)+' '}Meta leads${f==='new'?'. '+((window.OPS.isAdmin&&window.OPS.isAdmin())?'Set up the integration from the tracker → <b>⚙ Meta leads</b>.':''):''}</div>`}`;
   wireTabs();
+  m.querySelectorAll("[data-if]").forEach(b=>b.addEventListener("click",()=>{ F.inboxFilter=b.getAttribute("data-if"); paintInbox(); }));
   m.querySelectorAll("[data-xfer]").forEach(b=>b.addEventListener("click",()=>{ const x=inbox.find(z=>String(z.id)===b.getAttribute("data-xfer")); if(x) transfer(x); }));
+  m.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{ const l=leads.find(z=>String(z.id)===b.getAttribute("data-open")); if(l){ F.tab='tracker'; detail(l); } else window.OPS.flashTop("Lead not found"); }));
   m.querySelectorAll("[data-dismiss]").forEach(b=>b.addEventListener("click",async()=>{
-    const x=inbox.find(z=>String(z.id)===b.getAttribute("data-dismiss")); if(!x||!confirm("Dismiss this Meta lead? It won't be added to the tracker."))return;
+    const x=inbox.find(z=>String(z.id)===b.getAttribute("data-dismiss")); if(!x||!confirm("Dismiss this Meta lead? It stays listed as Dismissed but won't be tracked."))return;
     const { error }=await sb().from("meta_leads_inbox").update({ status:'dismissed', handled_by:me().id, handled_at:new Date().toISOString() }).eq("id",x.id);
     if(error){ alert(error.message); return; }
     window.OPS.flashTop("Dismissed"); view();
+  }));
+  m.querySelectorAll("[data-reopen]").forEach(b=>b.addEventListener("click",async()=>{
+    const x=inbox.find(z=>String(z.id)===b.getAttribute("data-reopen")); if(!x)return;
+    const { error }=await sb().from("meta_leads_inbox").update({ status:'new', handled_by:null, handled_at:null }).eq("id",x.id);
+    if(error){ alert(error.message); return; }
+    window.OPS.flashTop("Reopened"); view();
   }));
 }
 function transfer(x){
