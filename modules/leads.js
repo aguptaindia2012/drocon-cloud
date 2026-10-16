@@ -97,7 +97,7 @@ function paint(){
       <input id="ldQ" placeholder="Search name / phone / interest / city…" style="max-width:260px" value="${esc(F.q)}">
       ${F.layout==='board'?'':`<select id="ldStatus" style="width:auto"><option value="">All status</option>${STATUSES.map(([k,l])=>`<option value="${k}" ${F.status===k?'selected':''}>${esc(l)}</option>`).join("")}</select>`}
       <select id="ldSource" style="width:auto"><option value="">All sources</option>${SOURCES.map(([k,l])=>`<option value="${k}" ${F.source===k?'selected':''}>${esc(l)}</option>`).join("")}</select>
-      <select id="ldOwner" style="width:auto"><option value="">All owners</option>${profiles.map(p=>`<option value="${p.id}" ${F.owner===p.id?'selected':''}>${esc(p.full_name||p.email)}</option>`).join("")}</select>
+      <select id="ldOwner" style="width:auto" title="Owner or Responsible"><option value="">Owner / responsible: all</option>${profiles.map(p=>`<option value="${p.id}" ${F.owner===p.id?'selected':''}>${esc(p.full_name||p.email)}</option>`).join("")}</select>
       ${F.bucket?`<button class="btn sm" id="ldClear">✕ ${esc({overdue:"Overdue",today:"Due today",week:"This week",nodate:"No date set",later:"Upcoming"}[F.bucket]||F.bucket)}</button>`:''}
       <div class="spacer"></div><span class="muted" id="ldCount"></span>
     </div>
@@ -181,7 +181,7 @@ function renderDash(){
 function matches(l){
   if(F.status && l.status!==F.status) return false;
   if(F.source && l.source!==F.source) return false;
-  if(F.owner && String(l.owner||"")!==F.owner) return false;
+  if(F.owner && String(l.owner||"")!==F.owner && String(l.assignee||"")!==F.owner) return false;
   if(F.bucket && bucketOf(l)!==F.bucket) return false;
   const q=F.q.toLowerCase().trim();
   if(q && ![l.name,l.phone,l.interest,l.city].some(v=>String(v||"").toLowerCase().includes(q))) return false;
@@ -202,7 +202,7 @@ function render(){
       <td>${esc(l.interest||'')}</td>
       <td>${fuCell(l)}</td>
       <td>${stChip(l.status)}</td>
-      <td>${esc(nameOf(l.owner))}</td>
+      <td>${esc(nameOf(l.owner))||'—'}${l.assignee?`<br><span class="muted" style="font-size:11px">→ ${esc(nameOf(l.assignee))}</span>`:''}</td>
       <td>${waLink(l.phone)?`<a class="btn sm ghost" href="${waLink(l.phone)}" target="_blank" rel="noopener" title="WhatsApp" onclick="event.stopPropagation()">💬</a> `:''}${l.phone?`<a class="btn sm ghost" href="tel:${esc(digits(l.phone))}" title="Call" onclick="event.stopPropagation()">📞</a>`:''}</td>
     </tr>`).join("")}</tbody></table></div>`
     : '<div class="card muted">No leads match. '+(leads.length?'Clear filters, or ':'')+'<a href="#" id="ldAddHere">add a lead</a>.</div>';
@@ -213,7 +213,7 @@ function render(){
 /* ---- pipeline / kanban board by status (drag a card to change status) ---- */
 function boardMatches(l){
   if(F.source && l.source!==F.source) return false;
-  if(F.owner && String(l.owner||"")!==F.owner) return false;
+  if(F.owner && String(l.owner||"")!==F.owner && String(l.assignee||"")!==F.owner) return false;
   if(F.bucket && bucketOf(l)!==F.bucket) return false;
   const q=F.q.toLowerCase().trim();
   if(q && ![l.name,l.phone,l.interest,l.city].some(v=>String(v||"").toLowerCase().includes(q))) return false;
@@ -267,6 +267,7 @@ function editLead(rec, seed){
         <div class="field"><label>Phone</label><input id="le_phone" value="${esc(e.phone||'')}" placeholder="10-digit mobile"></div>
         <div class="field"><label>Source</label><select id="le_source"><option value="">—</option>${SOURCES.map(([k,l])=>`<option value="${k}" ${e.source===k?'selected':''}>${esc(l)}</option>`).join("")}</select></div>
         <div class="field"><label>Owner (BD)</label><select id="le_owner"><option value="">— me —</option>${profiles.map(p=>`<option value="${p.id}" ${e.owner===p.id?'selected':''}>${esc(p.full_name||p.email)}</option>`).join("")}</select></div>
+        <div class="field"><label>Responsible <span class="muted">(assignee / escalation)</span></label><select id="le_assignee"><option value="">— none —</option>${profiles.map(p=>`<option value="${p.id}" ${e.assignee===p.id?'selected':''}>${esc(p.full_name||p.email)}</option>`).join("")}</select></div>
         <div class="field full"><label>Interested in</label><input id="le_interest" value="${esc(e.interest||'')}" placeholder="e.g. 10L spraying drone, spare battery…"></div>
         <div class="field"><label>City / area</label><input id="le_city" value="${esc(e.city||'')}"></div>
         <div class="field"><label>Est. value ₹</label><input id="le_value" type="number" step="any" value="${e.est_value!=null?e.est_value:''}"></div>
@@ -282,6 +283,7 @@ function editLead(rec, seed){
   $("leSave").addEventListener("click",async()=>{
     const out={ name:$("le_name").value.trim()||null, phone:cleanPhone($("le_phone").value),
       source:$("le_source").value||null, owner:$("le_owner").value||(rec?e.owner:me().id)||null,
+      assignee:$("le_assignee").value||null,
       interest:$("le_interest").value.trim()||null, city:$("le_city").value.trim()||null,
       est_value:$("le_value").value===""?null:num($("le_value").value),
       status:$("le_status").value||'new', next_follow_up:$("le_nfu").value||null,
@@ -316,7 +318,7 @@ async function detail(l){
             ${wa?`<a class="btn sm" href="${wa}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
             ${l.phone?`<a class="btn sm" href="tel:${esc(digits(l.phone))}">📞 Call</a>`:''}
             <button class="btn sm" id="ldEdit">Edit</button></div>
-          <div class="muted" style="font-size:12px;margin-top:6px">Owner: ${esc(nameOf(l.owner))||'—'}</div>
+          <div class="muted" style="font-size:12px;margin-top:6px">Owner: ${esc(nameOf(l.owner))||'—'}${l.assignee?` · Responsible: <b>${esc(nameOf(l.assignee))}</b>`:''}</div>
         </div>
       </div>
     </div>
