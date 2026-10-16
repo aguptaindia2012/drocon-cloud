@@ -20,7 +20,13 @@ let leads=[], profiles=[], loadErr="";
 let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list" };
 const nameOf = id => { const p=profiles.find(x=>x.id===id); return p?(p.full_name||p.email):""; };
 const digits = s => String(s||"").replace(/[^\d]/g,"");
-function waLink(phone){ let d=digits(phone); if(!d) return null; if(d.length===10) d="91"+d; return "https://wa.me/"+d; }
+function waLink(phone){
+  let d=digits(phone); if(!d) return null;
+  d=d.replace(/^0+/,"");                 // drop the STD "0" prefix people often add
+  if(d.length===10) d="91"+d;            // bare 10-digit Indian mobile → add country code
+  if(d.length<11) return null;           // still too short to be a valid number
+  return "https://wa.me/"+d;             // already has a country code (e.g. 91XXXXXXXXXX)
+}
 function stChip(s){ const cls = s==="won"?"paid":s==="lost"?"rejected":s==="quoted"?"issued":s==="interested"?"approved":s==="on_hold"?"in_review":"default"; return `<span class="chip ${cls}">${esc(ST_LABEL[s]||s)}</span>`; }
 function plus(days){ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
 function bucketOf(l){
