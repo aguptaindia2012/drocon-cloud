@@ -16,7 +16,7 @@ const ST_LABEL = Object.fromEntries(STATUSES);
 const OPEN = s => s!=="won" && s!=="lost";
 const SRC_ICON = { whatsapp:"🟢", phone:"📞", facebook:"📘", instagram:"📸", referral:"🤝", walk_in:"🚶", website:"🌐", other:"•" };
 
-let leads=[], profiles=[];
+let leads=[], profiles=[], loadErr="";
 let F = { bucket:"", q:"", status:"", source:"", owner:"", layout:"list" };
 const nameOf = id => { const p=profiles.find(x=>x.id===id); return p?(p.full_name||p.email):""; };
 const digits = s => String(s||"").replace(/[^\d]/g,"");
@@ -34,11 +34,23 @@ function bucketOf(l){
 }
 
 async function load(){
-  const [{ data:ls },{ data:ps }]=await Promise.all([
-    sb().from("leads").select("*").order("next_follow_up",{ascending:true,nullsFirst:false}).limit(2000),
+  // Ensure the stored session is attached before we query — otherwise a fresh
+  // reload can fire this before auth is ready and RLS silently returns 0 rows.
+  try{ await sb().auth.getSession(); }catch(e){}
+  const [lres, pres]=await Promise.all([
+    sb().from("leads").select("*").order("created_at",{ascending:false}).limit(5000),
     sb().from("profiles").select("id,full_name,email,role").order("full_name")
   ]);
-  leads=ls||[]; profiles=ps||[];
+  loadErr = lres.error ? lres.error.message : "";
+  leads = lres.data||[]; profiles = pres.data||[];
+}
+function diagLine(){
+  const ext = (window.OPS.isExternal && window.OPS.isExternal());
+  const who = (me() && (me().email||me().full_name)) || "—";
+  return `<div class="muted" style="font-size:12px;margin:2px 0 8px">`
+    + (loadErr?`<span style="color:#a3322a">⚠ read error: ${esc(loadErr)}</span> · `:``)
+    + `loaded <b>${leads.length}</b> lead(s) · you: ${esc(who)} · access: <b>${ext?'EXTERNAL (cannot see team leads)':'internal'}</b>`
+    + `</div>`;
 }
 
 async function view(){
@@ -49,6 +61,7 @@ async function view(){
     <div id="ldDash" class="statrow"></div>
     <div class="row wrap" style="margin:10px 0;gap:8px;align-items:center">
       <button class="btn green sm" id="ldNew">+ New lead</button>
+      <button class="btn sm" id="ldRefresh" title="Reload from the server">↻ Refresh</button>
       <div class="row" style="gap:0"><button class="btn sm ${F.layout!=='board'?'green':''}" id="ldListBtn">☰ List</button><button class="btn sm ${F.layout==='board'?'green':''}" id="ldBoardBtn">▦ Pipeline</button></div>
       <input id="ldQ" placeholder="Search name / phone / interest / city…" style="max-width:260px" value="${esc(F.q)}">
       ${F.layout==='board'?'':`<select id="ldStatus" style="width:auto"><option value="">All status</option>${STATUSES.map(([k,l])=>`<option value="${k}" ${F.status===k?'selected':''}>${esc(l)}</option>`).join("")}</select>`}
@@ -57,8 +70,10 @@ async function view(){
       ${F.bucket?`<button class="btn sm" id="ldClear">✕ ${esc({overdue:"Overdue",today:"Due today",week:"This week",nodate:"No date set",later:"Upcoming"}[F.bucket]||F.bucket)}</button>`:''}
       <div class="spacer"></div><span class="muted" id="ldCount"></span>
     </div>
+    <div id="ldDiag"></div>
     <div id="ldList" class="muted">Loading…</div>`;
   $("ldNew").addEventListener("click",()=>editLead(null));
+  $("ldRefresh").addEventListener("click",async()=>{ $("ldList").innerHTML='<div class="muted">Loading…</div>'; await load(); renderDash(); draw(); });
   $("ldListBtn").addEventListener("click",()=>{ if(F.layout!=='list'){ F.layout='list'; view(); } });
   $("ldBoardBtn").addEventListener("click",()=>{ if(F.layout!=='board'){ F.layout='board'; view(); } });
   $("ldQ").addEventListener("input",()=>{ F.q=$("ldQ").value; draw(); });
@@ -68,7 +83,7 @@ async function view(){
   if($("ldClear")) $("ldClear").addEventListener("click",()=>{ F.bucket=""; view(); });
   renderDash(); draw();
 }
-function draw(){ F.layout==='board' ? renderBoard() : render(); }
+function draw(){ if($("ldDiag")) $("ldDiag").innerHTML=diagLine(); F.layout==='board' ? renderBoard() : render(); }
 
 function renderDash(){
   const b={ overdue:0, today:0, week:0, nodate:0 };
