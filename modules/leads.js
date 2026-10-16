@@ -33,10 +33,18 @@ function bucketOf(l){
   return "later";
 }
 
+// Wait until the Supabase session is actually restored (getSession returns null
+// for a moment on a fresh reload). Without this, the first query fires before
+// auth is attached and RLS silently returns 0 rows.
+async function ensureSession(){
+  for(let i=0;i<30;i++){
+    try{ const { data }=await sb().auth.getSession(); if(data && data.session && data.session.access_token) return true; }catch(e){}
+    await new Promise(r=>setTimeout(r,120));
+  }
+  return false;
+}
 async function load(){
-  // Ensure the stored session is attached before we query — otherwise a fresh
-  // reload can fire this before auth is ready and RLS silently returns 0 rows.
-  try{ await sb().auth.getSession(); }catch(e){}
+  await ensureSession();
   const [lres, pres]=await Promise.all([
     sb().from("leads").select("*").order("created_at",{ascending:false}).limit(5000),
     sb().from("profiles").select("id,full_name,email,role").order("full_name")
