@@ -381,6 +381,8 @@ function cardHTML(r){
     ${r.purpose?`<div class="muted" style="margin-top:6px"><b>Purpose:</b> ${esc(r.purpose)}</div>`:""}
     <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">${receipts.length?receipts.map((x,i)=>`<button class="btn sm ghost" data-rc="${r.id}|${i}">📎 ${esc(x.name||("receipt "+(i+1)))}</button>`).join(""):'<span class="muted" style="font-size:12px">No receipts attached.</span>'}</div>
     <div class="field full" style="margin-top:8px"><label>Note to employee</label><input id="en_${r.id}" value="${esc(r.note||"")}"></div>
+    ${r.status==="submitted"?`<div class="field full" style="margin-top:6px"><label>Profit category <span class="muted" style="font-weight:normal">(for category P&amp;L)</span></label>
+      <select id="ecat_${r.id}" style="max-width:320px"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(r.cost_category,"revenue")}</select></div>`:''}
     <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center">
       ${r.status==="submitted"?`<button class="btn green sm" data-act="approve" data-id="${r.id}">Approve</button>
         <button class="btn sm" data-act="reject" data-id="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button>`:''}
@@ -400,7 +402,7 @@ function wire(r){
     window.OPS.once(e.currentTarget,async()=>{
       const note=($("en_"+r.id).value.trim()||null); const now=new Date().toISOString();
       if(act==="approve"){
-        const patch={ status:"approved", approver:window.OPS.me.id, approved_at:now, note };
+        const pc=$("ecat_"+r.id); const patch={ status:"approved", approver:window.OPS.me.id, approved_at:now, note, cost_category:(pc?pc.value:null)||null };
         // an approved advance request becomes a real advance to the employee
         if(r.claim_type==="advance"){
           const { data:adv }=await sb().from("advances").insert({ party_kind:"employee", employee_id:r.employee_id, payee_text:r.employee_name,

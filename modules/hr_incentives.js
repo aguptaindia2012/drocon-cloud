@@ -181,6 +181,7 @@ async function bonuses(){
     <div class="field"><label>Amount (₹) *</label><input id="bnAmt" type="number" step="any"></div>
     <div class="field"><label>For month</label><input id="bnMonth" type="month" value="${ymNow()}"></div>
     <div class="field"><label>Pay via</label><select id="bnMode"><option>Bank</option><option>UPI</option><option>Cash</option></select></div>
+    <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for P&amp;L)</span></label><select id="bnCat"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options("","revenue")}</select></div>
     <div class="field" style="grid-column:1/-1"><label>Reason / note</label><input id="bnReason"></div>
     </div><button class="btn green" id="bnAdd">Add bonus</button><div class="err" id="bnErr"></div></div>`;
   $("bnAdd").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{
@@ -190,7 +191,7 @@ async function bonuses(){
     if(amt<=0){ $("bnErr").textContent="Enter an amount."; return; }
     const p=payees[+pi];
     const { error }=await sb().from("hr_bonuses").insert({ pay_month:$("bnMonth").value||null, payee_kind:p.kind, payee_id:p.id, payee_name:p.name,
-      title, amount:amt, reason:$("bnReason").value.trim()||null, status:"pending", created_by:window.OPS.me.id });
+      title, amount:amt, cost_category:$("bnCat").value||null, reason:$("bnReason").value.trim()||null, status:"pending", created_by:window.OPS.me.id });
     if(error){ $("bnErr").textContent=error.message; return; }
     window.OPS.audit&&window.OPS.audit("added","bonus",p.name,money(amt)); window.OPS.flashTop("Bonus added ✓"); bonuses();
   }));

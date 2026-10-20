@@ -116,9 +116,45 @@ async function attendanceDoc(emp, ym){
 /* Account provisioning uses the shared panel — see modules/account_access.js */
 
 /* ============================ Employees ============================ */
+// Salary profit-split editor — the employee's standard allocation of salary
+// across profit categories (for category-wise P&L). Each monthly salary_run is
+// stamped with this at save time. Appended under Account access on the form.
+function salarySplitPanel(rec, host){
+  if(!rec || !rec.id){ host.innerHTML=""; return; }
+  const CATS=window.OPS.profitCats.revenue;            // the 6 real categories; remainder = overheads
+  const cur=(rec.cost_split && typeof rec.cost_split==="object") ? rec.cost_split : {};
+  host.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Salary profit-split <span class="muted" style="font-weight:normal;font-size:12px">(for category P&amp;L)</span></h3>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">How this person's salary is shared across profit categories. Enter percentages that total 100 — anything left over counts as <b>Overheads</b>. Leave all blank to treat the whole salary as Overheads. Applies to future salary runs (and re-saved months).</div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px 10px;max-width:420px">
+      ${CATS.map(([k,l])=>`<label style="align-self:center">${esc(l)}</label>
+        <input type="number" min="0" max="100" step="1" class="ssPct" data-k="${k}" value="${cur[k]!=null?esc(cur[k]):''}" style="width:90px" placeholder="0">`).join("")}
+      <div style="align-self:center"><b>Overheads</b> <span class="muted" style="font-size:12px">(remainder)</span></div>
+      <div id="ssOver" style="align-self:center;font-weight:600">—</div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:center;gap:10px">
+      <button class="btn green sm" id="ssSave">Save split</button>
+      <span id="ssMsg" class="muted" style="font-size:12px"></span>
+    </div></div>`;
+  const over=()=>{ let t=0; host.querySelectorAll(".ssPct").forEach(i=>t+=num(i.value)); const rem=Math.round((100-t)*100)/100;
+    const el=$("ssOver"); el.textContent=(rem>=0?rem:0)+"%"; el.style.color = t>100 ? "#a3322a" : "var(--ink)";
+    if(t>100){ $("ssMsg").textContent="Total exceeds 100% — reduce the splits."; $("ssMsg").style.color="#a3322a"; }
+    else { $("ssMsg").textContent=""; $("ssMsg").style.color=""; } return t; };
+  host.querySelectorAll(".ssPct").forEach(i=>i.addEventListener("input",over)); over();
+  $("ssSave").addEventListener("click",async()=>{
+    const t=over(); if(t>100){ return; }
+    const split={}; host.querySelectorAll(".ssPct").forEach(i=>{ const v=num(i.value); if(v>0) split[i.getAttribute("data-k")]=v; });
+    const val=Object.keys(split).length?split:null;
+    const { error }=await sb().from("employees").update({cost_split:val}).eq("id",rec.id);
+    if(error){ $("ssMsg").textContent=error.message; $("ssMsg").style.color="#a3322a"; return; }
+    rec.cost_split=val; window.OPS.audit&&window.OPS.audit("edited","employees",rec.id,"salary profit-split");
+    $("ssMsg").textContent="Saved ✓"; $("ssMsg").style.color="var(--green)";
+  });
+}
 window.OPS.routes.hr_employees = window.OPS.makeRegistry({
   tool:"hr_employees", table:"employees", title:"Employees", eyebrow:"HR", logView:true,
-  formExtra:(rec,host)=>window.OPS.accountAccess.panel({mode:"employee"})(rec,host),
+  formExtra:(rec,host)=>{ const a=document.createElement("div"), b=document.createElement("div");
+    host.appendChild(a); host.appendChild(b);
+    window.OPS.accountAccess.panel({mode:"employee"})(rec,a); salarySplitPanel(rec,b); },
   orderBy:"name", filter:{col:"emp_type",val:"employee"},
   activeField:{key:"status", activeVal:"active", inactiveVal:"inactive"},
   searchKeys:["name","designation","phone","email"],
@@ -305,6 +341,8 @@ async function saveMonth(){
     employee_id:r.emp.id, period_month:ym, period_start:r.ps, period_end:r.pe,
     monthly_salary:num(r.rate), working_days:r.working, off_days:r.off, lop_days:num(r.lop),
     month_days:r.monthDays, month_worked:c.mw, net_payable:c.net,
+    // stamp the employee's standard profit-split onto the run (category P&L)
+    cost_split:(r.emp.cost_split && typeof r.emp.cost_split==="object")?r.emp.cost_split:null,
     status:r.status||"calculated", created_by:window.OPS.me.id }; });
   // upsert by (employee_id, period_month)
   const { error }=await sb().from("salary_runs").upsert(recs,{onConflict:"employee_id,period_month"});
