@@ -229,6 +229,8 @@ function expForm(rec){
       <div class="field"><label>Date *</label><input type="date" id="ex_date" value="${esc(e.expense_date||todayISO())}"></div>
       <div class="field"><label>Category</label><select id="ex_cat"><option value="">— select —</option>
         ${cats.map(c=>`<option value="${c.id}" ${e.category_id===c.id?'selected':''}>${esc(c.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for category P&amp;L)</span></label>
+        <select id="ex_pcat"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(e.cost_category,'revenue')}</select></div>
       <div class="field"><label>Paid to (vendor)</label><select id="ex_vendor"><option value="">— none / other —</option>
         ${vendors.map(v=>`<option value="${v.id}" ${e.vendor_id===v.id?'selected':''}>${esc(vName(v))}</option>`).join("")}</select></div>
       <div class="field"><label>Or name the payee</label><input id="ex_payee" value="${esc(e.payee_text||'')}"></div>
@@ -252,7 +254,7 @@ function expForm(rec){
     const out={ expense_date:$("ex_date").value||todayISO(), category_id:$("ex_cat").value||null,
       vendor_id:$("ex_vendor").value||null, payee_text:$("ex_payee").value||null,
       payee_kind: $("ex_vendor").value?'vendor':'other',
-      amount:amt, gst_amount:gst, total:amt+gst,
+      amount:amt, gst_amount:gst, total:amt+gst, cost_category:$("ex_pcat").value||null,
       has_bill:$("ex_hasbill").value==="true", bill_no:$("ex_billno").value||null, note:$("ex_note").value||null };
     let err;
     if(rec){ ({error:err}=await sb().from("expenses").update(out).eq("id",rec.id)); }
@@ -498,6 +500,8 @@ function payForm(rec){
       <div class="field"><label>Amount *</label><input type="number" step="0.01" id="py_amt" value="${esc(e.amount||'')}"></div>
       <div class="field"><label>GST</label><input type="number" step="0.01" id="py_gst" value="${esc(e.gst_amount||0)}"></div>
       <div class="field"><label>Category</label><input id="py_cat" value="${esc(e.category||'')}"></div>
+      <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for category P&amp;L)</span></label>
+        <select id="py_pcat"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(e.cost_category,'revenue')}</select></div>
       <div class="field"><label>Status</label><select id="py_status">
         ${["unpaid","cheque_issued","part_paid","paid"].map(s=>`<option value="${s}" ${e.status===s?'selected':''}>${s.replace("_"," ")}</option>`).join("")}</select>
         <div class="small-note">A cheque handed over is <b>cheque issued</b>, not paid — it only hits the Day Book when the bank debits it.</div></div>
@@ -517,6 +521,7 @@ function payForm(rec){
     const out={ vendor_id:$("py_vendor").value, vendor_invoice_no:$("py_no").value||null,
       invoice_date:$("py_date").value||todayISO(), due_date:$("py_due").value||null,
       amount:amt, gst_amount:gst, total:amt+gst, category:$("py_cat").value||null,
+      cost_category:$("py_pcat").value||null,
       status:$("py_status").value, note:$("py_note").value||null };
     let err;
     if(rec){ ({error:err}=await sb().from("payables").update(out).eq("id",rec.id)); }
