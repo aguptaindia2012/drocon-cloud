@@ -70,6 +70,70 @@ async function fetchLead(leadId: string) {
   return await r.json();
 }
 
+// ---- admin backfill: pull EXISTING leads already sitting on the Page's forms ----
+// (The webhook only delivers leads created after it's live. This one-shot import
+//  walks every Lead Ad form and upserts the leads the Page has already collected.)
+async function graphGet(path: string, params: Record<string, string> = {}) {
+  const qs = new URLSearchParams({ ...params, access_token: PAGE_TOKEN }).toString();
+  const r = await fetch(`https://graph.facebook.com/${GRAPH}/${path}?${qs}`);
+  const j = await r.json();
+  if (!r.ok) throw new Error(`Graph ${r.status}: ${JSON.stringify(j.error || j)}`);
+  return j;
+}
+
+async function backfill() {
+  // the Page token's own node IS the Page
+  const meRes = await graphGet("me", { fields: "id,name" });
+  const pageId = String(meRes.id);
+
+  // collect every form (paged)
+  const forms: any[] = [];
+  let next: string | null = `${pageId}/leadgen_forms`;
+  let qp: Record<string, string> = { fields: "id,name", limit: "100" };
+  for (let guard = 0; next && guard < 20; guard++) {
+    const page = await graphGet(next, qp);
+    forms.push(...(page.data || []));
+    next = page.paging?.next ? new URL(page.paging.next).pathname.replace(/^\/[^/]+\//, "") : null;
+    qp = next ? Object.fromEntries(new URL(page.paging.next).searchParams) as any : {};
+  }
+
+  let scanned = 0, inserted = 0;
+  for (const f of forms) {
+    const formId = String(f.id);
+    let fnext: string | null = `${formId}/leads`;
+    let fqp: Record<string, string> = { fields: "id,created_time,field_data,form_id", limit: "100" };
+    for (let guard = 0; fnext && guard < 50; guard++) {
+      const page = await graphGet(fnext, fqp);
+      const leads = page.data || [];
+      scanned += leads.length;
+      if (leads.length) {
+        const rows = leads.map((ld: any) => {
+          const m = mapLead(ld.field_data || []);
+          return {
+            meta_lead_id: String(ld.id),
+            meta_form_id: formId,
+            meta_page_id: pageId,
+            name: m.name, phone: m.phone, email: m.email, city: m.city, interest: m.interest,
+            raw: ld, status: "new",
+            received_at: ld.created_time || new Date().toISOString(),
+          };
+        });
+        const ids = rows.map((r) => r.meta_lead_id);
+        const { data: existing } = await db().from("meta_leads_inbox").select("meta_lead_id").in("meta_lead_id", ids);
+        const have = new Set((existing || []).map((e: any) => e.meta_lead_id));
+        inserted += ids.filter((id) => !have.has(id)).length;
+        await db().from("meta_leads_inbox").upsert(rows, { onConflict: "meta_lead_id", ignoreDuplicates: true });
+      }
+      fnext = page.paging?.next ? new URL(page.paging.next).pathname.replace(/^\/[^/]+\//, "") : null;
+      fqp = fnext ? Object.fromEntries(new URL(page.paging.next).searchParams) as any : {};
+    }
+  }
+  if (inserted > 0) {
+    await db().from("meta_lead_config").update({ last_lead_at: new Date().toISOString() }).eq("id", 1);
+  }
+  return { page: meRes.name || pageId, forms: forms.length, scanned, inserted };
+}
+
 async function handleLeadgen(value: any) {
   const leadId = value.leadgen_id || value.lead_id;
   if (!leadId) return;
@@ -89,8 +153,34 @@ async function handleLeadgen(value: any) {
   await db().from("meta_lead_config").update({ last_lead_at: new Date().toISOString() }).eq("id", 1);
 }
 
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+};
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
+  // ---- admin-triggered one-time backfill of existing leads (JWT-gated, not Meta) ----
+  if (req.method === "POST" && url.searchParams.get("action") === "backfill") {
+    try {
+      const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!jwt) return json(401, { error: "missing token" });
+      const { data: caller, error: cerr } = await db().auth.getUser(jwt);
+      if (cerr || !caller?.user) return json(401, { error: "invalid token" });
+      const { data: prof } = await db().from("profiles").select("role,is_external").eq("id", caller.user.id).maybeSingle();
+      if (!prof || prof.role !== "admin" || prof.is_external) return json(403, { error: "admin only" });
+      const result = await backfill();
+      return json(200, result);
+    } catch (e) {
+      return json(500, { error: String((e as Error)?.message || e) });
+    }
+  }
 
   // ---- webhook verification handshake (GET) — no DB, no secrets beyond verify token
   if (req.method === "GET") {

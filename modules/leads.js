@@ -378,6 +378,10 @@ async function metaPanel(){
       <div class="row"><button class="btn green" id="m_save">Save</button></div>
       <div class="muted" style="font-size:12px;margin-top:8px">Last webhook event: <b>${c.last_event_at?fmtDate(c.last_event_at):'—'}</b> · Last lead received: <b>${c.last_lead_at?fmtDate(c.last_lead_at):'—'}</b></div>
       <hr style="margin:14px 0">
+      <h3 style="margin:0 0 6px">Import existing leads</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 8px">Pulls leads your Page has <b>already collected</b> on its Lead Ad forms into the 📥 Meta inbox (the live webhook only delivers new leads once the app is published). Safe to run repeatedly — duplicates are skipped.</p>
+      <div class="row"><button class="btn" id="m_backfill">⤵ Import existing Meta leads</button> <span id="m_bf_msg" class="muted" style="font-size:12px"></span></div>
+      <hr style="margin:14px 0">
       <h3 style="margin:0 0 6px">One-time setup (admin)</h3>
       <ol class="muted" style="font-size:13px;line-height:1.7;padding-left:18px">
         <li>Deploy the function: <code>supabase functions deploy meta-leads-webhook --no-verify-jwt</code></li>
@@ -390,6 +394,21 @@ async function metaPanel(){
       </ol>
     </div>`;
   $("mBack").addEventListener("click",view);
+  $("m_backfill").addEventListener("click",async()=>{
+    const btn=$("m_backfill"), msg=$("m_bf_msg");
+    btn.disabled=true; msg.textContent="Importing… this can take a minute.";
+    try{
+      const cfg=window.DCB_CONFIG||{};
+      const url=(cfg.SUPABASE_URL||"").replace(/\/+$/,"")+"/functions/v1/meta-leads-webhook?action=backfill";
+      const { data:sess }=await sb().auth.getSession();
+      const tok=sess&&sess.session&&sess.session.access_token;
+      const res=await fetch(url,{ method:"POST", headers:{ apikey:cfg.SUPABASE_ANON_KEY||"", Authorization:"Bearer "+tok } });
+      const j=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(j.error||("HTTP "+res.status));
+      msg.innerHTML=`<b>Done.</b> ${j.forms} form(s), ${j.scanned} lead(s) scanned, <b>${j.inserted} new</b> added to the inbox.`;
+    }catch(e){ msg.textContent="Failed: "+(e.message||e); }
+    finally{ btn.disabled=false; }
+  });
   $("m_save").addEventListener("click",async()=>{
     const { error }=await sb().from("meta_lead_config").update({ default_owner:$("m_owner").value||null, source_label:$("m_src").value||'facebook', enabled:$("m_en").checked }).eq("id",1);
     if(error){ alert(error.message); return; }
