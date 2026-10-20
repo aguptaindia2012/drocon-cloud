@@ -184,7 +184,9 @@ function openExisting(rec){
 
 function computeTotals(){ return window.OPS.docgen.computeTotals(D.items); }
 
-const REV_CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
+// Revenue categories come from the ONE shared master (window.OPS.profitCats) so
+// the document picker, receivables, and the cost side never drift apart.
+const REV_CATS=window.OPS.profitCats.revenue;
 function editor(){
   const cfg=CONFIG[TYPE]; const m=$("main"); const t=computeTotals();
   // Invoice: the client must come from the register — lock the party fields

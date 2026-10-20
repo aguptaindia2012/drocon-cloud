@@ -64,6 +64,37 @@ function downloadExcel(filename, sheetName, headers, rows){
 window.OPS.csv = { parseCSV, pickCSV, downloadCSV };
 window.OPS.xlsx = { download: downloadExcel };
 
+/* ---------- Profit categories — the ONE shared revenue+cost dimension --------
+   Used for category-wise P&L: every invoice/quote carries a revenue category,
+   every cost (supplier bill, expense claim, salary split, incentive) carries a
+   cost category. Revenue + direct cost per category = category profit; the
+   "overheads" pool (cost-only) is common/indivisible spend kept in the OVERALL
+   profit but not attributed to any single category. Keep keys stable — they are
+   stored on records. New categories go here and flow to every picker. */
+window.OPS.profitCats = (function(){
+  // revenue-eligible categories (also valid on the cost side)
+  const REV = [
+    ["spray","Agriculture Spraying"],
+    ["demo","Demonstrations"],
+    ["part","Part sales"],
+    ["service","Servicing of drones & batteries"],
+    ["dronesale","Drone Sales"],
+    ["other","Other / uncategorised"],
+  ];
+  // cost side = the same list + Overheads (common, indivisible)
+  const COST = REV.concat([["overheads","Overheads (common)"]]);
+  const LABEL = Object.fromEntries(COST);
+  return {
+    revenue: REV,
+    cost: COST,
+    label: (k)=> LABEL[k] || k,
+    isValid: (k)=> Object.prototype.hasOwnProperty.call(LABEL, k),
+    // <option> string for a <select>; pass 'cost' to include Overheads
+    options(selected, which){ const list = which==="cost" ? COST : REV;
+      return list.map(([k,l])=>`<option value="${k}"${selected===k?' selected':''}>${l}</option>`).join(""); },
+  };
+})();
+
 /* ---------- reusable State/District dropdowns (for custom forms) ---------- */
 window.OPS.geoUI = {
   states(){ return Object.keys(window.OPS.GEO||{}).sort(); },

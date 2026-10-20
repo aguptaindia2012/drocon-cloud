@@ -85,13 +85,16 @@ async function load(){
   // classified by its description + HSN/SAC; a mixed invoice is split across
   // categories in proportion to each line's value, so category totals reconcile
   // to the financial-year card above.
-  const CATS=[["spray","Agriculture Spraying"],["demo","Demonstrations"],["part","Part sales"],["service","Servicing of drones & batteries"],["other","Other / uncategorised"]];
+  const CATS=window.OPS.profitCats.revenue;      // shared master (incl. Drone Sales)
   const REV_LABEL=Object.fromEntries(CATS);
   const classifyLine=(desc,sub,hsn)=>{
     const d=((desc||"")+" "+(sub||"")).toLowerCase(); const h=String(hsn||"").replace(/\s/g,"");
     if(/demo/.test(d)) return "demo";
     if(/servic|repair|mainten|overhaul|\bmro\b|\bamc\b|refurb/.test(d) || /^9987/.test(h)) return "service";
     if(/spray|aerial|agri/.test(d) || /^9986/.test(h)) return "spray";
+    // WHOLE-drone sale (not spares): explicit model/unit terms only, so generic
+    // "drone battery / drone part" lines still fall through to Part sales.
+    if(/\bagras\b|\bt\d{2}p?\b|\bmg-?1\b|\buav\b|multirotor|quadcopter|agri[- ]?drone|drone\s*(unit|kit|set|package|system|combo)|complete\s*drone|full\s*drone|\baircraft\b/.test(d)) return "dronesale";
     if(/part|spare|batter|propeller|\bmotor\b|nozzle|\bpump\b|blade|\besc\b|frame|charger|drone|kit|\barm\b/.test(d) || /^(8806|8807|8508|8507|8479|8413)/.test(h)) return "part";
     return "other"; };
   // Whole-invoice category: a manual override (documents.data.rev_category) wins;
