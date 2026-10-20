@@ -103,14 +103,14 @@ async function load(){
     let best="other",bv=-1; Object.keys(tally).forEach(c=>{ if(tally[c]>bv){bv=tally[c];best=c;} }); return best; };
   const catOf=inv=>{ const ov=(inv.data||{}).rev_category; return (ov && REV_LABEL[ov])?ov:autoCat(inv); };
   const catFY={}, catInv={};
-  CATS.forEach(([k])=>{ catFY[k]={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}}; catInv[k]=[]; });
+  CATS.forEach(([k])=>{ catFY[k]={cur:{inv:0,rec:0,nc:0,recv:0},last:{inv:0,rec:0,nc:0,recv:0}}; catInv[k]=[]; });
   rows.forEach(x=>{ const s=fyStart(x.r.doc_date); if(s!==curFY && s!==curFY-1) return;
     const slot=s===curFY?"cur":"last"; const c=catOf(x.r); const o=catFY[c][slot];
-    o.inv+=x.gross; o.rec+=x.paid; o.recv+=Math.max(0,x.balance);
+    o.inv+=x.gross; o.rec+=x.paid; o.nc+=(num(x.credit)+num(x.settled)); o.recv+=Math.max(0,x.balance);
     catInv[c].push({x,s,overridden:!!((x.r.data||{}).rev_category)}); });
   const catShow=CATS.filter(([k])=> k!=="other" || catInv.other.length);
-  const catTot={cur:{inv:0,rec:0,recv:0},last:{inv:0,rec:0,recv:0}};
-  catShow.forEach(([k])=>["cur","last"].forEach(s=>{ catTot[s].inv+=catFY[k][s].inv; catTot[s].rec+=catFY[k][s].rec; catTot[s].recv+=catFY[k][s].recv; }));
+  const catTot={cur:{inv:0,rec:0,nc:0,recv:0},last:{inv:0,rec:0,nc:0,recv:0}};
+  catShow.forEach(([k])=>["cur","last"].forEach(s=>{ catTot[s].inv+=catFY[k][s].inv; catTot[s].rec+=catFY[k][s].rec; catTot[s].nc+=catFY[k][s].nc; catTot[s].recv+=catFY[k][s].recv; }));
 
   // ---- period comparison (any FY + month vs any FY + month), by category ----
   const MONTHNAME=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -216,8 +216,8 @@ async function load(){
     </div>
     <div class="card rvsec" data-rv="category"><h3>By revenue category &amp; financial year${entity?` — ${esc(entity)}`:''}</h3>
       <div style="overflow:auto"><table><thead>
-        <tr><th rowspan="2">Revenue category</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY)} (current)</th><th colspan="3" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY-1)} (last)</th></tr>
-        <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th></tr>
+        <tr><th rowspan="2">Revenue category</th><th colspan="4" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY)} (current)</th><th colspan="4" style="text-align:center;border-left:2px solid var(--line)">${fyLabel(curFY-1)} (last)</th></tr>
+        <tr><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num" title="Credit notes + settlements — cleared without cash">Settled/CN</th><th class="num">Still owed</th><th class="num" style="border-left:2px solid var(--line)">Invoiced</th><th class="num">Received</th><th class="num" title="Credit notes + settlements">Settled/CN</th><th class="num">Still owed</th></tr>
       </thead><tbody>
         ${catShow.map(([k,label])=>{
           const list=catInv[k].slice().sort((a,b)=> new Date(b.x.r.doc_date)-new Date(a.x.r.doc_date));
@@ -227,8 +227,8 @@ async function load(){
               <select class="catBulk" data-cat="${k}" style="width:auto;font-size:12px">${CATS.filter(([ck])=>ck!==k).map(([ck,cl])=>`<option value="${ck}">${cl}</option>`).join("")}<option value="__auto">Auto-detect</option></select>
               <button class="btn sm catApply" data-cat="${k}">Move selected</button>
               <span class="muted catCount" data-cat="${k}">0 selected</span></div>`;
-          const detail=`<tr class="catDetail" data-cat="${k}" style="display:none"><td colspan="7" style="padding:0;background:#fafbf6">
-            <div style="padding:8px 14px;overflow:auto">${bulk}<table style="margin:0;font-size:13px"><thead><tr><th></th><th>FY</th><th>Invoice</th><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Still owed</th><th>Reconcile to</th></tr></thead>
+          const detail=`<tr class="catDetail" data-cat="${k}" style="display:none"><td colspan="9" style="padding:0;background:#fafbf6">
+            <div style="padding:8px 14px;overflow:auto">${bulk}<table style="margin:0;font-size:13px"><thead><tr><th></th><th>FY</th><th>Invoice</th><th>Client</th><th class="num">Invoiced</th><th class="num">Received</th><th class="num">Settled</th><th class="num">Credit</th><th class="num">Still owed</th><th>Reconcile to</th></tr></thead>
             <tbody>${list.map(({x,s,overridden})=>`<tr>
               <td><input type="checkbox" class="catChk" data-cat="${k}" data-inv="${esc(x.r.id)}" style="width:auto"></td>
               <td>${s+"–"+String((s+1)%100).padStart(2,"0")}</td>
@@ -236,18 +236,20 @@ async function load(){
               <td>${esc(x.party||"")}</td>
               <td class="num">${money(x.gross)}</td>
               <td class="num">${money(x.paid)}</td>
+              <td class="num" style="${x.settled>0.005?'color:#9a5b00':''}">${x.settled>0.005?money(x.settled):'—'}</td>
+              <td class="num" style="${x.credit>0.005?'color:#3e6b20':''}">${x.credit>0.005?money(x.credit):'—'}</td>
               <td class="num" style="${x.balance>0?'font-weight:600':''}">${money(Math.max(0,x.balance))}</td>
-              <td>${catSelect(x.r,k)}</td></tr>`).join("")||'<tr><td colspan="8" class="muted">No invoices in this category.</td></tr>'}</tbody></table></div></td></tr>`;
+              <td>${catSelect(x.r,k)}</td></tr>`).join("")||'<tr><td colspan="10" class="muted">No invoices in this category.</td></tr>'}</tbody></table></div></td></tr>`;
           return `<tr class="catToggle" data-cat="${k}" style="cursor:pointer">
             <td><span class="caret" data-cat="${k}" style="display:inline-block;width:14px;color:var(--green)">▸</span>${label} <span class="muted">(${list.length})</span></td>
-            <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].cur.inv)}</td><td class="num">${money(catFY[k].cur.rec)}</td><td class="num">${money(catFY[k].cur.recv)}</td>
-            <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].last.inv)}</td><td class="num">${money(catFY[k].last.rec)}</td><td class="num">${money(catFY[k].last.recv)}</td></tr>${detail}`;
+            <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].cur.inv)}</td><td class="num">${money(catFY[k].cur.rec)}</td><td class="num" style="${catFY[k].cur.nc>0.005?'color:#9a5b00':''}">${catFY[k].cur.nc>0.005?money(catFY[k].cur.nc):'—'}</td><td class="num">${money(catFY[k].cur.recv)}</td>
+            <td class="num" style="border-left:2px solid var(--line)">${money(catFY[k].last.inv)}</td><td class="num">${money(catFY[k].last.rec)}</td><td class="num" style="${catFY[k].last.nc>0.005?'color:#9a5b00':''}">${catFY[k].last.nc>0.005?money(catFY[k].last.nc):'—'}</td><td class="num">${money(catFY[k].last.recv)}</td></tr>${detail}`;
         }).join("")}
         <tr style="border-top:2px solid var(--green)"><td><b>Total</b></td>
-          <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.cur.inv)}</b></td><td class="num"><b>${money(catTot.cur.rec)}</b></td><td class="num"><b>${money(catTot.cur.recv)}</b></td>
-          <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.last.inv)}</b></td><td class="num"><b>${money(catTot.last.rec)}</b></td><td class="num"><b>${money(catTot.last.recv)}</b></td></tr>
+          <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.cur.inv)}</b></td><td class="num"><b>${money(catTot.cur.rec)}</b></td><td class="num"><b>${money(catTot.cur.nc)}</b></td><td class="num"><b>${money(catTot.cur.recv)}</b></td>
+          <td class="num" style="border-left:2px solid var(--line)"><b>${money(catTot.last.inv)}</b></td><td class="num"><b>${money(catTot.last.rec)}</b></td><td class="num"><b>${money(catTot.last.nc)}</b></td><td class="num"><b>${money(catTot.last.recv)}</b></td></tr>
       </tbody></table></div>
-      <p class="muted"><b>Click a category</b> to expand the invoices in it (number, client and amounts). Each invoice is placed by its highest-value line's description + HSN/SAC. If one is in the wrong bucket, use <b>Reconcile to</b> to move that invoice — the choice is saved and the totals here (matching the financial-year card above, bar rounding) update. “Auto-detect” clears a manual override.</p>
+      <p class="muted"><b>Invoiced − Received − Settled/CN = Still owed.</b> <b>Settled/CN</b> is value cleared <b>without cash</b> — credit notes + cross-module settlements (e.g. a spare bill netted against a vendor payable). <b>Click a category</b> to expand its invoices and see the Settled / Credit split per invoice. Each invoice sits in its highest-value line's category; use <b>Reconcile to</b> to move one. “Auto-detect” clears a manual override.</p>
     </div>
     <div class="card rvsec" data-rv="compare"><h3>Compare periods — by revenue category${entity?` — ${esc(entity)}`:''}</h3>
       <div class="row wrap" style="gap:18px;align-items:flex-end">
