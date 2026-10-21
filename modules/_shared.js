@@ -84,11 +84,35 @@ window.OPS.profitCats = (function(){
   // cost side = the same list + Overheads (common, indivisible)
   const COST = REV.concat([["overheads","Overheads (common)"]]);
   const LABEL = Object.fromEntries(COST);
+  const n = (v)=>{ const x=parseFloat(v); return isNaN(x)?0:x; };
+  // Classify ONE invoice line to a revenue category by description + HSN/SAC.
+  // Whole-drone sales (explicit model/unit terms) → dronesale; spares → part.
+  // Keep in step with receivables.js (both call this).
+  function classifyLine(desc, sub, hsn){
+    const d=((desc||"")+" "+(sub||"")).toLowerCase(); const h=String(hsn||"").replace(/\s/g,"");
+    if(/demo/.test(d)) return "demo";
+    if(/servic|repair|mainten|overhaul|\bmro\b|\bamc\b|refurb/.test(d) || /^9987/.test(h)) return "service";
+    if(/spray|aerial|agri/.test(d) || /^9986/.test(h)) return "spray";
+    if(/\bagras\b|\bt\d{2}p?\b|\bmg-?1\b|\buav\b|multirotor|quadcopter|agri[- ]?drone|drone\s*(unit|kit|set|package|system|combo)|complete\s*drone|full\s*drone|\baircraft\b/.test(d)) return "dronesale";
+    if(/part|spare|batter|propeller|\bmotor\b|nozzle|\bpump\b|blade|\besc\b|frame|charger|drone|kit|\barm\b/.test(d) || /^(8806|8807|8508|8507|8479|8413)/.test(h)) return "part";
+    return "other";
+  }
+  // Whole-invoice revenue category: a manual override (data.rev_category) wins;
+  // else the category of the highest-value line. One invoice → one category.
+  function classifyInvoice(doc){
+    const ov=(doc && doc.data || {}).rev_category;
+    if(ov && Object.prototype.hasOwnProperty.call(LABEL, ov)) return ov;
+    const items=(doc && doc.line_items) || []; if(!items.length) return "other";
+    const tally={}; items.forEach(it=>{ const base=Math.max(0,(n(it.qty))*(n(it.rate))*(1-(n(it.disc))/100));
+      const c=classifyLine(it.desc,it.sub,it.hsn); tally[c]=(tally[c]||0)+base+0.0001; });
+    let best="other",bv=-1; Object.keys(tally).forEach(c=>{ if(tally[c]>bv){bv=tally[c];best=c;} }); return best;
+  }
   return {
     revenue: REV,
     cost: COST,
     label: (k)=> LABEL[k] || k,
     isValid: (k)=> Object.prototype.hasOwnProperty.call(LABEL, k),
+    classifyLine, classifyInvoice,
     // <option> string for a <select>; pass 'cost' to include Overheads
     options(selected, which){ const list = which==="cost" ? COST : REV;
       return list.map(([k,l])=>`<option value="${k}"${selected===k?' selected':''}>${l}</option>`).join(""); },

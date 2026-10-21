@@ -87,24 +87,8 @@ async function load(){
   // to the financial-year card above.
   const CATS=window.OPS.profitCats.revenue;      // shared master (incl. Drone Sales)
   const REV_LABEL=Object.fromEntries(CATS);
-  const classifyLine=(desc,sub,hsn)=>{
-    const d=((desc||"")+" "+(sub||"")).toLowerCase(); const h=String(hsn||"").replace(/\s/g,"");
-    if(/demo/.test(d)) return "demo";
-    if(/servic|repair|mainten|overhaul|\bmro\b|\bamc\b|refurb/.test(d) || /^9987/.test(h)) return "service";
-    if(/spray|aerial|agri/.test(d) || /^9986/.test(h)) return "spray";
-    // WHOLE-drone sale (not spares): explicit model/unit terms only, so generic
-    // "drone battery / drone part" lines still fall through to Part sales.
-    if(/\bagras\b|\bt\d{2}p?\b|\bmg-?1\b|\buav\b|multirotor|quadcopter|agri[- ]?drone|drone\s*(unit|kit|set|package|system|combo)|complete\s*drone|full\s*drone|\baircraft\b/.test(d)) return "dronesale";
-    if(/part|spare|batter|propeller|\bmotor\b|nozzle|\bpump\b|blade|\besc\b|frame|charger|drone|kit|\barm\b/.test(d) || /^(8806|8807|8508|8507|8479|8413)/.test(h)) return "part";
-    return "other"; };
-  // Whole-invoice category: a manual override (documents.data.rev_category) wins;
-  // otherwise the category of the highest-value line. One invoice → one category,
-  // so the drill lists and reconciliation stay unambiguous and totals still tie out.
-  const autoCat=inv=>{ const items=inv.line_items||[]; if(!items.length) return "other";
-    const tally={}; items.forEach(it=>{ const base=Math.max(0,(num(it.qty)||0)*(num(it.rate)||0)*(1-(num(it.disc)||0)/100));
-      const c=classifyLine(it.desc,it.sub,it.hsn); tally[c]=(tally[c]||0)+base+0.0001; });
-    let best="other",bv=-1; Object.keys(tally).forEach(c=>{ if(tally[c]>bv){bv=tally[c];best=c;} }); return best; };
-  const catOf=inv=>{ const ov=(inv.data||{}).rev_category; return (ov && REV_LABEL[ov])?ov:autoCat(inv); };
+  // whole-invoice category — the shared classifier (same one the Category P&L uses)
+  const catOf=inv=>window.OPS.profitCats.classifyInvoice(inv);
   const catFY={}, catInv={};
   CATS.forEach(([k])=>{ catFY[k]={cur:{inv:0,rec:0,nc:0,recv:0},last:{inv:0,rec:0,nc:0,recv:0}}; catInv[k]=[]; });
   rows.forEach(x=>{ const s=fyStart(x.r.doc_date); if(s!==curFY && s!==curFY-1) return;
