@@ -8,6 +8,29 @@
 const { $, esc, num, money } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const near = (a,b,tol)=> Math.abs(num(a)-num(b)) <= (tol==null?0.5:tol);
+const PC = window.OPS.profitCats;
+const isTagged = c => !!(c && PC.isValid(c));
+
+// Cost records missing an explicit profit category (→ counted as Overheads in
+// the Category P&L). Vendor spray payouts in `payables` auto-classify via their
+// category text, so they don't count as untagged.
+async function fetchUntaggedCosts(){
+  const [exp,pay,claims,emps,bon]=await Promise.all([
+    sb().from("expenses").select("id,expense_date,total,payee_text,note,cost_category"),
+    sb().from("payables").select("id,invoice_date,total,vendor_invoice_no,category,cost_category"),
+    sb().from("expense_claims").select("id,created_at,total,employee_name,claim_type,status,cost_category"),
+    sb().from("employees").select("id,name,cost_split").eq("emp_type","employee").eq("status","active"),
+    sb().from("hr_bonuses").select("id,pay_month,amount,payee_name,cost_category"),
+  ]);
+  const err=[exp,pay,claims,emps,bon].find(r=>r.error); if(err) throw err.error;
+  return {
+    expenses:(exp.data||[]).filter(r=>!isTagged(r.cost_category)),
+    payables:(pay.data||[]).filter(r=>!isTagged(r.cost_category) && !/spray|aerial/i.test(r.category||"")),
+    claims:(claims.data||[]).filter(r=>["approved","part_paid","paid"].includes(r.status) && r.claim_type!=="advance" && !isTagged(r.cost_category)),
+    salaries:(emps.data||[]).filter(e=>!(e.cost_split && typeof e.cost_split==="object" && Object.keys(e.cost_split).length)),
+    bonuses:(bon.data||[]).filter(r=>!isTagged(r.cost_category)),
+  };
+}
 
 // each check returns { status:'pass'|'warn'|'fail', detail:string }
 const CHECKS = [
@@ -103,6 +126,18 @@ const CHECKS = [
       return miss ? { status:"warn", detail:`${miss}/${tot} invoice(s) have no saved revenue category — created/imported before categories existed. The FY report infers them from HSN/description (figures stay correct); tag via Receivables → By revenue category, or open & save each.` }
                   : { status:"pass", detail:`${tot} invoice(s) categorised` };
     }, fix:{ tool:"invoice", filter:"uncat", label:"Fix in Invoices ›" } },
+  { name:"Costs tagged to a profit category (Category P&L)", run: async()=>{
+      const u=await fetchUntaggedCosts();
+      const parts=[];
+      if(u.expenses.length) parts.push(u.expenses.length+" direct expense(s)");
+      if(u.payables.length) parts.push(u.payables.length+" supplier bill(s)");
+      if(u.claims.length)   parts.push(u.claims.length+" approved expense claim(s)");
+      if(u.salaries.length) parts.push(u.salaries.length+" employee salary-split(s)");
+      if(u.bonuses.length)  parts.push(u.bonuses.length+" bonus(es)");
+      return parts.length
+        ? { status:"warn", detail:`Untagged → counted as Overheads in Category P&L: ${parts.join(", ")}. Tag the ones that belong to a category (leave true overheads blank).` }
+        : { status:"pass", detail:"All costs carry a profit category (or are intentional overheads)." };
+    }, fix:{ list:"costs", label:"Show untagged costs ›" } },
   { name:"Idle-tracking views reachable", run: async()=>{
       const a=await sb().from("v_idle_active_pilots").select("*").limit(1);
       const b=await sb().from("v_idle_active_locations").select("*").limit(1);
@@ -125,12 +160,45 @@ async function selftest(){
     <div class="row" style="margin:10px 0"><button class="btn green sm" id="stRun">▶ Run all checks</button><span id="stSum" class="muted"></span></div>
     <div class="row" style="margin:0 0 10px;gap:8px"><span class="muted" style="align-self:center">Clean-up lists:</span>
       <button class="btn sm" id="stUncat">Uncategorised invoices</button>
+      <button class="btn sm" id="stCosts">Untagged costs</button>
       <button class="btn sm" id="stUnlinked">Unlinked (no register client)</button></div>
     <div id="stList"></div>
     <div id="stBody" class="muted">Press <b>Run all checks</b> to begin.</div>`;
   $("stRun").addEventListener("click",e=>window.OPS.once(e.currentTarget,runAll));
   $("stUncat").addEventListener("click",()=>listInvoices("uncat"));
+  $("stCosts").addEventListener("click",()=>listCosts());
   $("stUnlinked").addEventListener("click",()=>listInvoices("unlinked"));
+}
+// ---- clean-up list: cost records missing a profit category (for Category P&L) ----
+async function listCosts(){
+  const host=$("stList"); if(!host) return;
+  host.innerHTML='<div class="muted" style="margin:6px 0">Loading…</div>';
+  let u; try{ u=await fetchUntaggedCosts(); }catch(e){ host.innerHTML='<div class="card" style="color:#a3322a">'+esc(e.message)+'</div>'; return; }
+  const fd=window.OPS.helpers.fmtDate;
+  const sec=(title,rows,cols,where)=>`<div class="card" style="margin-bottom:8px">
+    <div class="row"><h3 style="margin:0">${esc(title)} — ${rows.length}</h3><div class="spacer"></div>${rows.length?`<button class="btn sm" data-open="${where.tool}">${esc(where.label)}</button>`:''}</div>
+    ${rows.length?`<div style="overflow:auto"><table><thead><tr>${cols.map(c=>`<th class="${c.num?'num':''}">${esc(c.h)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.slice(0,100).map(r=>`<tr>${cols.map(c=>`<td class="${c.num?'num':''}">${c.f(r)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${rows.length>100?`<p class="muted" style="font-size:12px">Showing first 100 of ${rows.length}.</p>`:''}
+      <p class="muted" style="font-size:12px">${esc(where.hint)}</p>`:'<p class="muted" style="margin:6px 0 0">None 🎉</p>'}</div>`;
+  const totalU=u.expenses.length+u.payables.length+u.claims.length+u.salaries.length+u.bonuses.length;
+  host.innerHTML=`<div class="muted" style="margin:4px 0 8px"><b>${totalU}</b> cost record(s) with no profit category (treated as Overheads until tagged).</div>`
+   + sec("Direct expenses — no profit category", u.expenses, [
+      {h:"Date",f:r=>esc(fd(r.expense_date))},{h:"Payee",f:r=>esc(r.payee_text||r.note||"")},{h:"Total",num:true,f:r=>money(r.total)}
+    ], {tool:"expense_mgmt", label:"Open Expense Management ›", hint:"Open each and set its Profit category."})
+   + sec("Supplier bills — no profit category", u.payables, [
+      {h:"Invoice no.",f:r=>esc(r.vendor_invoice_no||"(no no.)")},{h:"Date",f:r=>esc(fd(r.invoice_date))},{h:"Total",num:true,f:r=>money(r.total)}
+    ], {tool:"vendor_bills", label:"Open Vendor Bills ›", hint:"Open each and set its Profit category. (Vendor spray payouts are auto-tagged and don't appear here.)"})
+   + sec("Approved expense claims — no profit category", u.claims, [
+      {h:"Employee",f:r=>esc(r.employee_name||"")},{h:"Date",f:r=>esc(fd(r.created_at))},{h:"Total",num:true,f:r=>money(r.total)}
+    ], {tool:"expense_review", label:"Open Expense Claims ›", hint:"Finance tags a claim's profit category when approving."})
+   + sec("Active employees — no salary profit-split", u.salaries, [
+      {h:"Employee",f:r=>esc(r.name||"")}
+    ], {tool:"hr_employees", label:"Open Employees ›", hint:"Open each → Salary profit-split; otherwise their salary counts 100% as Overheads."})
+   + sec("Bonuses — no profit category", u.bonuses, [
+      {h:"Payee",f:r=>esc(r.payee_name||"")},{h:"Month",f:r=>esc(r.pay_month||"")},{h:"Amount",num:true,f:r=>money(r.amount)}
+    ], {tool:"hr_bonuses", label:"Open Bonuses ›", hint:"Bonuses default to Overheads unless tagged."});
+  host.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{ if(window.OPS.openTool) window.OPS.openTool(b.getAttribute("data-open")); }));
 }
 async function runAll(){
   const body=$("stBody"); const chip=s=> s==="pass"?'<span class="chip ok">PASS</span>':s==="warn"?'<span class="chip warn">WARN</span>':'<span class="chip err">FAIL</span>';
@@ -178,6 +246,7 @@ async function listInvoices(kind){
 
 // jump to the tab that can fix a warning, with its filter pre-applied
 function gotoFix(fix){ if(!fix) return;
+  if(fix.list==="costs") return listCosts();
   if(fix.tool==="invoice")    window.OPS._invFilter=fix.filter;
   if(fix.tool==="catalogues") window.OPS._catFilter=fix.filter;
   if(window.OPS.openTool) window.OPS.openTool(fix.tool);
