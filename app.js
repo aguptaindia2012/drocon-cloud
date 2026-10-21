@@ -38,18 +38,22 @@ const SECTIONS = [
   { key:"trackers",   label:"Daily Spray Entry" },
   { key:"order",      label:"Business Development" },
   { key:"agreement",  label:"Agreement" },
-  { key:"sales",      label:"Sales & Receivables" },  // client invoicing + AR dashboards
-  { key:"expenses",   label:"Purchases & Expenses" }, // money out: bills, expenses, POs
-  { key:"cash",       label:"Payments & Cash" },      // clearing, settlements, cash position, day book
-  { key:"books",      label:"Accounting" },           // ledgers & reports
-  { key:"inventory",  label:"Inventory" },
-  { key:"hr",         label:"HR" },
+  { key:"sales",      label:"Sales & Receivables", group:"fin" },  // client invoicing + AR dashboards
+  { key:"expenses",   label:"Purchases & Expenses", group:"fin" }, // money out: bills, expenses, POs
+  { key:"cash",       label:"Payments & Cash", group:"fin" },      // clearing, settlements, cash position, day book
+  { key:"books",      label:"Accounting", group:"fin" },           // ledgers & reports
+  { key:"inventory",  label:"Inventory", group:"admin" },
+  { key:"hr",         label:"HR", group:"admin" },
   // registers of who/where everything else selects from, plus reference material
-  { key:"resources",  label:"Registers" },
-  { key:"team",       label:"Team & Access" },
-  { key:"audit",      label:"Audit" },
+  { key:"resources",  label:"Registers", group:"admin" },
+  { key:"team",       label:"Team & Access", group:"admin" },
+  { key:"audit",      label:"Audit", group:"admin" },
   { key:"portal",     label:"Partner Portal" },   // external (invite-only) logins only
 ];
+// Top-level groups — collapse several sections under one parent tab. A section
+// with no `group` stays a top-level tab. Order follows first appearance above.
+const GROUPS = [ { key:"fin", label:"Finance" }, { key:"admin", label:"Administration" } ];
+const GROUP_LABEL = Object.fromEntries(GROUPS.map(g=>[g.key,g.label]));
 const TOOLS = [
   // Daily Spray Entry (its own section, the landing tab)
   // (Daily approvals are surfaced in the consolidated Review / Approvals tab.)
@@ -439,38 +443,65 @@ function secLabel(s){
   if(s.key==="portal" && profile && !profile.is_external && profile.pilot_id) return "Pilot Portal";
   return s.label;
 }
+function currentGroupOf(){ const s=SECTIONS.find(x=>x.key===window.OPS.currentSection); return s?(s.group||null):null; }
+function secBadge(s){
+  if(s.key==="reviews" && window.OPS.reviewCount) return ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>`;
+  if(s.key==="messenger" && window.OPS.chatUnread) return ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">💬 ${window.OPS.chatUnread}</span>`;
+  return "";
+}
+// group badge = sum of its sections' badges' counts (so a collapsed group still flags pending items)
+function groupBadge(gkey, secs){
+  let n=0; secs.forEach(s=>{ if(s.group!==gkey) return;
+    if(s.key==="reviews") n+=window.OPS.reviewCount||0; if(s.key==="messenger") n+=window.OPS.chatUnread||0; });
+  return n ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">${n}</span>` : "";
+}
+function wireNav(rootId){
+  $(rootId).querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{ const k=b.getAttribute("data-sec"); if(k==="__home") goHome(); else openSection(k); }));
+  $(rootId).querySelectorAll("[data-grp]").forEach(b=>b.addEventListener("click",()=>openGroup(b.getAttribute("data-grp"))));
+  $(rootId).querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-tab"))));
+}
 function renderNav(){
-  // top section bar — Home is the first tab
+  // Row 1 (groupBar) — Home is the first tab
   const homeBtn = `<button data-sec="__home" class="${window.OPS.currentTool==='home'?'active':''}">🏠 Home</button>`;
   // External portal logins get a single FLAT tab bar — their portal tools become
   // the top-level tabs (no redundant "Vendor/Client Portal" wrapper level).
   if(isExternal()){
     const ptools = TOOLS.filter(t=>t.section==="portal" && canSee(t));
-    $("sectionBar").innerHTML = homeBtn + ptools.map(t=>`<button data-tab="${t.key}" class="${(window.OPS.currentTool!=='home' && t.key===window.OPS.currentTool)?'active':''}">${esc(t.label)}</button>`).join("");
-    $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{ if(b.getAttribute("data-sec")==="__home") goHome(); }));
-    $("sectionBar").querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-tab"))));
-    $("nav").innerHTML="";
+    $("groupBar").innerHTML = homeBtn + ptools.map(t=>`<button data-tab="${t.key}" class="${(window.OPS.currentTool!=='home' && t.key===window.OPS.currentTool)?'active':''}">${esc(t.label)}</button>`).join("");
+    wireNav("groupBar"); $("sectionBar").innerHTML=""; $("sectionBar").style.display="none"; $("nav").innerHTML="";
     return;
   }
   const secs = visibleSections();
-  $("sectionBar").innerHTML = homeBtn + secs.map(s=>{
-    let badge = (s.key==="reviews" && window.OPS.reviewCount) ? ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">🔔 ${window.OPS.reviewCount}</span>` : "";
-    if(s.key==="messenger" && window.OPS.chatUnread) badge = ` <span style="background:var(--orange);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px">💬 ${window.OPS.chatUnread}</span>`;
-    return `<button data-sec="${s.key}" class="${(window.OPS.currentTool!=='home' && s.key===window.OPS.currentSection)?'active':''}">${esc(secLabel(s))}${badge}</button>`;
+  const cg = (window.OPS.currentTool!=='home') ? currentGroupOf() : null;
+  // Row 1: Home + (group tabs | ungrouped section tabs), ordered by first appearance
+  const seen={}, top=[];
+  secs.forEach(s=>{ if(s.group){ if(!seen[s.group]){ seen[s.group]=true; top.push({g:s.group}); } } else top.push({s}); });
+  $("groupBar").innerHTML = homeBtn + top.map(it=>{
+    if(it.g){ const active = cg===it.g; return `<button data-grp="${it.g}" class="${active?'active':''}">${esc(GROUP_LABEL[it.g]||it.g)}${groupBadge(it.g,secs)}</button>`; }
+    const s=it.s, active=(window.OPS.currentTool!=='home' && s.key===window.OPS.currentSection);
+    return `<button data-sec="${s.key}" class="${active?'active':''}">${esc(secLabel(s))}${secBadge(s)}</button>`;
   }).join("");
-  $("sectionBar").querySelectorAll("[data-sec]").forEach(b=>b.addEventListener("click",()=>{
-    const k=b.getAttribute("data-sec"); if(k==="__home") goHome(); else openSection(k); }));
-  // sub-tabs for the active section
+  // Row 2 (sectionBar): the active group's sections (hidden when no group active)
+  if(cg){ const gsecs=secs.filter(s=>s.group===cg);
+    $("sectionBar").innerHTML = gsecs.map(s=>`<button data-sec="${s.key}" class="${s.key===window.OPS.currentSection?'active':''}">${esc(secLabel(s))}${secBadge(s)}</button>`).join("");
+    $("sectionBar").style.display="";
+  } else { $("sectionBar").innerHTML=""; $("sectionBar").style.display="none"; }
+  // Row 3 (nav): the active section's tools
   const tools = TOOLS.filter(t=>t.section===window.OPS.currentSection && canSee(t));
   $("nav").innerHTML = tools.map(t=>
     `<button data-tab="${t.key}" class="${t.key===window.OPS.currentTool?'active':''}">${esc(t.label)}${t.phase?` <span class="soon">soon</span>`:''}</button>`).join("");
-  $("nav").querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>openTool(b.getAttribute("data-tab"))));
+  wireNav("groupBar"); wireNav("sectionBar"); wireNav("nav");
 }
 function openSection(secKey){
   window.OPS.currentSection = secKey;
   const first = TOOLS.find(t=>t.section===secKey && canSee(t));
   if(first) openTool(first.key); else renderNav();
 }
+function openGroup(gkey){
+  const s = visibleSections().find(x=>x.group===gkey);
+  if(s) openSection(s.key); else renderNav();
+}
+window.OPS.openGroup = openGroup;
 function openTool(key){
   const tool = toolByKey(key);
   if(!tool || !canSee(tool)){ return; }
@@ -776,6 +807,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "299";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "300";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

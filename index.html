@@ -52,6 +52,10 @@ label{font-size:12px;font-weight:700;display:block;margin-bottom:4px}
 .nav button{background:none;border:none;border-bottom:3px solid transparent;padding:11px 13px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
 .nav button.active{color:var(--green);border-bottom-color:var(--green)}
 .nav .soon{font-size:9px;background:var(--cream);color:var(--orange);padding:1px 5px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
+/* Row 2 (a group's sections) sits between the dark group bar and the white tool
+   bar — tint it so the three nav tiers are visually distinct. */
+#sectionBar.nav{background:var(--soft-green)}
+#sectionBar.nav:empty{display:none}
 .wrap{max-width:none;margin:0;padding:22px 1cm 70px}
 h1{font-size:24px;margin:0 0 4px}
 h3{margin:0 0 8px}
@@ -177,7 +181,8 @@ thead th[data-ttdir]{color:var(--green)}
       <button class="btn sm" id="btnChangePw" title="Change your password">Change password</button>
       <button class="btn sm" id="btnSignOut">Sign out</button>
     </div>
-    <div class="sectionbar" id="sectionBar"></div>
+    <div class="sectionbar" id="groupBar"></div>
+    <div class="nav" id="sectionBar"></div>
     <div class="nav" id="nav"></div>
   </div>
   <div class="wrap" id="main"></div>
