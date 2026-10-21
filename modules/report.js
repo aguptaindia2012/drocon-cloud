@@ -31,11 +31,24 @@ function img(id){ const cv=document.getElementById(id); try{ return cv?cv.toData
 // defined height lets Chart.js (responsive, maintainAspectRatio:false) size the
 // canvas to the full available width.
 function canvas(id,w,h){ return `<div style="position:relative;width:100%;height:${(h||260)}px"><canvas id="${id}"></canvas></div>`; }
-function wordButton(hostId, title, sectionsFn){
+// opts (optional): { to, who, noEmail } — adds a "📧 Email report" button that
+// builds the same Word report and opens the mail composer with it attached.
+function wordButton(hostId, title, sectionsFn, opts){
+  opts=opts||{};
   const h=document.getElementById(hostId); if(!h) return;
   const b=document.createElement("button"); b.className="btn blue sm"; b.textContent="⬇ Download Word report";
   b.addEventListener("click",()=>{ try{ window.OPS.docgen.generateReport({ title, sections:sectionsFn() }); }catch(e){ alert("Report error: "+e.message); } });
   h.appendChild(b);
+  if(opts.noEmail || !window.OPS.mailComposeWithBlob) return;
+  const e=document.createElement("button"); e.className="btn green sm"; e.textContent="📧 Email report"; e.style.marginLeft="6px";
+  e.addEventListener("click",()=>window.OPS.once(e,async()=>{
+    try{
+      const out=await window.OPS.docgen.generateReport({ title, sections:sectionsFn() }, { asBlob:true });
+      const body="Dear "+(opts.who||"Sir/Madam")+",\n\nPlease find attached: "+title+".\n\nWarm regards,";
+      await window.OPS.mailComposeWithBlob({ to:opts.to||"", subject:title, body:body, blob:out.blob, filename:out.filename, mime:out.mime });
+    }catch(err){ alert("Couldn't build the report: "+(err&&err.message||err)); }
+  }));
+  h.appendChild(e);
 }
 /* ---------------------------------------------------------------------------
    Reusable consolidated panel: ONE card, a row of buttons, one content area.

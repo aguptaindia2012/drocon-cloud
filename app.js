@@ -278,6 +278,21 @@ function applyProfile(){
   refreshNotifs(); refreshReviewCount(); refreshChatBadge();
   if(!window._notifPoll) window._notifPoll=setInterval(()=>{ if(me){ refreshNotifs(); refreshReviewCount(); refreshChatBadge(); } }, 30000);
   try{ window.OPS.tour && window.OPS.tour.maybeAuto(); }catch(e){}
+  maybePendingEmail();
+}
+// The Agreement Studio (a separate page) hands a generated .docx back here via
+// localStorage; open the mail composer with it attached.
+function maybePendingEmail(){
+  let raw; try{ raw=localStorage.getItem("dcb_pending_email"); }catch(e){ return; }
+  if(!raw) return;
+  try{ localStorage.removeItem("dcb_pending_email"); }catch(e){}
+  let p; try{ p=JSON.parse(raw); }catch(e){ return; }
+  if(!p || !p.content_base64) return;
+  if(p.ts && (Date.now()-p.ts) > 10*60*1000) return;           // stale (>10 min)
+  if(!(window.OPS && window.OPS.mailCompose)) return;
+  const body="Dear "+(p.who||"Sir/Madam")+",\n\nPlease find the attached document.\n\nWarm regards,";
+  setTimeout(()=>{ try{ window.OPS.mailCompose({ to:p.to||"", subject:p.subject||"", body:body,
+    readyAtt:[{ filename:p.filename||"document.docx", content_type:p.mime||"application/octet-stream", content_base64:p.content_base64 }] }); }catch(e){} }, 400);
 }
 async function refreshRole(){
   const data = await loadProfile();
@@ -761,6 +776,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "297";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "298";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

@@ -2157,6 +2157,7 @@ function panelDownloads(){
     <div class="callout"><b>Save the JSON</b> to reopen and revise this exact draft later (use “Open JSON Draft” in the top bar).</div>
     <div class="toolbar-row">
       <button class="btn blue" id="dlWord" style="font-size:15px;padding:11px 20px">⬇ Download Word (.docx) — recommended</button>
+      <button class="btn green" id="dlEmail" style="font-size:15px;padding:11px 20px">📧 Email this agreement</button>
       <button class="btn" id="dlJson">⬇ Save JSON draft</button>
     </div>
     <div class="toolbar-row"><button class="btn grey sm" id="dlQuickPdf">Quick draft PDF (preview only)</button>
@@ -2267,7 +2268,8 @@ function wirePanel(){
   });
   // downloads
   if($("dlQuickPdf")) $("dlQuickPdf").addEventListener("click",exportPDF);
-  if($("dlWord")) $("dlWord").addEventListener("click",exportWord);
+  if($("dlWord")) $("dlWord").addEventListener("click",()=>exportWord(false));
+  if($("dlEmail")) $("dlEmail").addEventListener("click",()=>exportWord(true));
   if($("dlJson")) $("dlJson").addEventListener("click",exportJSON);
 }
 
@@ -2980,8 +2982,8 @@ function importJSON(obj){
 /* ============================================================
    EXPORT — WORD (.docx, branded)
    ============================================================ */
-function exportWord(){
-  setDl("Building Word document…");
+function exportWord(asEmail){
+  setDl(asEmail?"Preparing email…":"Building Word document…");
   if(typeof docx==="undefined"){ setDl("Word library not loaded. Check your connection and retry."); return; }
   const D=docx;
   const GREEN="599533", ORANGE="F48A1C", BLUE="0A6496", CHAR="282828", GREY="F5F5F5";
@@ -3230,7 +3232,26 @@ function exportWord(){
       children
     }]
   });
-  D.Packer.toBlob(doc).then(blob=>{ saveBlob(blob, fileBase()+".docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",".docx"); })
+  const MIME="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if(asEmail){
+    D.Packer.toBlob(doc).then(blob=>{
+      const r=new FileReader();
+      r.onload=()=>{ try{
+        const b64=String(r.result).split(",")[1]||"";
+        const f=(draft&&draft.fields)||{};
+        localStorage.setItem("dcb_pending_email", JSON.stringify({
+          filename:fileBase()+".docx", content_base64:b64, mime:MIME,
+          to:f.cpPocEmail||"", subject:"Agreement — "+(f.cpName||draft.cpRole||"")+" — DroCon Bharat Private Limited",
+          who:f.cpPocName||f.cpName||"Sir/Madam", ts:Date.now() }));
+        setDl("Opening email… you'll return to the app with this agreement attached.");
+        location.href="./index.html";
+      }catch(e){ setDl("Couldn't prepare email: "+e); } };
+      r.onerror=()=>setDl("Couldn't read the document for email.");
+      r.readAsDataURL(blob);
+    }).catch(e=>{ setDl("Word error: "+e); });
+    return;
+  }
+  D.Packer.toBlob(doc).then(blob=>{ saveBlob(blob, fileBase()+".docx",MIME,".docx"); })
   .catch(e=>{ setDl("Word error: "+e); });
 }
 

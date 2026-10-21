@@ -105,7 +105,7 @@ function render(){
       rows:Object.entries(byL).sort((a,b)=>b[1].acres-a[1].acres).map(([k,v])=>[k,v.acres.toFixed(1)])}},
     {heading:"Detail", table:{headers:["Date","Pilot","Location","Acres"],
       rows:rows.map(r=>[fmtDate(r.entry_date),r.pilot_name||"",r.location_name||"",num(r.acres)])}},
-  ]));
+  ]), { to:(cur&&cur.email)||"", who:(cur&&(cur.firm_name||cur.name))||"Sir/Madam" });
 }
 
 function exportExcel(){
