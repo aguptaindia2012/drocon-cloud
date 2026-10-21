@@ -399,13 +399,52 @@ async function records(){
       <div class="stat"><div class="n">${rows.length}</div><div class="l">Employees</div></div>
     </div>
     ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Employee</th><th>Profit split</th><th class="num">Net</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows.map(x=>`<tr><td><b>${esc(x.r.emp&&x.r.emp.name||'')}</b></td><td style="font-size:12px">${splitSummary(x.r.cost_split)}</td><td class="num">${money(x.r.net_payable)}</td>
+      <tbody>${rows.map(x=>`<tr data-run="${x.r.id}"><td><b>${esc(x.r.emp&&x.r.emp.name||'')}</b></td>
+        <td style="font-size:12px">${splitSummary(x.r.cost_split)} <a href="#" class="runSplit" data-id="${x.r.id}" title="Edit this month's split" style="text-decoration:none">✎</a></td>
+        <td class="num">${money(x.r.net_payable)}</td>
         <td class="num">${money(x.paid)}</td><td class="num" style="${x.bal>0?'font-weight:700':''}">${money(x.bal)}</td>
         <td>${window.OPS.statusChip(x.r.status)}</td>
         <td>${x.r.status==='calculated'?`<button class="btn sm" data-post="${x.r.id}">Post</button> `:''}${x.bal>0.01?`<button class="btn sm" data-pay="${x.r.id}">+ Pay</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No salary runs for this month. Calculate them in <b>Salary Calculator</b>.</div>'}`;
+  _salRuns=rows;
   $("rBody").querySelectorAll("[data-post]").forEach(b=>b.addEventListener("click",()=>postRun(rows.find(x=>String(x.r.id)===b.getAttribute("data-post")).r)));
   $("rBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",()=>payRun(rows.find(x=>String(x.r.id)===b.getAttribute("data-pay")))));
+  $("rBody").querySelectorAll(".runSplit").forEach(a=>a.addEventListener("click",e=>{ e.preventDefault(); openRunSplitEditor(a.getAttribute("data-id")); }));
+}
+let _salRuns=[];
+// Inline editor for ONE salary run's profit-split (toggles a row under it).
+function openRunSplitEditor(id){
+  const old=document.getElementById("rse_"+id); if(old){ old.remove(); return; }
+  const tr=$("rBody").querySelector(`tr[data-run="${id}"]`); if(!tr) return;
+  const run=_salRuns.find(x=>String(x.r.id)===String(id)); if(!run) return;
+  const cur=(run.r.cost_split && typeof run.r.cost_split==="object")?run.r.cost_split:{};
+  const CATS=window.OPS.profitCats.cost.filter(c=>c[0]!=="overheads");   // revenue + R&D; remainder = overheads
+  const ed=document.createElement("tr"); ed.id="rse_"+id;
+  ed.innerHTML=`<td colspan="7" style="background:#fafbf8;padding:8px 10px">
+    <div style="font-weight:600;margin-bottom:4px">Profit split — ${esc(run.r.emp&&run.r.emp.name||'')} · ${esc(run.r.period_month||'')}</div>
+    <div style="display:grid;grid-template-columns:1fr auto;gap:4px 10px;max-width:380px">
+      ${CATS.map(([k,l])=>`<label style="align-self:center">${esc(l)}</label><input type="number" min="0" max="100" step="1" class="rsPct" data-k="${k}" value="${cur[k]!=null?esc(cur[k]):''}" style="width:80px" placeholder="0">`).join("")}
+      <div style="align-self:center"><b>Overheads</b> <span class="muted" style="font-size:12px">(remainder)</span></div><div id="rsOver_${id}" style="align-self:center;font-weight:600">—</div>
+    </div>
+    <div class="row" style="margin-top:8px;gap:10px;align-items:center">
+      <button class="btn green sm" id="rsSave_${id}">Save this month's split</button>
+      <span id="rsMsg_${id}" class="muted" style="font-size:12px"></span>
+      <span class="muted" style="font-size:11px">Changes only this run. Re-running the Salary Calculator re-applies the employee's standard split.</span>
+    </div></td>`;
+  tr.after(ed);
+  const over=()=>{ let t=0; ed.querySelectorAll(".rsPct").forEach(i=>t+=num(i.value)); const rem=Math.round((100-t)*100)/100;
+    $("rsOver_"+id).textContent=(rem>=0?rem:0)+"%"; const msg=$("rsMsg_"+id);
+    if(t>100){ msg.textContent="Total exceeds 100% — reduce the splits."; msg.style.color="#a3322a"; } else { msg.textContent=""; msg.style.color=""; } return t; };
+  ed.querySelectorAll(".rsPct").forEach(i=>i.addEventListener("input",over)); over();
+  $("rsSave_"+id).addEventListener("click",async()=>{
+    const t=over(); if(t>100) return;
+    const split={}; ed.querySelectorAll(".rsPct").forEach(i=>{ const v=num(i.value); if(v>0) split[i.getAttribute("data-k")]=v; });
+    const val=Object.keys(split).length?split:{overheads:100};
+    const { error }=await sb().from("salary_runs").update({cost_split:val}).eq("id",id);
+    if(error){ $("rsMsg_"+id).textContent=error.message; $("rsMsg_"+id).style.color="#a3322a"; return; }
+    window.OPS.audit&&window.OPS.audit("edited","salary_run",id,"profit-split");
+    window.OPS.flashTop("Split saved ✓"); records();
+  });
 }
 async function doPost(run){
   await sb().from("accounting_entries").insert([
