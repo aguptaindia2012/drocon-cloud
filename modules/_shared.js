@@ -132,6 +132,33 @@ window.OPS.profitCatCell = function(table, id, current){
   const blank = `<option value="">— not set —</option>`;
   return `<select class="pcCell" data-pc-table="${esc(table)}" data-pc-id="${esc(id)}" style="max-width:160px">${blank}${window.OPS.profitCats.options(current,'cost')}</select>`;
 };
+/* ---------- small dropdown menu button (returns a DOM node) ------------------
+   window.OPS.menuButton("Download", [{label:"Word (.docx)",fn},{label:"PDF",fn}])
+   Appends a "Download ▾" button that opens a click-menu. Items' fn may be async;
+   errors surface via a flash. Used for the Word/PDF download & email choices. */
+window.OPS.menuButton = function(label, items, opts){
+  opts=opts||{};
+  const wrap=document.createElement("span"); wrap.style.cssText="position:relative;display:inline-block";
+  const btn=document.createElement("button"); btn.type="button"; btn.className=opts.className||"btn blue sm"; btn.textContent=label+" ▾";
+  const menu=document.createElement("div");
+  menu.style.cssText="position:absolute;top:calc(100% + 2px);left:0;z-index:70;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);min-width:170px;display:none;padding:4px";
+  (items||[]).forEach(it=>{ const b=document.createElement("button"); b.type="button"; b.className="btn sm";
+    b.style.cssText="display:block;width:100%;text-align:left;border:none;background:none;padding:7px 10px;border-radius:6px";
+    b.textContent=it.label;
+    b.addEventListener("mouseenter",()=>b.style.background="#f2f5ef"); b.addEventListener("mouseleave",()=>b.style.background="none");
+    b.addEventListener("click",async(e)=>{ e.stopPropagation(); menu.style.display="none";
+      try{ await it.fn(); }catch(err){ window.OPS.flashTop && window.OPS.flashTop("Failed: "+(err&&err.message||err)); } });
+    menu.appendChild(b); });
+  btn.addEventListener("click",e=>{ e.stopPropagation();
+    const isOpen=menu.style.display==="block";
+    document.querySelectorAll(".dcb-menu").forEach(m=>m.style.display="none");
+    menu.style.display=isOpen?"none":"block"; });
+  menu.className="dcb-menu";
+  document.addEventListener("click",()=>{ menu.style.display="none"; });
+  wrap.appendChild(btn); wrap.appendChild(menu);
+  return wrap;
+};
+
 window.OPS.wireProfitCatCells = function(root, onSaved){
   (root||document).querySelectorAll("select.pcCell").forEach(sel=>{
     sel.addEventListener("click", e=>e.stopPropagation());

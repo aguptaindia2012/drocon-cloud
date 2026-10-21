@@ -592,6 +592,17 @@ async function fetchAttB64(mailbox, uid, index){
   return await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(String(r.result).split(",")[1]||""); r.onerror=reject; r.readAsDataURL(blob); });
 }
 
+// ---- DOCX → PDF via the backend (true Word fidelity) ------------------------
+// Takes a .docx Blob, returns a PDF Blob. Needs the user signed in.
+window.OPS.docxToPdf = async function(blob){
+  const b64 = await toB64(blob);
+  const res = await api("/convert/docx-to-pdf", { method:"POST", body:{ docx_base64:b64 } });
+  if(!res || !res.pdf_base64) throw new Error("conversion returned no PDF");
+  const bin = atob(res.pdf_base64); const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes], { type:"application/pdf" });
+};
+
 // ---- open the composer from anywhere (e.g. "Email this document") ----------
 // seed: { to, cc, subject, body, readyAtt:[{filename,content_type,content_base64}] }
 window.OPS.mailCompose = async function(seed){

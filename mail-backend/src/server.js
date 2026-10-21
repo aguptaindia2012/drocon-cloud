@@ -5,6 +5,7 @@ import cors from "@fastify/cors";
 import { requireUser } from "./auth.js";
 import { getAccount, getAccountWithPassword, saveAccount, deleteAccount, setError } from "./store.js";
 import * as mail from "./mail.js";
+import { docxToPdf } from "./convert.js";
 
 const app = Fastify({ bodyLimit: 30 * 1024 * 1024 }); // 30MB for attachments
 await app.register(cors, {
@@ -20,6 +21,24 @@ const D = {
 };
 
 app.get("/health", async () => ({ ok: true }));
+
+// ---- DOCX -> PDF (true Word fidelity via LibreOffice). Any signed-in user; a
+// connected mailbox is NOT required (used for plain downloads too). ----
+app.post("/convert/docx-to-pdf", async (req, reply) => {
+  const user = await requireUser(req, reply); if (!user) return;
+  const b64 = (req.body && req.body.docx_base64) || "";
+  if (!b64) return reply.code(400).send({ error: "docx_base64 required" });
+  let buf;
+  try { buf = Buffer.from(b64, "base64"); } catch { return reply.code(400).send({ error: "bad_base64" }); }
+  if (!buf.length) return reply.code(400).send({ error: "empty_docx" });
+  try {
+    const pdf = await docxToPdf(buf);
+    return { pdf_base64: pdf.toString("base64") };
+  } catch (e) {
+    req.log?.error?.(e);
+    return reply.code(500).send({ error: "convert_failed", detail: String(e.message || e).slice(0, 300) });
+  }
+});
 
 // helper: load the user's mailbox creds or 409 if not connected
 async function acctOr409(user, reply) {

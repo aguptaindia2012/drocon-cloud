@@ -31,24 +31,26 @@ function img(id){ const cv=document.getElementById(id); try{ return cv?cv.toData
 // defined height lets Chart.js (responsive, maintainAspectRatio:false) size the
 // canvas to the full available width.
 function canvas(id,w,h){ return `<div style="position:relative;width:100%;height:${(h||260)}px"><canvas id="${id}"></canvas></div>`; }
-// opts (optional): { to, who, noEmail } — adds a "📧 Email report" button that
-// builds the same Word report and opens the mail composer with it attached.
+// opts (optional): { to, who, noEmail } — renders "Download report ▾" (Word/PDF)
+// and "Email report ▾" (Word/PDF). PDF = backend converts the .docx (Word fidelity).
 function wordButton(hostId, title, sectionsFn, opts){
   opts=opts||{};
-  const h=document.getElementById(hostId); if(!h) return;
-  const b=document.createElement("button"); b.className="btn blue sm"; b.textContent="⬇ Download Word report";
-  b.addEventListener("click",()=>{ try{ window.OPS.docgen.generateReport({ title, sections:sectionsFn() }); }catch(e){ alert("Report error: "+e.message); } });
-  h.appendChild(b);
+  const h=document.getElementById(hostId); if(!h || !window.OPS.menuButton) return;
+  async function buildBlob(){ return await window.OPS.docgen.generateReport({ title, sections:sectionsFn() }, { asBlob:true }); }
+  async function toPdf(out){ window.OPS.flashTop&&window.OPS.flashTop("Making PDF…");
+    const pdf=await window.OPS.docxToPdf(out.blob);
+    return { blob:pdf, filename:out.filename.replace(/\.docx$/i,".pdf"), mime:"application/pdf" }; }
+  async function dl(asPdf){ let out=await buildBlob(); if(asPdf) out=await toPdf(out);
+    window.OPS.saveBlob(out.blob, out.filename, out.mime, asPdf?".pdf":".docx"); }
+  async function email(asPdf){ let out=await buildBlob(); if(asPdf) out=await toPdf(out);
+    const body="Dear "+(opts.who||"Sir/Madam")+",\n\nPlease find attached: "+title+".\n\nWarm regards,";
+    await window.OPS.mailComposeWithBlob({ to:opts.to||"", subject:title, body:body, blob:out.blob, filename:out.filename, mime:out.mime }); }
+  h.appendChild(window.OPS.menuButton("⬇ Download report",
+    [{label:"Word (.docx)", fn:()=>dl(false)},{label:"PDF", fn:()=>dl(true)}], {className:"btn blue sm"}));
   if(opts.noEmail || !window.OPS.mailComposeWithBlob) return;
-  const e=document.createElement("button"); e.className="btn green sm"; e.textContent="📧 Email report"; e.style.marginLeft="6px";
-  e.addEventListener("click",()=>window.OPS.once(e,async()=>{
-    try{
-      const out=await window.OPS.docgen.generateReport({ title, sections:sectionsFn() }, { asBlob:true });
-      const body="Dear "+(opts.who||"Sir/Madam")+",\n\nPlease find attached: "+title+".\n\nWarm regards,";
-      await window.OPS.mailComposeWithBlob({ to:opts.to||"", subject:title, body:body, blob:out.blob, filename:out.filename, mime:out.mime });
-    }catch(err){ alert("Couldn't build the report: "+(err&&err.message||err)); }
-  }));
-  h.appendChild(e);
+  const sp=document.createElement("span"); sp.style.marginLeft="6px"; h.appendChild(sp);
+  sp.appendChild(window.OPS.menuButton("📧 Email report",
+    [{label:"Email as Word", fn:()=>email(false)},{label:"Email as PDF", fn:()=>email(true)}], {className:"btn green sm"}));
 }
 /* ---------------------------------------------------------------------------
    Reusable consolidated panel: ONE card, a row of buttons, one content area.

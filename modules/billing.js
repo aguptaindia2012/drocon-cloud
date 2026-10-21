@@ -255,10 +255,8 @@ function editor(){
       <div class="row wrap" style="margin-top:14px">
         <button class="btn green" id="dSave">${D.id?"Save changes":"Save"}</button>
         ${TYPE==='quotation' && D.id?'<button class="btn blue" id="dToInvoice">→ Convert to Invoice</button>':''}
-        ${TYPE==='invoice'
-          ? '<button class="btn blue" id="dWordOG">⬇ Download Original</button><button class="btn blue" id="dWordDup">⬇ Download Duplicate</button><button class="btn blue" id="dWordShip">⬇ Download Shipper Copy</button>'
-          : '<button class="btn blue" id="dWord">⬇ Download Word (.docx)</button>'}
-        <button class="btn green" id="dEmail">📧 Email</button>
+        <span id="dDownloadMenu"></span>
+        <span id="dEmailMenu"></span>
         <button class="btn" id="dJson">⬇ Download JSON</button>
         <button class="btn sm" id="dImport">Import JSON…</button>
         ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px"><input type="checkbox" id="dStock" style="width:auto"> reduce spare stock on save</label>':''}
@@ -280,33 +278,38 @@ function editor(){
   if($("dAddItem")) $("dAddItem").addEventListener("click",()=>{ D.items.push({desc:"",hsn:"",gst:0,qty:1,rate:0,per:"",disc:0}); renderItems(); });
   if($("dCatMgr")) $("dCatMgr").addEventListener("click",()=>{ if(window.OPS.openTool) window.OPS.openTool("catalogues"); });
   $("dSave").addEventListener("click",save);
-  // Word download — an optional copy label (Original / Duplicate / Shipper Copy)
-  // marks the document and drives a distinct filename suffix (OG / Dup / Ship).
-  async function downloadWord(label){ syncTerms();
+  // Build the branded .docx as a Blob for an (optional) copy label.
+  async function buildBlob(label){ syncTerms();
     const prev=D.copyLabel; if(label!==undefined) D.copyLabel=label;
     const g=toDocgen();
-    if(D.id){ try{ const {data}=await sb().from("documents").select("approval_status").eq("id",D.id).single(); g.systemApproved = !!(data && data.approval_status==="approved"); }catch(e){} }
-    window.OPS.docgen.generateWord(g);
-    D.copyLabel=prev; if($("dCopy")) $("dCopy").value=prev||"Original";
-  }
-  if($("dWord")) $("dWord").addEventListener("click",()=>downloadWord());
-  if($("dWordOG")) $("dWordOG").addEventListener("click",()=>downloadWord("Original"));
-  if($("dWordDup")) $("dWordDup").addEventListener("click",()=>downloadWord("Duplicate"));
-  if($("dWordShip")) $("dWordShip").addEventListener("click",()=>downloadWord("Shipper Copy"));
-  // Email this document — builds the .docx and opens the mail composer with it
-  // attached; the team fills the recipient and writes the message.
-  async function emailDoc(){ syncTerms();
-    const g=toDocgen();
     if(D.id){ try{ const {data}=await sb().from("documents").select("approval_status").eq("id",D.id).single(); g.systemApproved=!!(data&&data.approval_status==="approved"); }catch(e){} }
-    let out; try{ out=await window.OPS.docgen.generateWord(g,{asBlob:true}); }
-    catch(e){ alert("Couldn't build the document: "+(e&&e.message||e)); return; }
+    const out=await window.OPS.docgen.generateWord(g,{asBlob:true});
+    D.copyLabel=prev; if($("dCopy")) $("dCopy").value=prev||"Original";
+    return out;   // {blob, filename, mime}
+  }
+  // PDF = the backend converts the SAME .docx (true Word fidelity).
+  async function toPdf(out){ window.OPS.flashTop&&window.OPS.flashTop("Making PDF…");
+    const pdf=await window.OPS.docxToPdf(out.blob);
+    return { blob:pdf, filename:out.filename.replace(/\.docx$/i,".pdf"), mime:"application/pdf" }; }
+  async function doDownload(label, asPdf){ let out=await buildBlob(label); if(asPdf) out=await toPdf(out);
+    window.OPS.saveBlob(out.blob, out.filename, out.mime, asPdf?".pdf":".docx"); }
+  async function doEmail(asPdf){ let out=await buildBlob(); if(asPdf) out=await toPdf(out);
     const typeLabel={quotation:"Quotation",invoice:"Invoice",credit_note:"Credit Note",purchase_order:"Purchase Order"}[TYPE]||"Document";
     const num=D.number||""; const who=D.party.name||D.party.firmName||"Sir/Madam";
     const subject=(typeLabel+" "+num).trim()+" — "+(window.OPS.docgen.DCB.legalName||"DroCon Bharat");
     const body="Dear "+who+",\n\nPlease find attached "+typeLabel+" "+num+".\n\nWarm regards,";
     await window.OPS.mailComposeWithBlob({ to:D.party.email||"", subject:subject, body:body, blob:out.blob, filename:out.filename, mime:out.mime });
   }
-  if($("dEmail")) $("dEmail").addEventListener("click",()=>window.OPS.once($("dEmail"),emailDoc));
+  // Download ▾ and Email ▾ menus (Word / PDF; invoices also pick the copy)
+  const dlHost=$("dDownloadMenu"), emHost=$("dEmailMenu");
+  if(dlHost){ let items;
+    if(TYPE==='invoice'){ items=[]; ["Original","Duplicate","Shipper Copy"].forEach(c=>{
+        items.push({label:c+" — Word (.docx)", fn:()=>doDownload(c,false)});
+        items.push({label:c+" — PDF", fn:()=>doDownload(c,true)}); }); }
+    else { items=[{label:"Word (.docx)", fn:()=>doDownload(undefined,false)},{label:"PDF", fn:()=>doDownload(undefined,true)}]; }
+    dlHost.appendChild(window.OPS.menuButton("⬇ Download", items, {className:"btn blue"})); }
+  if(emHost){ emHost.appendChild(window.OPS.menuButton("📧 Email",
+    [{label:"Email as Word", fn:()=>doEmail(false)},{label:"Email as PDF", fn:()=>doEmail(true)}], {className:"btn green"})); }
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
   if($("dToInvoice")) $("dToInvoice").addEventListener("click",convertToInvoice);
