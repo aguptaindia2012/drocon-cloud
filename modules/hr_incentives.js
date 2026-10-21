@@ -182,7 +182,7 @@ async function bonuses(){
     <div class="field"><label>Amount (₹) *</label><input id="bnAmt" type="number" step="any"></div>
     <div class="field"><label>For month</label><input id="bnMonth" type="month" value="${ymNow()}"></div>
     <div class="field"><label>Pay via</label><select id="bnMode"><option>Bank</option><option>UPI</option><option>Cash</option></select></div>
-    <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for P&amp;L)</span></label><select id="bnCat"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options("","revenue")}</select></div>
+    <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for P&amp;L)</span></label><select id="bnCat"><option value="">— not set —</option>${window.OPS.profitCats.options("","cost")}</select></div>
     <div class="field" style="grid-column:1/-1"><label>Reason / note</label><input id="bnReason"></div>
     </div><button class="btn green" id="bnAdd">Add bonus</button><div class="err" id="bnErr"></div></div>`;
   $("bnAdd").addEventListener("click",e=>window.OPS.once(e.currentTarget,async()=>{

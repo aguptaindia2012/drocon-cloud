@@ -237,7 +237,7 @@ function expForm(rec){
       <div class="field"><label>Category</label><select id="ex_cat"><option value="">— select —</option>
         ${cats.map(c=>`<option value="${c.id}" ${e.category_id===c.id?'selected':''}>${esc(c.name)}</option>`).join("")}</select></div>
       <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for category P&amp;L)</span></label>
-        <select id="ex_pcat"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(e.cost_category,'revenue')}</select></div>
+        <select id="ex_pcat"><option value="">— not set —</option>${window.OPS.profitCats.options(e.cost_category,'cost')}</select></div>
       <div class="field"><label>Paid to (vendor)</label><select id="ex_vendor"><option value="">— none / other —</option>
         ${vendors.map(v=>`<option value="${v.id}" ${e.vendor_id===v.id?'selected':''}>${esc(vName(v))}</option>`).join("")}</select></div>
       <div class="field"><label>Or name the payee</label><input id="ex_payee" value="${esc(e.payee_text||'')}"></div>
@@ -516,7 +516,7 @@ function payForm(rec){
       <div class="field"><label>GST</label><input type="number" step="0.01" id="py_gst" value="${esc(e.gst_amount||0)}"></div>
       <div class="field"><label>Category</label><input id="py_cat" value="${esc(e.category||'')}"></div>
       <div class="field"><label>Profit category <span class="muted" style="font-weight:normal">(for category P&amp;L)</span></label>
-        <select id="py_pcat"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(e.cost_category,'revenue')}</select></div>
+        <select id="py_pcat"><option value="">— not set —</option>${window.OPS.profitCats.options(e.cost_category,'cost')}</select></div>
       <div class="field"><label>Status</label><select id="py_status">
         ${["unpaid","cheque_issued","part_paid","paid"].map(s=>`<option value="${s}" ${e.status===s?'selected':''}>${s.replace("_"," ")}</option>`).join("")}</select>
         <div class="small-note">A cheque handed over is <b>cheque issued</b>, not paid — it only hits the Day Book when the bank debits it.</div></div>

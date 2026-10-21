@@ -125,8 +125,8 @@ window.OPS.profitCats = (function(){
    writes `cost_category` straight to that row (blank = Overheads). Clicks are
    stopped so an editable cell inside a clickable row doesn't open the record. */
 window.OPS.profitCatCell = function(table, id, current){
-  const blank = `<option value="">— Overheads —</option>`;
-  return `<select class="pcCell" data-pc-table="${esc(table)}" data-pc-id="${esc(id)}" style="max-width:150px">${blank}${window.OPS.profitCats.options(current,'revenue')}</select>`;
+  const blank = `<option value="">— not set —</option>`;
+  return `<select class="pcCell" data-pc-table="${esc(table)}" data-pc-id="${esc(id)}" style="max-width:160px">${blank}${window.OPS.profitCats.options(current,'cost')}</select>`;
 };
 window.OPS.wireProfitCatCells = function(root, onSaved){
   (root||document).querySelectorAll("select.pcCell").forEach(sel=>{

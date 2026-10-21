@@ -143,7 +143,9 @@ function salarySplitPanel(rec, host){
   $("ssSave").addEventListener("click",async()=>{
     const t=over(); if(t>100){ return; }
     const split={}; host.querySelectorAll(".ssPct").forEach(i=>{ const v=num(i.value); if(v>0) split[i.getAttribute("data-k")]=v; });
-    const val=Object.keys(split).length?split:null;
+    // Saving with nothing entered is an explicit "100% Overheads" (a real mark),
+    // not "unset" — so it shows as tagged and isn't flagged by the health check.
+    const val=Object.keys(split).length?split:{overheads:100};
     const { error }=await sb().from("employees").update({cost_split:val}).eq("id",rec.id);
     if(error){ $("ssMsg").textContent=error.message; $("ssMsg").style.color="#a3322a"; return; }
     rec.cost_split=val; window.OPS.audit&&window.OPS.audit("edited","employees",rec.id,"salary profit-split");
@@ -351,7 +353,7 @@ async function saveMonth(){
 }
 
 /* compact read-only summary of a salary run's profit-split (set on the employee) */
-const SPLIT_SHORT={spray:"Spray",demo:"Demo",part:"Part",service:"Service",dronesale:"Drone",other:"Other"};
+const SPLIT_SHORT={spray:"Spray",demo:"Demo",part:"Part",service:"Service",dronesale:"Drone",other:"Other",overheads:"Overheads"};
 function splitSummary(cs){
   if(!(cs && typeof cs==="object")) return '<span class="muted">Overheads</span>';
   const keys=Object.keys(cs).filter(k=>num(cs[k])>0); if(!keys.length) return '<span class="muted">Overheads</span>';
