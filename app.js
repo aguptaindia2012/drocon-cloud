@@ -38,8 +38,10 @@ const SECTIONS = [
   { key:"trackers",   label:"Daily Spray Entry" },
   { key:"order",      label:"Business Development" },
   { key:"agreement",  label:"Agreement" },
-  { key:"finance",    label:"Finance" },
-  { key:"accounting", label:"Accounting" },
+  { key:"sales",      label:"Sales & Receivables" },  // client invoicing + AR dashboards
+  { key:"expenses",   label:"Purchases & Expenses" }, // money out: bills, expenses, POs
+  { key:"cash",       label:"Payments & Cash" },      // clearing, settlements, cash position, day book
+  { key:"books",      label:"Accounting" },           // ledgers & reports
   { key:"inventory",  label:"Inventory" },
   { key:"hr",         label:"HR" },
   // registers of who/where everything else selects from, plus reference material
@@ -80,25 +82,27 @@ const TOOLS = [
   { key:"agreements",       section:"agreement", label:"Agreements",      gate:"all" },
   { key:"new",              section:"agreement", label:"New agreement",   gate:"all" },
   { key:"templates",        section:"agreement", label:"Shared templates",gate:"approver" },
-  // Finance — document generation
-  { key:"invoice",       section:"finance", label:"Invoice",        gate:"perm" },
-  { key:"acre_invoice",  section:"finance", label:"Acre Invoicing", gate:"perm" },
-  { key:"vendor_rates",  section:"finance", label:"Vendor Rates",   gate:"perm" },
-  { key:"credit_note",   section:"finance", label:"Credit Note",    gate:"perm" },
-  { key:"purchase_order",section:"finance", label:"Purchase Order", gate:"perm" },
-  { key:"expense_mgmt",  section:"finance", label:"Expense Management", gate:"perm" },
-  { key:"advances",      section:"finance", label:"Advances",           gate:"perm" },
-  { key:"expense_review",section:"finance", label:"Expense Claims",     gate:"perm" },
-  // Accounting — dashboards first (daily cash-flow review), then the ledgers
-  { key:"receivables",   section:"accounting", label:"Invoice & Receivables", gate:"perm" },
-  { key:"acct_position", section:"accounting", label:"Position (Cash Flow)",   gate:"perm" },
-  { key:"payment_status",section:"accounting", label:"Client Receipts", gate:"perm" },
-  { key:"vendor_bills",  section:"accounting", label:"Vendor Bills",    gate:"perm" },
-  { key:"pay_hub",       section:"accounting", label:"Payments & Settlements", gate:"perm" },
-  { key:"day_book",      section:"accounting", label:"Day Book",              gate:"perm" },
-  { key:"ledger",        section:"accounting", label:"Ledger",                gate:"perm" },
-  { key:"tax_reports",   section:"accounting", label:"GST & TDS Reports",     gate:"perm" },
-  { key:"category_pl",   section:"accounting", label:"Category P&L",          gate:"perm" },
+  // Sales & Receivables — client money IN: AR dashboard first, then documents
+  { key:"receivables",   section:"sales", label:"Invoice & Receivables", gate:"perm" },  // landing (dashboard)
+  { key:"payment_status",section:"sales", label:"Client Receipts",       gate:"perm" },
+  { key:"invoice",       section:"sales", label:"Invoice",               gate:"perm" },
+  { key:"acre_invoice",  section:"sales", label:"Acre Invoicing",        gate:"perm" },
+  { key:"credit_note",   section:"sales", label:"Credit Note",           gate:"perm" },
+  // Purchases & Expenses — money OUT: payables dashboard first, then the rest
+  { key:"vendor_bills",  section:"expenses", label:"Vendor Bills",       gate:"perm" },  // landing (payables dashboard)
+  { key:"expense_mgmt",  section:"expenses", label:"Expense Management", gate:"perm" },
+  { key:"expense_review",section:"expenses", label:"Expense Claims",     gate:"perm" },
+  { key:"advances",      section:"expenses", label:"Advances",           gate:"perm" },
+  { key:"purchase_order",section:"expenses", label:"Purchase Order",     gate:"perm" },
+  { key:"vendor_rates",  section:"expenses", label:"Vendor Rates",       gate:"perm" },
+  // Payments & Cash — clearing + cash view
+  { key:"acct_position", section:"cash", label:"Position (Cash Flow)",   gate:"perm" },  // landing (dashboard)
+  { key:"pay_hub",       section:"cash", label:"Payments & Settlements", gate:"perm" },
+  { key:"day_book",      section:"cash", label:"Day Book",               gate:"perm" },
+  // Accounting — ledgers & reports
+  { key:"category_pl",   section:"books", label:"Category P&L",          gate:"perm" },  // landing (P&L overview)
+  { key:"tax_reports",   section:"books", label:"GST & TDS Reports",     gate:"perm" },
+  { key:"ledger",        section:"books", label:"Ledger",                gate:"perm" },
   // Inventory
   { key:"inventory",     section:"inventory", label:"Inventory",    gate:"perm" },
   { key:"catalogues",    section:"inventory", label:"Catalogue",    gate:"perm" },
@@ -757,6 +761,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "295";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "296";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
