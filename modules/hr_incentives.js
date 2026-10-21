@@ -77,7 +77,8 @@ function renderIncentives(ym){
     <td>${paid?window.OPS.statusChip("paid"):(r.id?'<span class="muted">saved</span>':'<span class="muted">new</span>')}</td>
     <td>${(!paid && r.id && c.total>0)?`<button class="btn sm" data-pay="${i}">Pay</button>`:''}</td></tr>`; }).join("");
   $("inBody").innerHTML=`<div style="overflow:auto"><table><thead><tr><th>Pilot</th><th class="num">Acres</th><th>Tier</th><th class="num">Crashes</th><th class="num">Repair ₹</th><th class="num">No-crash</th><th>Minor waiver</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
-    <tbody>${body}</tbody><tfoot><tr><th colspan="7" style="text-align:right">Total incentive</th><th class="num">${money(tot)}</th><th colspan="2"></th></tr></tfoot></table></div>`;
+    <tbody>${body}</tbody><tfoot><tr><th colspan="7" style="text-align:right">Total incentive</th><th class="num">${money(tot)}</th><th colspan="2"></th></tr></tfoot></table></div>
+    <div class="muted" style="font-size:12px;margin-top:6px">Pilot incentives are categorised as <b>Agriculture Spraying</b> in the Category P&amp;L.</div>`;
   $("inBody").querySelectorAll("input[data-crash]").forEach(inp=>inp.addEventListener("input",()=>{ incRows[+inp.getAttribute("data-crash")].crashes=num(inp.value); renderIncentives(ym); reFocus("data-crash",inp.getAttribute("data-crash")); }));
   $("inBody").querySelectorAll("input[data-rep]").forEach(inp=>inp.addEventListener("input",()=>{ incRows[+inp.getAttribute("data-rep")].repair=num(inp.value); renderIncentives(ym); reFocus("data-rep",inp.getAttribute("data-rep")); }));
   $("inBody").querySelectorAll("[data-pay]").forEach(b=>b.addEventListener("click",e=>window.OPS.once(e.currentTarget,()=>payIncentive(incRows[+b.getAttribute("data-pay")],ym))));
@@ -196,13 +197,15 @@ async function bonuses(){
     window.OPS.audit&&window.OPS.audit("added","bonus",p.name,money(amt)); window.OPS.flashTop("Bonus added ✓"); bonuses();
   }));
   const rows=list||[];
-  $("bnBody").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Payee</th><th>Title</th><th>Month</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+  $("bnBody").innerHTML = rows.length ? `<div style="overflow:auto"><table><thead><tr><th>Payee</th><th>Title</th><th>Profit cat.</th><th>Month</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
     <tbody>${rows.map(b=>`<tr><td><b>${esc(b.payee_name)}</b><br><span class="muted">${esc(b.payee_kind)}</span></td>
       <td>${esc(b.title)}${b.reason?`<br><span class="muted">${esc(b.reason)}</span>`:''}</td>
+      <td>${window.OPS.profitCatCell("hr_bonuses",b.id,b.cost_category)}</td>
       <td>${b.pay_month||'—'}</td><td class="num">${money(b.amount)}</td>
       <td>${window.OPS.statusChip(b.status==="paid"?"paid":"pending")}${b.status==="paid"&&b.paid_on?`<br><span class="muted">${fmtDate(b.paid_on)} · ${esc(b.mode||'')}</span>`:''}</td>
       <td>${b.status!=="paid"?`<button class="btn sm" data-bpay="${b.id}">Pay</button> <button class="btn sm ghost" data-bdel="${b.id}">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
     : '<div class="card muted">No bonuses yet.</div>';
+  window.OPS.wireProfitCatCells($("bnBody"));
   $("bnBody").querySelectorAll("[data-bpay]").forEach(x=>x.addEventListener("click",e=>window.OPS.once(e.currentTarget,()=>payBonus(rows.find(b=>b.id===x.getAttribute("data-bpay"))))));
   $("bnBody").querySelectorAll("[data-bdel]").forEach(x=>x.addEventListener("click",async()=>{
     if(!confirm("Delete this bonus?")) return;

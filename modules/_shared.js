@@ -119,6 +119,32 @@ window.OPS.profitCats = (function(){
   };
 })();
 
+/* ---------- inline editable profit-category cell (for cost lists) -------------
+   Drop `window.OPS.profitCatCell(table,id,current)` into a list cell, then call
+   `window.OPS.wireProfitCatCells(rootEl, onSaved)` after rendering. On change it
+   writes `cost_category` straight to that row (blank = Overheads). Clicks are
+   stopped so an editable cell inside a clickable row doesn't open the record. */
+window.OPS.profitCatCell = function(table, id, current){
+  const blank = `<option value="">— Overheads —</option>`;
+  return `<select class="pcCell" data-pc-table="${esc(table)}" data-pc-id="${esc(id)}" style="max-width:150px">${blank}${window.OPS.profitCats.options(current,'revenue')}</select>`;
+};
+window.OPS.wireProfitCatCells = function(root, onSaved){
+  (root||document).querySelectorAll("select.pcCell").forEach(sel=>{
+    sel.addEventListener("click", e=>e.stopPropagation());
+    sel.addEventListener("change", async (e)=>{
+      e.stopPropagation();
+      const table=sel.getAttribute("data-pc-table"), id=sel.getAttribute("data-pc-id"), val=sel.value||null;
+      sel.disabled=true;
+      const { error }=await window.OPS.sb.from(table).update({ cost_category: val }).eq("id", id);
+      sel.disabled=false;
+      if(error){ window.OPS.flashTop && window.OPS.flashTop("Save failed: "+error.message); return; }
+      window.OPS.audit && window.OPS.audit("edited", table, id, "profit category → "+(val||"overheads"));
+      window.OPS.flashTop && window.OPS.flashTop("Category saved ✓");
+      if(onSaved) onSaved();
+    });
+  });
+};
+
 /* ---------- reusable State/District dropdowns (for custom forms) ---------- */
 window.OPS.geoUI = {
   states(){ return Object.keys(window.OPS.GEO||{}).sort(); },

@@ -348,6 +348,7 @@ async function expenseReview(){
     const rows=(data||[]).map(r=>{ r._paid=paidBy[r.id]||0; r._settled=num((settleMap||{})[r.id]||0); r._bal=Math.round((num(r.total)-r._paid-r._settled)*100)/100; return r; });
     $("erBody").innerHTML = rows.length ? rows.map(cardHTML).join("") : '<div class="card muted">Nothing here.</div>';
     rows.forEach(wire);
+    window.OPS.wireProfitCatCells($("erBody"));
   };
   $("erStatus").addEventListener("change",load);
   window.OPS._expReviewLoad=load;
@@ -382,7 +383,8 @@ function cardHTML(r){
     <div class="row" style="margin-top:6px;gap:6px;flex-wrap:wrap">${receipts.length?receipts.map((x,i)=>`<button class="btn sm ghost" data-rc="${r.id}|${i}">📎 ${esc(x.name||("receipt "+(i+1)))}</button>`).join(""):'<span class="muted" style="font-size:12px">No receipts attached.</span>'}</div>
     <div class="field full" style="margin-top:8px"><label>Note to employee</label><input id="en_${r.id}" value="${esc(r.note||"")}"></div>
     ${r.status==="submitted"?`<div class="field full" style="margin-top:6px"><label>Profit category <span class="muted" style="font-weight:normal">(for category P&amp;L)</span></label>
-      <select id="ecat_${r.id}" style="max-width:320px"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(r.cost_category,"revenue")}</select></div>`:''}
+      <select id="ecat_${r.id}" style="max-width:320px"><option value="">— Overheads (common) —</option>${window.OPS.profitCats.options(r.cost_category,"revenue")}</select></div>`
+    :(r.status!=="rejected"?`<div class="row" style="margin-top:6px;align-items:center;gap:8px"><span class="muted" style="font-size:12px">Profit category (for P&amp;L):</span>${window.OPS.profitCatCell("expense_claims",r.id,r.cost_category)}</div>`:'')}
     <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center">
       ${r.status==="submitted"?`<button class="btn green sm" data-act="approve" data-id="${r.id}">Approve</button>
         <button class="btn sm" data-act="reject" data-id="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button>`:''}

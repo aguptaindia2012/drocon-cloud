@@ -350,6 +350,15 @@ async function saveMonth(){
   window.OPS.flashTop("Saved "+recs.length+" salary run(s) for "+ym+" ✓"); salaryCalc();
 }
 
+/* compact read-only summary of a salary run's profit-split (set on the employee) */
+const SPLIT_SHORT={spray:"Spray",demo:"Demo",part:"Part",service:"Service",dronesale:"Drone",other:"Other"};
+function splitSummary(cs){
+  if(!(cs && typeof cs==="object")) return '<span class="muted">Overheads</span>';
+  const keys=Object.keys(cs).filter(k=>num(cs[k])>0); if(!keys.length) return '<span class="muted">Overheads</span>';
+  let used=0; const parts=keys.map(k=>{ used+=num(cs[k]); return (SPLIT_SHORT[k]||k)+" "+num(cs[k]); });
+  const rem=Math.round((100-used)*100)/100; if(rem>0) parts.push("OH "+rem);
+  return esc(parts.join(" · "));
+}
 /* ============================ Salary Records ============================ */
 async function records(){
   const ym=(window.OPS._hrMonth)||todayISO().slice(0,7);
@@ -386,8 +395,8 @@ async function records(){
       <div class="stat"><div class="n">${money(totNet-totPaid)}</div><div class="l">Balance</div></div>
       <div class="stat"><div class="n">${rows.length}</div><div class="l">Employees</div></div>
     </div>
-    ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Employee</th><th class="num">Net</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows.map(x=>`<tr><td><b>${esc(x.r.emp&&x.r.emp.name||'')}</b></td><td class="num">${money(x.r.net_payable)}</td>
+    ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Employee</th><th>Profit split</th><th class="num">Net</th><th class="num">Paid</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows.map(x=>`<tr><td><b>${esc(x.r.emp&&x.r.emp.name||'')}</b></td><td style="font-size:12px">${splitSummary(x.r.cost_split)}</td><td class="num">${money(x.r.net_payable)}</td>
         <td class="num">${money(x.paid)}</td><td class="num" style="${x.bal>0?'font-weight:700':''}">${money(x.bal)}</td>
         <td>${window.OPS.statusChip(x.r.status)}</td>
         <td>${x.r.status==='calculated'?`<button class="btn sm" data-post="${x.r.id}">Post</button> `:''}${x.bal>0.01?`<button class="btn sm" data-pay="${x.r.id}">+ Pay</button>`:''}</td></tr>`).join("")}</tbody></table></div>`

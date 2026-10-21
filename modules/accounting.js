@@ -214,11 +214,10 @@ async function listExpenses(){
   const PC=window.OPS.profitCats; const tagged=c=>!!(c&&PC.isValid(c));
   let rows=data||[];
   if(_expOnlyUntagged) rows=rows.filter(r=>!tagged(r.cost_category));
-  const pcCell=r=> tagged(r.cost_category) ? esc(PC.label(r.cost_category)) : '<span class="chip warn">— set —</span>';
   $("emBody").innerHTML=rows.length?`<div style="overflow:auto"><table>
     <thead><tr><th>Date</th><th>Category</th><th>Profit cat.</th><th>Paid to</th><th class="num">Amount</th><th class="num">GST</th><th class="num">Total</th><th>Bill</th><th>Status</th></tr></thead>
     <tbody>${rows.map(r=>`<tr class="clickable" data-id="${r.id}">
-      <td>${fmtDate(r.expense_date)}</td><td>${esc((r.cat&&r.cat.name)||'')}</td><td>${pcCell(r)}</td>
+      <td>${fmtDate(r.expense_date)}</td><td>${esc((r.cat&&r.cat.name)||'')}</td><td>${window.OPS.profitCatCell("expenses",r.id,r.cost_category)}</td>
       <td>${esc(vName(r.vendor)||r.payee_text||'')}</td>
       <td class="num">${money(r.amount)}</td><td class="num">${money(r.gst_amount)}</td><td class="num"><b>${money(r.total)}</b></td>
       <td>${r.has_bill?'✓'+(r.bill_no?(' '+esc(r.bill_no)):''):'·'}</td>
@@ -226,6 +225,7 @@ async function listExpenses(){
     :`<div class="card muted">${_expOnlyUntagged?'No expenses missing a profit category 🎉':'No expenses yet.'}</div>`;
   $("emBody").querySelectorAll("[data-id]").forEach(tr=>tr.addEventListener("click",()=>
     expForm(rows.find(x=>String(x.id)===tr.getAttribute("data-id")))));
+  window.OPS.wireProfitCatCells($("emBody"), _expOnlyUntagged?listExpenses:null);
 }
 
 function expForm(rec){
@@ -337,9 +337,10 @@ async function listPayables(){
       <label class="muted" style="display:inline;margin-left:12px"><input type="checkbox" id="pyUntag" style="width:auto" ${_payOnlyUntagged?'checked':''}> ⚠ only missing profit category</label>
       <div class="spacer"></div><span class="muted">Record part or full payments; each one lands on the Day Book.</span></div>
     <div id="pyList">${list.length?`<div style="overflow:auto"><table>
-      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Settled</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Vendor</th><th>Invoice no.</th><th>Profit cat.</th><th>Date</th><th>Due</th><th class="num">Invoiced</th><th class="num">Paid</th><th class="num">Settled</th><th class="num">Credit</th><th class="num">Balance</th><th>Status</th><th></th></tr></thead>
       <tbody>${list.map(x=>`<tr><td><b>${esc(x.vendor_name)}</b></td>
         <td class="clickable" data-edit="${x.p.id}" style="text-decoration:underline">${esc(x.p.vendor_invoice_no||'(no no.)')}</td>
+        <td>${window.OPS.profitCatCell("payables",x.p.id, tagged(x.p.cost_category)?x.p.cost_category:(/spray|aerial/i.test(x.p.category||"")?"spray":""))}</td>
         <td>${fmtDate(x.p.invoice_date)}</td><td>${x.p.due_date?fmtDate(x.p.due_date):'—'}</td>
         <td class="num">${money(x.p.total)}</td><td class="num">${money(x.paid)}</td>
         <td class="num" style="${num(x.contra||0)>0.005?'color:#9a5b00':''}">${num(x.contra||0)>0.005?money(x.contra):'—'}</td>
@@ -350,6 +351,7 @@ async function listPayables(){
       :'<div class="card muted">No supplier invoices'+(_payOnlyDue?' with a balance':'')+'.</div>'}</div>`;
   $("pyOnlyDue").addEventListener("change",()=>{ _payOnlyDue=$("pyOnlyDue").checked; listPayables(); });
   $("pyUntag").addEventListener("change",()=>{ _payOnlyUntagged=$("pyUntag").checked; listPayables(); });
+  window.OPS.wireProfitCatCells($("pyList"), _payOnlyUntagged?listPayables:null);
   const find=id=>rows.find(x=>String(x.p.id)===id);
   // back must rebuild the whole Expense Management page — the payment screens
   // replace all of #main, so refilling #emBody alone would target a dead node.
