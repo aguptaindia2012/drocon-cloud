@@ -547,6 +547,7 @@ function compose(seed){
   function filesLabel(){
     const parts=[];
     if(seed.fwdAtt&&seed.fwdAtt.length) parts.push("Forwarding: "+seed.fwdAtt.map(a=>a.filename).join(", "));
+    if(seed.readyAtt&&seed.readyAtt.length) parts.push("Attached: "+seed.readyAtt.map(a=>a.filename).join(", "));
     if(pending.length) parts.push("Attached: "+pending.map(f=>f.name).join(", "));
     $("coFiles").textContent=parts.join("   ·   ");
   }
@@ -566,6 +567,8 @@ function compose(seed){
           attachments.push({ filename:a.filename, content_type:a.content_type||"application/octet-stream", content_base64 });
         }
       }
+      // pre-built attachments passed in by the caller (e.g. a document's .docx)
+      (seed.readyAtt||[]).forEach(a=>attachments.push({ filename:a.filename, content_type:a.content_type||"application/octet-stream", content_base64:a.content_base64 }));
       for(const f of pending){ attachments.push({ filename:f.name, content_type:f.type||"application/octet-stream", content_base64:await toB64(f) }); }
       const s=curSig();
       // deterministic order: your text -> signature -> quoted chain
@@ -588,6 +591,21 @@ async function fetchAttB64(mailbox, uid, index){
   const blob=await res.blob();
   return await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(String(r.result).split(",")[1]||""); r.onerror=reject; r.readAsDataURL(blob); });
 }
+
+// ---- open the composer from anywhere (e.g. "Email this document") ----------
+// seed: { to, cc, subject, body, readyAtt:[{filename,content_type,content_base64}] }
+window.OPS.mailCompose = async function(seed){
+  try{ if(!STATE.signatures || !STATE.signatures.length) await loadSignatures(); }catch(e){}
+  compose(seed||{});
+};
+// Attach a Blob (e.g. a generated .docx) and open the composer.
+// arg: { to, cc, subject, body, blob, filename, mime }
+window.OPS.mailComposeWithBlob = async function(a){
+  a=a||{};
+  const content_base64 = a.blob ? await toB64(a.blob) : "";
+  await window.OPS.mailCompose({ to:a.to, cc:a.cc, subject:a.subject, body:a.body,
+    readyAtt: content_base64 ? [{ filename:a.filename||"document.docx", content_type:a.mime||"application/octet-stream", content_base64 }] : [] });
+};
 
 window.OPS.routes.mail = route;
 })();

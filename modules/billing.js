@@ -258,6 +258,7 @@ function editor(){
         ${TYPE==='invoice'
           ? '<button class="btn blue" id="dWordOG">⬇ Download Original</button><button class="btn blue" id="dWordDup">⬇ Download Duplicate</button><button class="btn blue" id="dWordShip">⬇ Download Shipper Copy</button>'
           : '<button class="btn blue" id="dWord">⬇ Download Word (.docx)</button>'}
+        <button class="btn green" id="dEmail">📧 Email</button>
         <button class="btn" id="dJson">⬇ Download JSON</button>
         <button class="btn sm" id="dImport">Import JSON…</button>
         ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px"><input type="checkbox" id="dStock" style="width:auto"> reduce spare stock on save</label>':''}
@@ -292,6 +293,20 @@ function editor(){
   if($("dWordOG")) $("dWordOG").addEventListener("click",()=>downloadWord("Original"));
   if($("dWordDup")) $("dWordDup").addEventListener("click",()=>downloadWord("Duplicate"));
   if($("dWordShip")) $("dWordShip").addEventListener("click",()=>downloadWord("Shipper Copy"));
+  // Email this document — builds the .docx and opens the mail composer with it
+  // attached; the team fills the recipient and writes the message.
+  async function emailDoc(){ syncTerms();
+    const g=toDocgen();
+    if(D.id){ try{ const {data}=await sb().from("documents").select("approval_status").eq("id",D.id).single(); g.systemApproved=!!(data&&data.approval_status==="approved"); }catch(e){} }
+    let out; try{ out=await window.OPS.docgen.generateWord(g,{asBlob:true}); }
+    catch(e){ alert("Couldn't build the document: "+(e&&e.message||e)); return; }
+    const typeLabel={quotation:"Quotation",invoice:"Invoice",credit_note:"Credit Note",purchase_order:"Purchase Order"}[TYPE]||"Document";
+    const num=D.number||""; const who=D.party.name||D.party.firmName||"Sir/Madam";
+    const subject=(typeLabel+" "+num).trim()+" — "+(window.OPS.docgen.DCB.legalName||"DroCon Bharat");
+    const body="Dear "+who+",\n\nPlease find attached "+typeLabel+" "+num+".\n\nWarm regards,";
+    await window.OPS.mailComposeWithBlob({ to:D.party.email||"", subject:subject, body:body, blob:out.blob, filename:out.filename, mime:out.mime });
+  }
+  if($("dEmail")) $("dEmail").addEventListener("click",()=>window.OPS.once($("dEmail"),emailDoc));
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
   if($("dToInvoice")) $("dToInvoice").addEventListener("click",convertToInvoice);

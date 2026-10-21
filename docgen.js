@@ -93,8 +93,12 @@ function downloadJson(doc){
 /* ============================================================================
    WORD (.docx)
    ============================================================================ */
-function generateWord(doc){
-  if(typeof docx==="undefined"){ alert("Word library not loaded. Check your connection and retry."); return; }
+// opts.asBlob === true → resolve to {blob, filename} instead of downloading
+// (used to attach the .docx to an email). Otherwise downloads as before.
+function generateWord(doc, opts){
+  opts=opts||{};
+  if(typeof docx==="undefined"){ const m="Word library not loaded. Check your connection and retry.";
+    if(opts.asBlob) return Promise.reject(new Error(m)); alert(m); return; }
   const D=docx;
   const GREEN="599533", ORANGE="F48A1C", BLUE="0A6496", CHAR="282828", GREY="F5F5F5", LINE="CFD8C9";
   const border={style:D.BorderStyle.SINGLE,size:1,color:LINE};
@@ -318,8 +322,11 @@ function generateWord(doc){
       children
     }]
   });
+  const filename=fileBase(doc)+".docx";
+  const MIME="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if(opts.asBlob) return D.Packer.toBlob(docx_doc).then(blob=>({ blob, filename, mime:MIME }));
   D.Packer.toBlob(docx_doc).then(blob=>{
-    window.OPS.saveBlob(blob, fileBase(doc)+".docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",".docx");
+    window.OPS.saveBlob(blob, filename, MIME, ".docx");
   }).catch(e=>{ alert("Word error: "+e); });
 }
 
@@ -328,8 +335,10 @@ function generateWord(doc){
    DroCon letterhead repeating on every page.
    opts = { title, subtitle?, sections:[{heading?, note?, image?(pngDataUrl), imgW?, imgH?, table?:{headers,rows}}] }
    ============================================================================ */
-function generateReport(opts){
-  if(typeof docx==="undefined"){ alert("Word library not loaded."); return; }
+function generateReport(opts, out){
+  out=out||{};
+  if(typeof docx==="undefined"){ const m="Word library not loaded.";
+    if(out.asBlob) return Promise.reject(new Error(m)); alert(m); return; }
   const D=docx;
   const GREEN="599533", ORANGE="F48A1C", BLUE="0A6496", CHAR="282828", GREY="F5F5F5", LINE="CFD8C9";
   const border={style:D.BorderStyle.SINGLE,size:1,color:LINE};
@@ -362,7 +371,9 @@ function generateReport(opts){
       ]})}, children }]
   });
   const fname=(opts.title||"Report").replace(/[\\\/:*?"<>|]+/g,"").replace(/\s+/g,"_")+"_"+new Date().toISOString().slice(0,10);
-  D.Packer.toBlob(doc).then(blob=>{ window.OPS.saveBlob(blob, fname+".docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document",".docx"); })
+  const MIME="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if(out.asBlob) return D.Packer.toBlob(doc).then(blob=>({ blob, filename:fname+".docx", mime:MIME }));
+  D.Packer.toBlob(doc).then(blob=>{ window.OPS.saveBlob(blob, fname+".docx", MIME, ".docx"); })
     .catch(e=>alert("Report error: "+e));
 }
 
