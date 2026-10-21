@@ -121,7 +121,8 @@ async function attendanceDoc(emp, ym){
 // stamped with this at save time. Appended under Account access on the form.
 function salarySplitPanel(rec, host){
   if(!rec || !rec.id){ host.innerHTML=""; return; }
-  const CATS=window.OPS.profitCats.revenue;            // the 6 real categories; remainder = overheads
+  // allocatable rows = the 6 sales categories + R&D; the remainder is Overheads
+  const CATS=window.OPS.profitCats.cost.filter(c=>c[0]!=="overheads");
   const cur=(rec.cost_split && typeof rec.cost_split==="object") ? rec.cost_split : {};
   host.innerHTML=`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 4px">Salary profit-split <span class="muted" style="font-weight:normal;font-size:12px">(for category P&amp;L)</span></h3>
     <div class="muted" style="font-size:12px;margin-bottom:8px">How this person's salary is shared across profit categories. Enter percentages that total 100 — anything left over counts as <b>Overheads</b>. Leave all blank to treat the whole salary as Overheads. Applies to future salary runs (and re-saved months).</div>
@@ -353,7 +354,7 @@ async function saveMonth(){
 }
 
 /* compact read-only summary of a salary run's profit-split (set on the employee) */
-const SPLIT_SHORT={spray:"Spray",demo:"Demo",part:"Part",service:"Service",dronesale:"Drone",other:"Other",overheads:"Overheads"};
+const SPLIT_SHORT={spray:"Spray",demo:"Demo",part:"Part",service:"Service",dronesale:"Drone",other:"Other",overheads:"Overheads",rnd:"R&D"};
 function splitSummary(cs){
   if(!(cs && typeof cs==="object")) return '<span class="muted">Overheads</span>';
   const keys=Object.keys(cs).filter(k=>num(cs[k])>0); if(!keys.length) return '<span class="muted">Overheads</span>';

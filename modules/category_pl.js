@@ -110,16 +110,19 @@ function render(b){
   const sumRev=rows.reduce((s,r)=>s+r.rv,0);
   const sumDirect=rows.reduce((s,r)=>s+r.cs,0);
   const gross=sumRev-sumDirect;
-  const overheads=cost.overheads||0;
-  const net=gross-overheads;
+  // cost-only categories (Overheads, R&D) — below-the-line deductions
+  const below=PC.costOnly.map(([k,l])=>({ k, l, cs: cost[k]||0 }));
+  const sumBelow=below.reduce((s,x)=>s+x.cs,0);
+  const net=gross-sumBelow;
 
   const prCell=v=>`<td class="num" style="color:${v<0?'#a3322a':'#137a2e'}"><b>${money(v)}</b></td>`;
   const mg=m=> m==null?'<span class="muted">—</span>':(Math.round(m*10)/10)+"%";
 
+  const COLS=PC.cost;   // every cost category (revenue cats + Overheads + R&D)
   // cost-by-source breakdown (transparency)
   const sources=Object.keys(b.src).sort();
   const srcRows=sources.map(sname=>{ const row=b.src[sname]; const tot=Object.values(row).reduce((s,v)=>s+v,0);
-    return `<tr><td>${esc(sname)}</td>${REV_CATS.map(([k])=>`<td class="num">${row[k]?money(row[k]):'·'}</td>`).join("")}<td class="num">${row.overheads?money(row.overheads):'·'}</td><td class="num"><b>${money(tot)}</b></td></tr>`; }).join("");
+    return `<tr><td>${esc(sname)}</td>${COLS.map(([k])=>`<td class="num">${row[k]?money(row[k]):'·'}</td>`).join("")}<td class="num"><b>${money(tot)}</b></td></tr>`; }).join("");
 
   host.innerHTML=`
     <div class="card" style="overflow:auto">
@@ -130,17 +133,17 @@ function render(b){
         </tbody>
         <tfoot>
           <tr style="border-top:2px solid var(--line)"><td><b>Gross profit (direct)</b></td><td class="num"><b>${money(sumRev)}</b></td><td class="num"><b>${money(sumDirect)}</b></td>${prCell(gross)}<td class="num">${mg(sumRev>0?gross/sumRev*100:null)}</td></tr>
-          <tr><td>Overheads (common)</td><td class="num muted">—</td><td class="num">${money(overheads)}</td>${prCell(-overheads)}<td class="num muted">—</td></tr>
-          <tr style="border-top:2px solid var(--line)"><td><b>Net profit</b></td><td class="num"><b>${money(sumRev)}</b></td><td class="num"><b>${money(sumDirect+overheads)}</b></td>${prCell(net)}<td class="num">${mg(sumRev>0?net/sumRev*100:null)}</td></tr>
+          ${below.map(x=>`<tr><td>${esc(x.l)}</td><td class="num muted">—</td><td class="num">${money(x.cs)}</td>${prCell(-x.cs)}<td class="num muted">—</td></tr>`).join("")}
+          <tr style="border-top:2px solid var(--line)"><td><b>Net profit</b></td><td class="num"><b>${money(sumRev)}</b></td><td class="num"><b>${money(sumDirect+sumBelow)}</b></td>${prCell(net)}<td class="num">${mg(sumRev>0?net/sumRev*100:null)}</td></tr>
         </tfoot>
       </table>
-      <div class="muted" style="font-size:12px;margin-top:8px">Overheads are kept in the overall net profit but not attributed to any single category. Untagged costs count as Overheads.</div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Overheads and R&amp;D are kept in the overall net profit but not attributed to any sales category. Untagged costs count as Overheads.</div>
     </div>
     <h3 style="margin:16px 0 6px">Cost by source</h3>
     <div class="card" style="overflow:auto">
       <table>
-        <thead><tr><th>Source</th>${REV_CATS.map(([,l])=>`<th class="num">${esc(l.split(" ")[0])}</th>`).join("")}<th class="num">Overheads</th><th class="num">Total</th></tr></thead>
-        <tbody>${srcRows||'<tr><td colspan="9" class="muted">No costs recorded for this year.</td></tr>'}</tbody>
+        <thead><tr><th>Source</th>${COLS.map(([k,l])=>`<th class="num">${esc(k==="rnd"?"R&D":l.split(" ")[0])}</th>`).join("")}<th class="num">Total</th></tr></thead>
+        <tbody>${srcRows||`<tr><td colspan="${COLS.length+2}" class="muted">No costs recorded for this year.</td></tr>`}</tbody>
       </table>
       <div class="muted" style="font-size:12px;margin-top:8px">Salaries are split per employee's profit-split; vendor payouts &amp; pilot incentives default to Agriculture Spraying.</div>
     </div>`;

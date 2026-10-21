@@ -81,8 +81,11 @@ window.OPS.profitCats = (function(){
     ["dronesale","Drone Sales"],
     ["other","Other / uncategorised"],
   ];
-  // cost side = the same list + Overheads (common, indivisible)
-  const COST = REV.concat([["overheads","Overheads (common)"]]);
+  // cost side = the same list + cost-only categories (no revenue of their own,
+  // kept in the OVERALL profit but not attributed to any sales line):
+  //   Overheads = common/indivisible spend · R&D = research spend, not for sale
+  const COST_ONLY = [["overheads","Overheads (common)"],["rnd","Research & Development"]];
+  const COST = REV.concat(COST_ONLY);
   const LABEL = Object.fromEntries(COST);
   const n = (v)=>{ const x=parseFloat(v); return isNaN(x)?0:x; };
   // Classify ONE invoice line to a revenue category by description + HSN/SAC.
@@ -110,6 +113,7 @@ window.OPS.profitCats = (function(){
   return {
     revenue: REV,
     cost: COST,
+    costOnly: COST_ONLY,          // cost-only categories (Overheads, R&D)
     label: (k)=> LABEL[k] || k,
     isValid: (k)=> Object.prototype.hasOwnProperty.call(LABEL, k),
     classifyLine, classifyInvoice,
