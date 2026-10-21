@@ -2156,8 +2156,8 @@ function panelDownloads(){
     <div class="callout green"><b>Recommended:</b> download the <b>Word (.docx)</b> file — it carries the DroCon letterhead on every page and all tables correctly. For a PDF, open the Word file and use <b>File → Save As → PDF</b>, which preserves the letterhead and layout exactly.</div>
     <div class="callout"><b>Save the JSON</b> to reopen and revise this exact draft later (use “Open JSON Draft” in the top bar).</div>
     <div class="toolbar-row">
-      <button class="btn blue" id="dlWord" style="font-size:15px;padding:11px 20px">⬇ Download Word (.docx) — recommended</button>
-      <button class="btn green" id="dlEmail" style="font-size:15px;padding:11px 20px">📧 Email this agreement</button>
+      <span style="position:relative;display:inline-block"><button class="btn blue" id="dlWord" style="font-size:15px;padding:11px 20px">⬇ Download ▾</button></span>
+      <span style="position:relative;display:inline-block"><button class="btn green" id="dlEmail" style="font-size:15px;padding:11px 20px">📧 Email ▾</button></span>
       <button class="btn" id="dlJson">⬇ Save JSON draft</button>
     </div>
     <div class="toolbar-row"><button class="btn grey sm" id="dlQuickPdf">Quick draft PDF (preview only)</button>
@@ -2268,8 +2268,12 @@ function wirePanel(){
   });
   // downloads
   if($("dlQuickPdf")) $("dlQuickPdf").addEventListener("click",exportPDF);
-  if($("dlWord")) $("dlWord").addEventListener("click",()=>exportWord(false));
-  if($("dlEmail")) $("dlEmail").addEventListener("click",()=>exportWord(true));
+  if($("dlWord")) studioMenu($("dlWord"), [
+    {label:"Word (.docx)", fn:()=>exportWord({action:"download", asPdf:false})},
+    {label:"PDF", fn:()=>exportWord({action:"download", asPdf:true})} ]);
+  if($("dlEmail")) studioMenu($("dlEmail"), [
+    {label:"Email as Word", fn:()=>exportWord({action:"email", asPdf:false})},
+    {label:"Email as PDF", fn:()=>exportWord({action:"email", asPdf:true})} ]);
   if($("dlJson")) $("dlJson").addEventListener("click",exportJSON);
 }
 
@@ -2982,8 +2986,12 @@ function importJSON(obj){
 /* ============================================================
    EXPORT — WORD (.docx, branded)
    ============================================================ */
-function exportWord(asEmail){
-  setDl(asEmail?"Preparing email…":"Building Word document…");
+// opts: { action:'download'|'email', asPdf:bool }. Direct Word download happens
+// here; PDF and all email variants hand off to the app (it has the backend
+// token for DOCX→PDF and the mail composer; the Studio is standalone).
+function exportWord(opts){
+  opts=opts||{}; const action=opts.action||"download"; const asPdf=!!opts.asPdf;
+  setDl(action==="email" ? "Preparing email…" : (asPdf ? "Preparing PDF…" : "Building Word document…"));
   if(typeof docx==="undefined"){ setDl("Word library not loaded. Check your connection and retry."); return; }
   const D=docx;
   const GREEN="599533", ORANGE="F48A1C", BLUE="0A6496", CHAR="282828", GREY="F5F5F5";
@@ -3233,26 +3241,45 @@ function exportWord(asEmail){
     }]
   });
   const MIME="application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  if(asEmail){
-    D.Packer.toBlob(doc).then(blob=>{
-      const r=new FileReader();
-      r.onload=()=>{ try{
-        const b64=String(r.result).split(",")[1]||"";
-        const f=(draft&&draft.fields)||{};
-        localStorage.setItem("dcb_pending_email", JSON.stringify({
-          filename:fileBase()+".docx", content_base64:b64, mime:MIME,
-          to:f.cpPocEmail||"", subject:"Agreement — "+(f.cpName||draft.cpRole||"")+" — DroCon Bharat Private Limited",
-          who:f.cpPocName||f.cpName||"Sir/Madam", ts:Date.now() }));
-        setDl("Opening email… you'll return to the app with this agreement attached.");
-        location.href="./index.html";
-      }catch(e){ setDl("Couldn't prepare email: "+e); } };
-      r.onerror=()=>setDl("Couldn't read the document for email.");
-      r.readAsDataURL(blob);
-    }).catch(e=>{ setDl("Word error: "+e); });
+  // direct Word download — no app round-trip needed
+  if(action==="download" && !asPdf){
+    D.Packer.toBlob(doc).then(blob=>{ saveBlob(blob, fileBase()+".docx",MIME,".docx"); })
+    .catch(e=>{ setDl("Word error: "+e); });
     return;
   }
-  D.Packer.toBlob(doc).then(blob=>{ saveBlob(blob, fileBase()+".docx",MIME,".docx"); })
-  .catch(e=>{ setDl("Word error: "+e); });
+  // PDF, or any email — hand the .docx to the app via localStorage, then go there
+  D.Packer.toBlob(doc).then(blob=>{
+    const r=new FileReader();
+    r.onload=()=>{ try{
+      const b64=String(r.result).split(",")[1]||"";
+      const f=(draft&&draft.fields)||{};
+      localStorage.setItem("dcb_pending_email", JSON.stringify({
+        action, asPdf, filename:fileBase()+".docx", content_base64:b64, mime:MIME,
+        to:f.cpPocEmail||"", subject:"Agreement — "+(f.cpName||draft.cpRole||"")+" — DroCon Bharat Private Limited",
+        who:f.cpPocName||f.cpName||"Sir/Madam", ts:Date.now() }));
+      setDl(action==="email" ? "Opening email… returning to the app with this agreement attached."
+                             : "Opening the app to make the PDF…");
+      location.href="./index.html";
+    }catch(e){ setDl("Couldn't prepare: "+e); } };
+    r.onerror=()=>setDl("Couldn't read the document.");
+    r.readAsDataURL(blob);
+  }).catch(e=>{ setDl("Word error: "+e); });
+}
+
+/* small click-dropdown attached to a button (Word / PDF choices) */
+function studioMenu(btn, items){
+  const menu=document.createElement("div");
+  menu.className="sdd";
+  menu.style.cssText="position:absolute;top:100%;left:0;margin-top:2px;z-index:999;background:#fff;border:1px solid #cfd8c9;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);min-width:190px;display:none;padding:4px";
+  items.forEach(it=>{ const b=document.createElement("button"); b.type="button"; b.textContent=it.label;
+    b.style.cssText="display:block;width:100%;text-align:left;border:none;background:none;padding:9px 12px;border-radius:6px;cursor:pointer;font-size:14px;color:#282828";
+    b.onmouseenter=()=>b.style.background="#eef5e9"; b.onmouseleave=()=>b.style.background="none";
+    b.onclick=(e)=>{ e.stopPropagation(); menu.style.display="none"; it.fn(); };
+    menu.appendChild(b); });
+  btn.parentNode.appendChild(menu);
+  btn.addEventListener("click",e=>{ e.stopPropagation(); const open=menu.style.display==="block";
+    document.querySelectorAll(".sdd").forEach(m=>m.style.display="none"); menu.style.display=open?"none":"block"; });
+  document.addEventListener("click",()=>{ menu.style.display="none"; });
 }
 
 /* ============================================================

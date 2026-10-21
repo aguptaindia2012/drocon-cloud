@@ -285,7 +285,10 @@ function applyProfile(){
   maybePendingEmail();
 }
 // The Agreement Studio (a separate page) hands a generated .docx back here via
-// localStorage; open the mail composer with it attached.
+// localStorage; convert to PDF if asked (the Studio has no backend token) and
+// then download it or open the composer with it attached.
+function b64ToBlob(b64, mime){ const bin=atob(b64); const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return new Blob([u], { type:mime||"application/octet-stream" }); }
 function maybePendingEmail(){
   let raw; try{ raw=localStorage.getItem("dcb_pending_email"); }catch(e){ return; }
   if(!raw) return;
@@ -293,10 +296,26 @@ function maybePendingEmail(){
   let p; try{ p=JSON.parse(raw); }catch(e){ return; }
   if(!p || !p.content_base64) return;
   if(p.ts && (Date.now()-p.ts) > 10*60*1000) return;           // stale (>10 min)
-  if(!(window.OPS && window.OPS.mailCompose)) return;
-  const body="Dear "+(p.who||"Sir/Madam")+",\n\nPlease find the attached document.\n\nWarm regards,";
-  setTimeout(()=>{ try{ window.OPS.mailCompose({ to:p.to||"", subject:p.subject||"", body:body,
-    readyAtt:[{ filename:p.filename||"document.docx", content_type:p.mime||"application/octet-stream", content_base64:p.content_base64 }] }); }catch(e){} }, 400);
+  setTimeout(()=>handlePendingDoc(p), 400);
+}
+async function handlePendingDoc(p){
+  try{
+    let blob = b64ToBlob(p.content_base64, p.mime||"application/octet-stream");
+    let filename = p.filename || "document.docx";
+    if(p.asPdf && window.OPS.docxToPdf){
+      try{ window.OPS.flashTop && window.OPS.flashTop("Making PDF…");
+        blob = await window.OPS.docxToPdf(blob); filename = filename.replace(/\.docx$/i,".pdf"); }
+      catch(e){ alert("PDF conversion failed ("+(e&&e.message||e)+") — using the Word file instead."); }
+    }
+    if(p.action==="download"){
+      window.OPS.saveBlob(blob, filename, blob.type||"application/octet-stream", p.asPdf?".pdf":".docx");
+      window.OPS.flashTop && window.OPS.flashTop("Downloaded "+filename);
+      return;
+    }
+    if(!(window.OPS && window.OPS.mailComposeWithBlob)) return;
+    const body="Dear "+(p.who||"Sir/Madam")+",\n\nPlease find the attached document.\n\nWarm regards,";
+    await window.OPS.mailComposeWithBlob({ to:p.to||"", subject:p.subject||"", body:body, blob:blob, filename:filename, mime:blob.type });
+  }catch(e){ /* nothing actionable */ }
 }
 async function refreshRole(){
   const data = await loadProfile();
@@ -807,6 +826,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "300";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "301";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
