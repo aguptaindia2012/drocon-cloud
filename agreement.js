@@ -152,6 +152,7 @@ async function viewDetail(id){
           <button class="btn green sm" id="agNoSave">${r.agreement_no?"Update number":"Assign number"}</button>
           <span class="muted" id="agNoMsg"></span></div></div>`:''}
       <div class="row wrap" style="margin-top:8px">
+        ${r.data?'<button class="btn blue sm" id="agPreview">👁 Preview</button><span id="agDlMenu"></span><span id="agEmMenu"></span>':''}
         ${canEditDoc?'<button class="btn green sm" id="editdoc">✎ Open document editor</button>':''}
         <button class="btn sm" id="editmeta">Edit details</button>
         ${canSubmit?'<button class="btn orange sm" id="submit">Submit for review</button>':''}
@@ -166,6 +167,13 @@ async function viewDetail(id){
       ${ (events&&events.length)? events.map(ev=>`<div class="evt"><b>${esc(ev.action)}</b> — ${esc((ev.who&&(ev.who.full_name||ev.who.email))||"")} <span class="muted">· ${fmt(ev.created_at)}</span>${ev.note?`<br>${esc(ev.note)}`:""}</div>`).join("") : '<div class="muted">No history yet.</div>' }
     </div>`;
   $("back").addEventListener("click",back);
+  if($("agPreview")) $("agPreview").addEventListener("click",()=>generateAgreementDoc(r.data,{action:"preview",asPdf:false}));
+  if($("agDlMenu")) $("agDlMenu").appendChild(window.OPS.menuButton("⬇ Download",[
+    {label:"Word (.docx)", fn:()=>generateAgreementDoc(r.data,{action:"download",asPdf:false})},
+    {label:"PDF", fn:()=>generateAgreementDoc(r.data,{action:"download",asPdf:true})} ],{className:"btn blue sm"}));
+  if($("agEmMenu") && window.OPS.mailComposeWithBlob) $("agEmMenu").appendChild(window.OPS.menuButton("📧 Email",[
+    {label:"Email as Word", fn:()=>generateAgreementDoc(r.data,{action:"email",asPdf:false})},
+    {label:"Email as PDF", fn:()=>generateAgreementDoc(r.data,{action:"email",asPdf:true})} ],{className:"btn green sm"}));
   if($("editdoc")) $("editdoc").addEventListener("click",()=>viewStudio(r));
   if($("editmeta")) $("editmeta").addEventListener("click",()=>viewForm(r));
   if($("submit")) $("submit").addEventListener("click",()=>runRpc("submit_for_review",{p_id:r.id},r.id));
@@ -328,13 +336,61 @@ async function saveStudioDraft(d){
     currentEdit=Object.assign(currentEdit,patch); await audit("edited","agreement",currentEdit.id,"document updated in editor"); window.OPS.flashTop("Saved to cloud ✓");
   }
 }
+/* ---- Studio export bridge: the Studio (iframe) hands back a generated .docx;
+   the app previews / downloads / emails it (converting to PDF when asked). ---- */
+const _genFrames = new Map();   // hidden generator iframes → { draft, opts }
+function b64ToBlob(b64, mime){ const bin=atob(b64); const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return new Blob([u], { type:mime||"application/octet-stream" }); }
+async function handleStudioExport(msg){
+  if(msg.error){ alert("Document error: "+msg.error); return; }
+  const meta=msg.meta||{}; const action=msg.action||"download"; const baseName=msg.filename||"agreement.docx";
+  const docxBlob=b64ToBlob(msg.b64, msg.mime);
+  if(action==="preview"){
+    window.OPS.previewDoc({ title: meta.subject || baseName.replace(/\.docx$/i,""),
+      getDocx: async()=>({ blob:docxBlob, filename:baseName, mime:msg.mime }),
+      email:{ to:meta.to||"", who:meta.who||"Sir/Madam", subject:meta.subject||"" } });
+    return;
+  }
+  let blob=docxBlob, filename=baseName, mime=msg.mime;
+  if(msg.asPdf){ try{ window.OPS.flashTop&&window.OPS.flashTop("Making PDF…"); blob=await window.OPS.docxToPdf(docxBlob);
+      filename=baseName.replace(/\.docx$/i,".pdf"); mime="application/pdf"; }
+    catch(e){ alert("PDF conversion failed ("+(e&&e.message||e)+") — using the Word file instead."); } }
+  if(action==="download"){ window.OPS.saveBlob(blob, filename, mime, msg.asPdf?".pdf":".docx"); return; }
+  if(action==="email"){ await window.OPS.mailComposeWithBlob({ to:meta.to||"", subject:meta.subject||"",
+    body:"Dear "+(meta.who||"Sir/Madam")+",\n\nPlease find the attached document.\n\nWarm regards,", blob, filename, mime }); }
+}
+// generate a document from a stored agreement draft via a hidden Studio iframe
+function generateAgreementDoc(draft, opts){
+  if(!draft){ alert("This agreement has no saved draft to generate from. Open it in the editor once and Save to cloud."); return; }
+  const ifr=document.createElement("iframe");
+  ifr.style.cssText="position:fixed;left:-9999px;top:-9999px;width:10px;height:10px;border:0";
+  _genFrames.set(ifr, { draft, opts:opts||{} });
+  ifr.src="studio.html?gen="+Date.now();
+  document.body.appendChild(ifr);
+  window.OPS.flashTop && window.OPS.flashTop("Preparing document…");
+  setTimeout(()=>{ if(_genFrames.has(ifr)){ _genFrames.delete(ifr); try{ifr.remove();}catch(e){} } }, 60000);
+}
 window.addEventListener("message",function(ev){
-  const f=$("studioFrame"); if(!f || ev.source!==f.contentWindow) return;
   const msg=ev.data||{};
-  if(msg.type==="dcb-ready"){ f.contentWindow.postMessage({type:"dcb-load", draft: currentEdit?currentEdit.data:null}, "*"); }
-  else if(msg.type==="dcb-save"){ saveStudioDraft(msg.draft); }
-  else if(msg.type==="dcb-close"){ closeStudio(); }
+  const f=$("studioFrame");
+  if(f && ev.source===f.contentWindow){
+    if(msg.type==="dcb-ready"){ f.contentWindow.postMessage({type:"dcb-load", draft: currentEdit?currentEdit.data:null}, "*"); }
+    else if(msg.type==="dcb-save"){ saveStudioDraft(msg.draft); }
+    else if(msg.type==="dcb-close"){ closeStudio(); }
+    else if(msg.type==="dcb-export"){ handleStudioExport(msg); }
+    return;
+  }
+  for(const [ifr,g] of _genFrames){
+    if(ev.source===ifr.contentWindow){
+      if(msg.type==="dcb-ready"){
+        ifr.contentWindow.postMessage({type:"dcb-load", draft:g.draft}, "*");
+        ifr.contentWindow.postMessage({type:"dcb-generate", action:g.opts.action, asPdf:g.opts.asPdf}, "*");
+      } else if(msg.type==="dcb-export"){ _genFrames.delete(ifr); setTimeout(()=>{ try{ifr.remove();}catch(e){} },0); handleStudioExport(msg); }
+      return;
+    }
+  }
 });
+window.OPS.agreementDoc = generateAgreementDoc;
 
 // register routes
 R.agreements = viewAgreements;
