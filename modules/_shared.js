@@ -159,6 +159,19 @@ window.OPS.menuButton = function(label, items, opts){
   return wrap;
 };
 
+/* ---------- share a generated document into the Messenger -------------------
+   getDocx: async () => ({blob, filename, mime}); converts to PDF (Word fallback)
+   then stages it on the chat composer (window.OPS.messenger.shareFile). */
+window.OPS.shareDocToMessenger = async function(getDocx, title){
+  if(!(window.OPS.messenger && window.OPS.messenger.shareFile)){ alert("Messenger isn't available."); return; }
+  try{
+    window.OPS.flashTop && window.OPS.flashTop("Preparing document…");
+    const o=await getDocx(); let blob=o.blob, filename=o.filename||"document.docx";
+    try{ blob=await window.OPS.docxToPdf(o.blob); filename=filename.replace(/\.docx$/i,".pdf"); }catch(e){}  // PDF preferred
+    window.OPS.messenger.shareFile(blob, filename, title||"");
+  }catch(e){ alert("Couldn't prepare the document: "+(e&&e.message||e)); }
+};
+
 /* ---------- in-app document Preview (see exactly what will download) ----------
    window.OPS.previewDoc({ title, getDocx, email })
      getDocx: async () => ({blob, filename, mime})   // the .docx (built on demand)
@@ -207,6 +220,11 @@ window.OPS.previewDoc = async function(opts){
       { label:"Email as Word", fn:async()=>{ const d=await getDocx(); close(); await window.OPS.mailComposeWithBlob({ to:opts.email.to, subject:opts.email.subject, body:body(), blob:d.blob, filename:d.filename, mime:d.mime }); } },
       { label:"Email as PDF", fn:async()=>{ const p=await getPdf(); close(); await window.OPS.mailComposeWithBlob({ to:opts.email.to, subject:opts.email.subject, body:body(), blob:p.blob, filename:p.filename, mime:p.mime }); } },
     ], {className:"btn green sm"}));
+  }
+  if(window.OPS.messenger && window.OPS.messenger.shareFile){
+    const mb=document.createElement("button"); mb.className="btn sm"; mb.textContent="💬 Messenger";
+    mb.addEventListener("click",()=>{ close(); window.OPS.shareDocToMessenger(getDocx, opts.title||""); });
+    act.appendChild(mb);
   }
 };
 

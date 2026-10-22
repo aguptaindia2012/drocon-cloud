@@ -258,6 +258,7 @@ function editor(){
         <button class="btn sm" id="dPreview">👁 Preview</button>
         <span id="dDownloadMenu"></span>
         <span id="dEmailMenu"></span>
+        <button class="btn sm" id="dMsg">💬 Messenger</button>
         <button class="btn" id="dJson">⬇ Download JSON</button>
         <button class="btn sm" id="dImport">Import JSON…</button>
         ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px"><input type="checkbox" id="dStock" style="width:auto"> reduce spare stock on save</label>':''}
@@ -317,6 +318,10 @@ function editor(){
     window.OPS.previewDoc({ title:(typeLabel+" "+num).trim(), getDocx:()=>buildBlob(),
       email:{ to:D.party.email||"", who:D.party.name||D.party.firmName||"Sir/Madam",
               subject:(typeLabel+" "+num).trim()+" — "+(window.OPS.docgen.DCB.legalName||"DroCon Bharat") } });
+  });
+  if($("dMsg")) $("dMsg").addEventListener("click",()=>{
+    const typeLabel={quotation:"Quotation",invoice:"Invoice",credit_note:"Credit Note",purchase_order:"Purchase Order"}[TYPE]||"Document";
+    window.OPS.shareDocToMessenger(()=>buildBlob(), (typeLabel+" "+(D.number||"")).trim());
   });
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
