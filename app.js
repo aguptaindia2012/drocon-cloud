@@ -32,9 +32,9 @@ const STATUS_LABEL={draft:"Draft",in_review:"In review",recommended:"Recommended
    gate: 'all' (any signed-in) | 'approver' | 'admin' | 'perm' (admin or per-tool grant) */
 const SECTIONS = [
   { key:"reviews",    label:"Review / Approvals" },   // sits right after Home
-  { key:"messenger",  label:"Messenger" },            // internal team chat
-  { key:"mail",       label:"Mail" },                 // in-app email (Hostinger)
-  { key:"self",       label:"My Space" },             // employee self-service (attendance & expenses)
+  { key:"messenger",  label:"Messenger", group:"workspace" },            // internal team chat
+  { key:"mail",       label:"Mail", group:"workspace" },                 // in-app email (Hostinger)
+  { key:"self",       label:"My Space", group:"workspace" },             // employee self-service (attendance & expenses)
   { key:"trackers",   label:"Daily Spray Entry" },
   { key:"order",      label:"Business Development" },
   { key:"agreement",  label:"Agreement" },
@@ -52,7 +52,7 @@ const SECTIONS = [
 ];
 // Top-level groups — collapse several sections under one parent tab. A section
 // with no `group` stays a top-level tab. Order follows first appearance above.
-const GROUPS = [ { key:"fin", label:"Finance" }, { key:"admin", label:"Administration" } ];
+const GROUPS = [ { key:"workspace", label:"Workspace" }, { key:"fin", label:"Finance" }, { key:"admin", label:"Administration" } ];
 const GROUP_LABEL = Object.fromEntries(GROUPS.map(g=>[g.key,g.label]));
 const TOOLS = [
   // Daily Spray Entry (its own section, the landing tab)
@@ -826,6 +826,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "303";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "304";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
