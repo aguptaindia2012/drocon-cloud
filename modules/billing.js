@@ -255,6 +255,7 @@ function editor(){
       <div class="row wrap" style="margin-top:14px">
         <button class="btn green" id="dSave">${D.id?"Save changes":"Save"}</button>
         ${TYPE==='quotation' && D.id?'<button class="btn blue" id="dToInvoice">→ Convert to Invoice</button>':''}
+        <button class="btn sm" id="dPreview">👁 Preview</button>
         <span id="dDownloadMenu"></span>
         <span id="dEmailMenu"></span>
         <button class="btn" id="dJson">⬇ Download JSON</button>
@@ -310,6 +311,13 @@ function editor(){
     dlHost.appendChild(window.OPS.menuButton("⬇ Download", items, {className:"btn blue"})); }
   if(emHost){ emHost.appendChild(window.OPS.menuButton("📧 Email",
     [{label:"Email as Word", fn:()=>doEmail(false)},{label:"Email as PDF", fn:()=>doEmail(true)}], {className:"btn green"})); }
+  if($("dPreview")) $("dPreview").addEventListener("click",()=>{
+    const typeLabel={quotation:"Quotation",invoice:"Invoice",credit_note:"Credit Note",purchase_order:"Purchase Order"}[TYPE]||"Document";
+    const num=D.number||"";
+    window.OPS.previewDoc({ title:(typeLabel+" "+num).trim(), getDocx:()=>buildBlob(),
+      email:{ to:D.party.email||"", who:D.party.name||D.party.firmName||"Sir/Madam",
+              subject:(typeLabel+" "+num).trim()+" — "+(window.OPS.docgen.DCB.legalName||"DroCon Bharat") } });
+  });
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
   if($("dToInvoice")) $("dToInvoice").addEventListener("click",convertToInvoice);
@@ -605,6 +613,32 @@ function toDocgen(){
   return { doc_type:TYPE, number:D.number, doc_date:D.doc_date, title,
     party:D.party, refs, items:D.items, totals:computeTotals(), terms:D.terms, copyLabel:D.copyLabel };
 }
+
+/* Build the docgen shape from a SAVED `documents` row (no editor needed) — used
+   to preview/download a document from the approval queue or any list. */
+function docgenFromRow(row){
+  const data=row.data||{}; const bos = data.title==="Bill of Supply"; const copyLabel=data.copyLabel||"Original";
+  const title = bos ? `Bill of Supply (${copyLabel})`
+    : (row.doc_type==="invoice" ? `Tax/Cash Credit Invoice (${copyLabel})`
+       : ({quotation:"Quotation",credit_note:"Credit Note",purchase_order:"Purchase Order"}[row.doc_type]||"Document"));
+  return { doc_type:row.doc_type, number:row.number, doc_date:row.doc_date, title,
+    party:row.party_snapshot||{}, refs:[], items:row.line_items||[],
+    totals:row.totals||window.OPS.docgen.computeTotals(row.line_items||[]), terms:row.terms||{}, copyLabel,
+    systemApproved:(row.approval_status==="approved") && (row.doc_type==="quotation"||row.doc_type==="purchase_order"),
+    data:{ rev_category:data.rev_category } };
+}
+window.OPS.billing = Object.assign(window.OPS.billing||{}, {
+  docgenFromRow,
+  // open the in-app Preview (PDF) for a saved documents row
+  previewRow(row){
+    const typeLabel={quotation:"Quotation",invoice:"Invoice",credit_note:"Credit Note",purchase_order:"Purchase Order"}[row.doc_type]||"Document";
+    const p=row.party_snapshot||{}; const num=row.number||"";
+    window.OPS.previewDoc({ title:(typeLabel+" "+num).trim(),
+      getDocx:()=>window.OPS.docgen.generateWord(docgenFromRow(row),{asBlob:true}),
+      email:{ to:p.email||"", who:p.name||p.firmName||"Sir/Madam",
+              subject:(typeLabel+" "+num).trim()+" — "+(window.OPS.docgen.DCB.legalName||"DroCon Bharat") } });
+  }
+});
 
 /* ---------- persist ---------- */
 async function save(){

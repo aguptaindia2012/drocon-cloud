@@ -146,13 +146,14 @@ async function reviewQueue(){
     <tbody>${items.map((it,i)=>`<tr><td><span class="tag">${esc(lblOf(it.table,it.r))}</span></td>
       <td><b>${esc(titleOf(it.table,it.r))}</b></td>
       <td>${esc(nameOf(ps, it.table==="agreements"?it.r.created_by:it.r.submitted_by))}</td>
-      <td><button class="btn green sm" data-act="approve" data-i="${i}">Approve</button>
+      <td>${(it.table==="documents" && window.OPS.billing && window.OPS.billing.previewRow)?`<button class="btn blue sm" data-act="preview" data-i="${i}">👁 Preview</button> `:''}<button class="btn green sm" data-act="approve" data-i="${i}">Approve</button>
           <button class="btn sm" data-act="reject" data-i="${i}" style="color:#a3322a;border-color:#e4b4b4">Reject</button>
           <button class="btn sm" data-act="open" data-i="${i}">Open</button></td></tr>`).join("")}</tbody></table></div>`;
   $("rvBody").querySelectorAll("[data-act]").forEach(b=>b.addEventListener("click",async()=>{
     const it=items[+b.getAttribute("data-i")]; const act=b.getAttribute("data-act");
     if(act==="approve"){ if(await approve(it.table,it.r.id,titleOf(it.table,it.r))) reviewQueue(); }
     else if(act==="reject"){ const n=prompt("Reason for rejection:"); if(n===null)return; if(await reject(it.table,it.r.id,n,titleOf(it.table,it.r))) reviewQueue(); }
+    else if(act==="preview"){ try{ window.OPS.billing.previewRow(it.r); }catch(e){ alert("Preview failed: "+(e&&e.message||e)); } }
     else { reviewDetail(it); }
   }));
 }
@@ -270,6 +271,7 @@ async function reviewDetail(it){
       <div class="eyebrow">Review / Approvals · ${esc(lbl)}</div>
       <h1 style="margin:2px 0">${esc(title)}</h1>
       <div>${window.OPS.statusChip(st==="submitted"?"in_review":st)} <span class="muted">· submitted by <b>${esc(submittedBy||"—")}</b>${r.submitted_at?(" · "+fmt(r.submitted_at)):""}</span></div>
+      ${(table==="documents" && window.OPS.billing && window.OPS.billing.previewRow)?`<div style="margin-top:10px"><button class="btn blue" id="rdPreview">👁 Review document — preview exactly as it prints</button></div>`:''}
       ${r.reject_note?`<div class="muted" style="color:#a3322a;margin-top:6px">Earlier rejection note: ${esc(r.reject_note)}</div>`:''}
       <h3 style="margin-top:14px">What you're approving</h3>
       ${summaryHTML(it)}
@@ -282,6 +284,7 @@ async function reviewDetail(it){
       </div>
     </div>`;
   $("rdBack").addEventListener("click",reviewQueue);
+  if($("rdPreview")) $("rdPreview").addEventListener("click",()=>{ try{ window.OPS.billing.previewRow(r); }catch(e){ alert("Preview failed: "+(e&&e.message||e)); } });
   $("rdOpen").addEventListener("click",()=>openItem(it));
   if($("rdApprove")) $("rdApprove").addEventListener("click",async()=>{ if(await approve(table,r.id,title)) reviewQueue(); });
   if($("rdReject"))  $("rdReject").addEventListener("click",async()=>{ const n=prompt("Reason for rejection:"); if(n===null)return; if(await reject(table,r.id,n,title)) reviewQueue(); });

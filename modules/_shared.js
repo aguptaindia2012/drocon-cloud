@@ -159,6 +159,57 @@ window.OPS.menuButton = function(label, items, opts){
   return wrap;
 };
 
+/* ---------- in-app document Preview (see exactly what will download) ----------
+   window.OPS.previewDoc({ title, getDocx, email })
+     getDocx: async () => ({blob, filename, mime})   // the .docx (built on demand)
+     email  : { to, who, subject }                   // optional → shows Email menu
+   Renders the .docx as a PDF (via window.OPS.docxToPdf — true fidelity) inside a
+   modal, with Download (Word/PDF) and Email (Word/PDF) actions. The docx & pdf
+   are built once and reused across the buttons. */
+window.OPS.previewDoc = async function(opts){
+  opts=opts||{};
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:80;display:flex;align-items:center;justify-content:center;padding:16px";
+  ov.innerHTML=`<div class="card" style="width:min(920px,97vw);height:92vh;display:flex;flex-direction:column;padding:12px">
+    <div class="row" style="align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">${esc(opts.title||"Preview")}</h3>
+      <div class="spacer"></div>
+      <span id="pvActions" style="display:flex;gap:6px;align-items:center"></span>
+      <button class="btn sm" id="pvClose" style="margin-left:8px">✕ Close</button>
+    </div>
+    <div id="pvFrame" style="flex:1;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#f4f5f2;display:flex;align-items:center;justify-content:center">
+      <div class="muted" id="pvLoad">Rendering preview…</div>
+    </div></div>`;
+  document.body.appendChild(ov);
+  let _url=null;
+  const close=()=>{ try{ if(_url) URL.revokeObjectURL(_url); }catch(e){} ov.remove(); };
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  $("pvClose").addEventListener("click",close);
+  let _docx=null,_pdf=null;
+  const getDocx=async()=>{ if(!_docx) _docx=await opts.getDocx(); return _docx; };
+  const getPdf=async()=>{ if(!_pdf){ const d=await getDocx(); _pdf={ blob:await window.OPS.docxToPdf(d.blob), filename:(d.filename||"document.docx").replace(/\.docx$/i,".pdf"), mime:"application/pdf" }; } return _pdf; };
+  const body=()=>"Dear "+((opts.email&&opts.email.who)||"Sir/Madam")+",\n\nPlease find the attached document.\n\nWarm regards,";
+  // render the PDF preview
+  try{
+    const p=await getPdf(); _url=URL.createObjectURL(p.blob);
+    $("pvFrame").innerHTML=`<iframe src="${_url}#toolbar=1" title="preview" style="width:100%;height:100%;border:0"></iframe>`;
+  }catch(e){
+    $("pvFrame").innerHTML=`<div class="muted" style="padding:20px;text-align:center">Couldn't render the PDF preview — ${esc(String(e&&e.message||e))}.<br>You can still download the Word file below.</div>`;
+  }
+  // action menus (reuse the built docx/pdf)
+  const act=$("pvActions");
+  act.appendChild(window.OPS.menuButton("⬇ Download", [
+    { label:"Word (.docx)", fn:async()=>{ const d=await getDocx(); window.OPS.saveBlob(d.blob,d.filename,d.mime,".docx"); } },
+    { label:"PDF", fn:async()=>{ window.OPS.flashTop&&window.OPS.flashTop("Making PDF…"); const p=await getPdf(); window.OPS.saveBlob(p.blob,p.filename,p.mime,".pdf"); } },
+  ], {className:"btn blue sm"}));
+  if(opts.email && window.OPS.mailComposeWithBlob){
+    act.appendChild(window.OPS.menuButton("📧 Email", [
+      { label:"Email as Word", fn:async()=>{ const d=await getDocx(); close(); await window.OPS.mailComposeWithBlob({ to:opts.email.to, subject:opts.email.subject, body:body(), blob:d.blob, filename:d.filename, mime:d.mime }); } },
+      { label:"Email as PDF", fn:async()=>{ const p=await getPdf(); close(); await window.OPS.mailComposeWithBlob({ to:opts.email.to, subject:opts.email.subject, body:body(), blob:p.blob, filename:p.filename, mime:p.mime }); } },
+    ], {className:"btn green sm"}));
+  }
+};
+
 window.OPS.wireProfitCatCells = function(root, onSaved){
   (root||document).querySelectorAll("select.pcCell").forEach(sel=>{
     sel.addEventListener("click", e=>e.stopPropagation());

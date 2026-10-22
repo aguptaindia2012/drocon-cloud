@@ -45,6 +45,12 @@ function wordButton(hostId, title, sectionsFn, opts){
   async function email(asPdf){ let out=await buildBlob(); if(asPdf) out=await toPdf(out);
     const body="Dear "+(opts.who||"Sir/Madam")+",\n\nPlease find attached: "+title+".\n\nWarm regards,";
     await window.OPS.mailComposeWithBlob({ to:opts.to||"", subject:title, body:body, blob:out.blob, filename:out.filename, mime:out.mime }); }
+  if(window.OPS.previewDoc){
+    const pv=document.createElement("button"); pv.className="btn sm"; pv.textContent="👁 Preview"; pv.style.marginRight="6px";
+    pv.addEventListener("click",()=>window.OPS.previewDoc({ title:title, getDocx:buildBlob,
+      email: opts.noEmail?null:{ to:opts.to||"", who:opts.who||"Sir/Madam", subject:title } }));
+    h.appendChild(pv);
+  }
   h.appendChild(window.OPS.menuButton("⬇ Download report",
     [{label:"Word (.docx)", fn:()=>dl(false)},{label:"PDF", fn:()=>dl(true)}], {className:"btn blue sm"}));
   if(opts.noEmail || !window.OPS.mailComposeWithBlob) return;
