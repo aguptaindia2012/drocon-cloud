@@ -138,6 +138,7 @@ function render(){
         <button class="btn green" id="bSave">${design.id?"Save design":"Save design"}</button>
         <button class="btn blue" id="bQuote">Use in Quotation →</button>
         <span id="bDocHost" style="display:inline-flex;gap:6px;align-items:center"></span>
+        <button class="btn sm" id="bMsg">💬 Share to Messenger</button>
         ${design.id?'<button class="btn" id="bTransfer">⇪ Transfer product to Catalogue</button>':''}
         <button class="btn" id="bCancel">Cancel</button>
         <div class="spacer"></div>
@@ -159,6 +160,17 @@ function render(){
   $("bSave").addEventListener("click",save);
   $("bQuote").addEventListener("click",useInQuotation);
   if($("bTransfer")) $("bTransfer").addEventListener("click",transferToCatalogue);
+  if($("bMsg")) $("bMsg").addEventListener("click",()=>window.OPS.once($("bMsg"),async()=>{
+    if(!(window.OPS.messenger && window.OPS.messenger.shareFile)){ alert("Messenger not available."); return; }
+    try{
+      const title=bomDocTitle(design);
+      window.OPS.flashTop && window.OPS.flashTop("Preparing BOM document…");
+      const o=await window.OPS.docgen.generateReport({ title, sections:bomSections(design) }, { asBlob:true });
+      let blob=o.blob, filename=o.filename;
+      try{ blob=await window.OPS.docxToPdf(o.blob); filename=o.filename.replace(/\.docx$/i,".pdf"); }catch(e){}   // PDF preferred; Word fallback
+      window.OPS.messenger.shareFile(blob, filename, title);
+    }catch(e){ alert("Couldn't prepare the BOM: "+(e&&e.message||e)); }
+  }));
   // letterhead BOM document — Preview / Download / Email (Word or PDF)
   if($("bDocHost") && window.OPS.report && window.OPS.report.wordButton){
     const title=(design.part_no?("BOM "+design.part_no+" — "):"BOM — ")+(design.name||"Assembly");

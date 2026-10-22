@@ -28,6 +28,7 @@ async function loadChannels(){ const { data }=await sb().rpc("chat_my_channels")
 
 /* ---------- attachments (Supabase 'chat' storage bucket) ---------- */
 const _pending={};   // composer id -> [File]
+let _sharePending=null;   // a file handed in from elsewhere (e.g. "Share BOM to Messenger")
 async function uploadChatFiles(files){
   const out=[];
   for(const f of files){
@@ -246,6 +247,12 @@ function wireComposer(id, parentId){
     }));
   });
   send.addEventListener("click",()=>doSend(id,parentId));
+  // a file shared in from elsewhere (BOM / a document) lands in the MAIN composer
+  if(parentId===null && _sharePending){
+    try{ _pending[id]=(_pending[id]||[]).concat([_sharePending.file]);
+      if(_sharePending.text && txt){ txt.value=_sharePending.text; } renderPending(id); }catch(e){}
+    _sharePending=null;
+  }
 }
 async function doSend(id, parentId){
   const txt=$(id+"Txt"), send=$(id+"Send"); if(!txt) return;
@@ -420,5 +427,15 @@ window.OPS._notifOpen.messenger = async function(id){
   const c=CHANNELS.find(x=>String(x.id)===String(id)); if(c) openChannel(c);
 };
 
+// Share a generated file (e.g. a BOM document) into the Messenger: stages it on
+// the main composer, then opens Messenger so the user picks a channel and sends.
+window.OPS.messenger = {
+  shareFile(blob, filename, text){
+    try{ _sharePending={ file:new File([blob], filename||"document", { type:(blob&&blob.type)||"application/octet-stream" }), text:text||"" }; }
+    catch(e){ _sharePending=null; return; }
+    window.OPS.flashTop && window.OPS.flashTop("Opening Messenger — pick a channel and Send");
+    if(window.OPS.openTool) window.OPS.openTool("messenger");
+  }
+};
 window.OPS.routes.messenger = route;
 })();
