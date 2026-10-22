@@ -272,6 +272,7 @@ async function reviewDetail(it){
       <h1 style="margin:2px 0">${esc(title)}</h1>
       <div>${window.OPS.statusChip(st==="submitted"?"in_review":st)} <span class="muted">· submitted by <b>${esc(submittedBy||"—")}</b>${r.submitted_at?(" · "+fmt(r.submitted_at)):""}</span></div>
       ${(table==="documents" && window.OPS.billing && window.OPS.billing.previewRow)?`<div style="margin-top:10px"><button class="btn blue" id="rdPreview">👁 Review document — preview exactly as it prints</button></div>`:''}
+      ${(table==="bom_designs" && window.OPS.bom && window.OPS.bom.previewRow)?`<div style="margin-top:10px"><button class="btn blue" id="rdPreviewBom">👁 Review BOM — preview the document</button></div>`:''}
       ${r.reject_note?`<div class="muted" style="color:#a3322a;margin-top:6px">Earlier rejection note: ${esc(r.reject_note)}</div>`:''}
       <h3 style="margin-top:14px">What you're approving</h3>
       ${summaryHTML(it)}
@@ -285,6 +286,7 @@ async function reviewDetail(it){
     </div>`;
   $("rdBack").addEventListener("click",reviewQueue);
   if($("rdPreview")) $("rdPreview").addEventListener("click",()=>{ try{ window.OPS.billing.previewRow(r); }catch(e){ alert("Preview failed: "+(e&&e.message||e)); } });
+  if($("rdPreviewBom")) $("rdPreviewBom").addEventListener("click",()=>{ try{ window.OPS.bom.previewRow(r); }catch(e){ alert("Preview failed: "+(e&&e.message||e)); } });
   $("rdOpen").addEventListener("click",()=>openItem(it));
   if($("rdApprove")) $("rdApprove").addEventListener("click",async()=>{ if(await approve(table,r.id,title)) reviewQueue(); });
   if($("rdReject"))  $("rdReject").addEventListener("click",async()=>{ const n=prompt("Reason for rejection:"); if(n===null)return; if(await reject(table,r.id,n,title)) reviewQueue(); });
