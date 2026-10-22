@@ -445,16 +445,16 @@ async function loadPickers(cfg){
     sb().from("spare_catalogue").select("*").eq("active",true).order("name") ]);
   // Searchable combobox of catalogue items (type to filter; ↑/↓/Enter to pick).
   const cat=[];
-  (svc||[]).forEach(s=>cat.push({ kind:"svc", id:s.id, label:"[Service] "+s.name+(s.default_rate?(" — "+money(s.default_rate)):""),
-    hay:("service "+(s.name||"")+" "+(s.hsn_sac||"")+" "+(s.rev_category||"")).toLowerCase() }));
-  (spr||[]).forEach(s=>cat.push({ kind:"spr", id:s.id, label:"[Spare] "+s.name+(s.rate_excl_gst?(" — "+money(s.rate_excl_gst)):""),
-    hay:("spare "+(s.name||"")+" "+(s.hsn_code||"")+" "+(s.product_category||"")+" "+(s.rev_category||"")).toLowerCase() }));
+  (svc||[]).forEach(s=>cat.push({ kind:"svc", id:s.id, label:"[Service] "+(s.service_no?s.service_no+" · ":"")+s.name+(s.default_rate?(" — "+money(s.default_rate)):""),
+    hay:("service "+(s.service_no||"")+" "+(s.name||"")+" "+(s.hsn_sac||"")+" "+(s.rev_category||"")).toLowerCase() }));
+  (spr||[]).forEach(s=>cat.push({ kind:"spr", id:s.id, label:"[Spare] "+(s.part_no?s.part_no+" · ":"")+s.name+(s.rate_excl_gst?(" — "+money(s.rate_excl_gst)):""),
+    hay:("spare "+(s.part_no||"")+" "+(s.name||"")+" "+(s.hsn_code||"")+" "+(s.product_category||"")+" "+(s.rev_category||"")).toLowerCase() }));
 
   function addCat(kind,id){
     const s=(kind==="svc"?svc:spr).find(x=>x.id===id); if(!s) return;
     // _cb/_cs are the INTERNAL cost snapshot (base + shipping) — margin/approval only.
     const cost={ _cb:num(s.cost_base), _cs:num(s.cost_shipping) };
-    if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0},cost));
+    if(kind==="svc") D.items.push(Object.assign({desc:s.name,hsn:s.hsn_sac||"",gst:num(s.gst_rate),qty:1,rate:num(s.default_rate),per:s.unit||"",disc:0,_itemNo:s.service_no||""},cost));
     else {
       const g=num(s.gst_rate);
       // Exact-paise: taxable rate IS the catalogue Base Rate (excl GST); MRP(excl) &
@@ -464,7 +464,7 @@ async function loadPickers(cfg){
       if(!(base>0)) base = num(s.offer)>0 ? Math.round((num(s.offer)/(1+g/100))*100)/100
                           : (mrpExcl!=null ? Math.round(mrpExcl*(1-(num(s.discount)||0)/100)*100)/100 : 0);
       D.items.push(Object.assign({desc:s.name,hsn:s.hsn_code||"",gst:g,qty:1,rate:base,per:s.unit||"",disc:0,
-        _spareId:s.id, _spare:true, _mrpExcl:mrpExcl, _discPct:num(s.discount)||null},cost));
+        _spareId:s.id, _spare:true, _itemNo:s.part_no||"", _mrpExcl:mrpExcl, _discPct:num(s.discount)||null},cost));
     }
     // stamp the document's Revenue category from the catalogue item (first wins; editable)
     if(s.rev_category && !(D.data&&D.data.rev_category)){ D.data=D.data||{}; D.data.rev_category=s.rev_category; if($("dRevCat")) $("dRevCat").value=s.rev_category; }

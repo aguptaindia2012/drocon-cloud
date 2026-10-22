@@ -179,6 +179,7 @@ function generateWord(doc, opts){
       ? Math.round((1 - rate/Number(it._mrpExcl))*10000)/100
       : (it._discPct!=null ? Number(it._discPct) : disc);
     const descParas=[ new D.Paragraph({children:[run(it.desc,{size:17})],spacing:{after:0}}) ];
+    if(it._itemNo) descParas.push(new D.Paragraph({children:[run("Part/Service No.: "+it._itemNo,{size:14,color:"6a6a6a"})],spacing:{after:0}}));
     if(it.sub) descParas.push(new D.Paragraph({children:[run(it.sub,{size:15,italics:true,color:"6a6a6a"})],spacing:{after:0}}));
     return new D.TableRow({children:[
       cell(String(idx+1),{w:colW[0],size:17}),

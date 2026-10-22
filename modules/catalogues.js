@@ -13,9 +13,10 @@ const REV_LABEL=Object.fromEntries(REV_CATS);
 function revLabel(k){ return k?(REV_LABEL[k]||k):"—"; }
 
 const CATS = {
-  service: { table:"service_catalogue", label:"Services", rateKey:"default_rate", hsnKey:"hsn_sac",
-    cols:[["name","Service"],["rev_category","Rev. Category"],["hsn_sac","HSN/SAC"],["unit","Unit"],["default_rate","Rate",true],["gst_rate","GST%",true],["_cost","Cost",true]],
+  service: { table:"service_catalogue", label:"Services", rateKey:"default_rate", hsnKey:"hsn_sac", numField:"service_no", numPrefix:"SRV-",
+    cols:[["service_no","Service #"],["name","Service"],["rev_category","Rev. Category"],["hsn_sac","HSN/SAC"],["unit","Unit"],["default_rate","Rate",true],["gst_rate","GST%",true],["_cost","Cost",true]],
     fields:[
+      {key:"service_no",label:"Service number",placeholder:"auto-assigned"},
       {key:"name",label:"Service name",full:true,required:true},
       {key:"rev_category",label:"Revenue category",type:"select",options:REV_CATS},
       {key:"hsn_sac",label:"HSN/SAC"},
@@ -26,11 +27,12 @@ const CATS = {
       {key:"cost_shipping",label:"Cost — shipping (₹)",type:"number"},
       {key:"description",label:"Description",type:"textarea",full:true},
     ] },
-  spare: { table:"spare_catalogue", label:"Spares", rateKey:"rate_excl_gst", hsnKey:"hsn_code",
-    cols:[["name","Spare"],["product_category","Product Category"],["rev_category","Rev. Category"],["hsn_code","HSN"],["unit","Unit"],
+  spare: { table:"spare_catalogue", label:"Spares", rateKey:"rate_excl_gst", hsnKey:"hsn_code", numField:"part_no", numPrefix:"PRT-",
+    cols:[["part_no","Part #"],["name","Spare"],["product_category","Product Category"],["rev_category","Rev. Category"],["hsn_code","HSN"],["unit","Unit"],
       ["mrp_incl","MRP (Incl.)",true],["discount","Disc%",true],["offer","Offer",true],["rate_excl_gst","Base Rate",true],
       ["gst_rate","GST%",true],["pkg_pct","Pkg%",true],["base_cost","Base Cost",true],["current_stock","Stock",true]],
     fields:[
+      {key:"part_no",label:"Part number",placeholder:"auto-assigned"},
       {key:"name",label:"Spare name",full:true,required:true},
       {key:"product_category",label:"Product category",placeholder:"e.g. Propellers, Landing Gear, Spraying System"},
       {key:"rev_category",label:"Revenue category",type:"select",options:REV_CATS},
@@ -50,6 +52,14 @@ const CATS = {
 };
 
 let active="service";
+
+// next free part/service number (highest numeric suffix + 1), app-formatted
+async function nextCatNo(){
+  const cfg=CATS[active]; const field=cfg.numField, prefix=cfg.numPrefix;
+  const { data }=await sb().from(cfg.table).select(field);
+  let max=0; (data||[]).forEach(r=>{ const m=String(r[field]||"").match(/(\d+)\s*$/); if(m){ const n=parseInt(m[1],10); if(n>max) max=n; } });
+  return prefix+String(max+1).padStart(4,"0");
+}
 
 async function view(){
   const m=$("main");
@@ -147,6 +157,9 @@ function form(rec, seed){
       <div class="err" id="cErr"></div>
     </div>`;
   $("cBack").addEventListener("click",view); $("cCancel").addEventListener("click",view);
+  // auto-assign the next part/service number on a brand-new item (editable)
+  if(!rec && cfg.numField){ const el=$("cf_"+cfg.numField);
+    if(el && !el.value){ nextCatNo().then(no=>{ if(el && !el.value) el.value=no; }).catch(()=>{}); } }
   if($("cDup")) $("cDup").addEventListener("click",()=>{
     const s={}; cfg.fields.forEach(f=>{ s[f.key]=$("cf_"+f.key).value; });
     if("name" in s) s.name=String(s.name||"").replace(/\s*\(copy\)\s*$/i,"")+" (copy)";
