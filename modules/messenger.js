@@ -201,7 +201,9 @@ function renderPending(id){
   const list=_pending[id]||[];
   host.innerHTML=list.map((f,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px">📎 ${esc(f.name)} <span style="font-size:11px;color:var(--muted)">${fileSize(f.size)}</span> <a href="#" data-rm="${i}" style="color:#a3322a;text-decoration:none">✕</a></span>`).join("");
   host.querySelectorAll("[data-rm]").forEach(el=>el.addEventListener("click",e=>{ e.preventDefault();
-    _pending[id].splice(Number(el.getAttribute("data-rm")),1); renderPending(id); }));
+    const removed=_pending[id].splice(Number(el.getAttribute("data-rm")),1)[0];
+    if(_sharePending && removed===_sharePending.file) _sharePending=null;   // stop a removed share from re-attaching
+    renderPending(id); }));
 }
 function wrapSelection(txt, fmt){
   const s=txt.selectionStart, e=txt.selectionEnd, v=txt.value, sel=v.slice(s,e);
@@ -247,11 +249,11 @@ function wireComposer(id, parentId){
     }));
   });
   send.addEventListener("click",()=>doSend(id,parentId));
-  // a file shared in from elsewhere (BOM / a document) lands in the MAIN composer
+  // a file shared in from elsewhere (BOM / a document) rides the MAIN composer of
+  // EVERY channel you open until you send it — so you can pick the recipient.
   if(parentId===null && _sharePending){
     try{ _pending[id]=(_pending[id]||[]).concat([_sharePending.file]);
-      if(_sharePending.text && txt){ txt.value=_sharePending.text; } renderPending(id); }catch(e){}
-    _sharePending=null;
+      if(_sharePending.text && txt && !txt.value){ txt.value=_sharePending.text; } renderPending(id); }catch(e){}
   }
 }
 async function doSend(id, parentId){
@@ -268,6 +270,7 @@ async function doSend(id, parentId){
     p_mentions:mentions.length?mentions:null, p_attachments:atts });
   txt.disabled=false; if(send){ send.disabled=false; send.textContent="Send"; }
   if(error){ alert("Couldn't send: "+error.message); return; }
+  _sharePending=null;   // the shared file has been sent — stop it following channels
   txt.value=""; _mentions=new Set(); _pending[id]=[]; renderPending(id);
   if(THREAD) openThread(THREAD, true); else openChannel(CUR);
 }
