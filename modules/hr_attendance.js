@@ -211,7 +211,7 @@ async function compoff(){
   const [{data:emps},{data:credits},{data:absAll}]=await Promise.all([
     sb().from("employees").select("id,name,designation,monthly_salary").eq("status","active").eq("emp_type","employee").order("name"),
     sb().from("hr_comp_offs").select("*").order("earned_on"),
-    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent"),
+    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent").eq("approval_status","approved"),
   ]);
   const credBy={}; (credits||[]).forEach(c=>{ (credBy[c.employee_id]=credBy[c.employee_id]||[]).push(c); });
   const absBy={}; (absAll||[]).forEach(a=>{ (absBy[a.employee_id]=absBy[a.employee_id]||[]).push(a.work_date); });
@@ -286,6 +286,38 @@ function manageEmp(r){
   }));
 }
 
+/* ---------- Attendance approvals (manager/admin) ---------- */
+async function attendanceApprovals(){
+  const m=$("main");
+  m.innerHTML=`<div class="eyebrow">HR</div><h1>Attendance approvals</h1>
+    <p class="muted">Attendance submitted by employees, awaiting review. Approving counts it in payroll; rejecting sends it back.</p>
+    <div id="aaBody" class="muted">Loading…</div>`;
+  const admin=window.OPS.isAdmin();
+  let q=sb().from("hr_attendance").select("id,employee_id,work_date,status,assigned_approver").eq("approval_status","pending").order("work_date");
+  if(!admin) q=q.eq("assigned_approver",window.OPS.me.id);
+  const [{data:rows},{data:emps}]=await Promise.all([ q, sb().from("employees").select("id,name") ]);
+  const nameOf=id=>{ const e=(emps||[]).find(x=>x.id===id); return e?e.name:"(employee)"; };
+  const groups={};
+  (rows||[]).forEach(r=>{ const ym=(r.work_date||"").slice(0,7); const k=r.employee_id+"|"+ym;
+    (groups[k]=groups[k]||{employee_id:r.employee_id, ym, ids:[], a:0, w:0}); groups[k].ids.push(r.id);
+    if(r.status==="absent") groups[k].a++; else if(r.status==="worked_off") groups[k].w++; });
+  const list=Object.values(groups).sort((x,y)=>(x.ym<y.ym?1:-1));
+  if(!list.length){ $("aaBody").innerHTML='<div class="card muted">Nothing awaiting approval. 🎉</div>'; return; }
+  $("aaBody").innerHTML=`<div class="card"><div style="overflow:auto"><table><thead><tr><th>Employee</th><th>Month</th><th class="num">Absent (A)</th><th class="num">Worked-off (W)</th><th></th></tr></thead>
+    <tbody>${list.map((g,i)=>`<tr><td><b>${esc(nameOf(g.employee_id))}</b></td><td>${esc(g.ym)}</td><td class="num">${g.a}</td><td class="num">${g.w}</td>
+      <td><button class="btn green sm" data-ap="${i}">Approve</button> <button class="btn sm" data-rj="${i}" style="color:#a3322a;border-color:#e4b4b4">Reject</button></td></tr>`).join("")}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><button class="btn green sm" id="aaAll">Approve all (${list.length})</button></div></div>`;
+  const approve=async ids=>{ const { error }=await sb().from("hr_attendance").update({ approval_status:"approved", approved_by:window.OPS.me.id, approved_at:new Date().toISOString(), reject_note:null }).in("id",ids); if(error){ alert(error.message); return false; } return true; };
+  const reject=async (ids,note)=>{ const { error }=await sb().from("hr_attendance").update({ approval_status:"rejected", approved_by:window.OPS.me.id, approved_at:new Date().toISOString(), reject_note:note||null }).in("id",ids); if(error){ alert(error.message); return false; } return true; };
+  $("aaBody").querySelectorAll("[data-ap]").forEach(b=>b.addEventListener("click",async()=>{ const g=list[+b.getAttribute("data-ap")];
+    if(await approve(g.ids)){ window.OPS.audit&&window.OPS.audit("attendance_approved","hr_attendance",g.employee_id,g.ym); window.OPS.flashTop("Approved ✓"); attendanceApprovals(); } }));
+  $("aaBody").querySelectorAll("[data-rj]").forEach(b=>b.addEventListener("click",async()=>{ const g=list[+b.getAttribute("data-rj")];
+    const n=prompt("Reason for rejection (optional):"); if(n===null) return;
+    if(await reject(g.ids,n)){ window.OPS.flashTop("Rejected"); attendanceApprovals(); } }));
+  $("aaAll").addEventListener("click",async()=>{ const allIds=list.flatMap(g=>g.ids); if(allIds.length && await approve(allIds)){ window.OPS.flashTop("All approved ✓"); attendanceApprovals(); } });
+}
+
 window.OPS.routes.hr_attendance = attendance;
 window.OPS.routes.hr_compoff    = compoff;
+window.OPS.routes.hr_att_approvals = attendanceApprovals;
 })();

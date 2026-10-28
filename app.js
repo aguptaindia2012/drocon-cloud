@@ -113,6 +113,7 @@ const TOOLS = [
   // HR
   { key:"hr_employees",  section:"hr", label:"Employees",          gate:"perm" },
   { key:"hr_attendance", section:"hr", label:"Attendance",         gate:"perm" },
+  { key:"hr_att_approvals", section:"hr", label:"Attendance Approvals", gate:"perm" },
   { key:"hr_compoff",    section:"hr", label:"Comp-offs",          gate:"perm" },
   { key:"hr_salary",     section:"hr", label:"Salary Calculator",  gate:"perm" },
   { key:"hr_revisions",  section:"hr", label:"Salary Revisions",   gate:"perm" },
@@ -829,6 +830,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "312";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "313";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();

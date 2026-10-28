@@ -187,17 +187,28 @@ async function attendanceCard(emp){
   att.ym=ym; att.emp=emp;
   host.innerHTML=`<div class="card"><div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
       <b>My attendance</b><input id="maMonth" type="month" value="${ym}" style="width:auto"><span id="maLock"></span>
-      <span class="spacer"></span><button class="btn green sm" id="maSave">Save attendance</button></div>
-    <div class="muted" style="font-size:12px;margin:4px 0">Mark <b>A</b> for a day off you took, <b>W</b> if you worked a Sunday/holiday (earns a comp-off). Present is the default — click a day to cycle.</div>
+      <span id="maStatus"></span>
+      <span class="spacer"></span>
+      <label class="muted" style="margin:0;font-size:12px">Approver</label><select id="maApprover" style="width:auto;max-width:200px"></select>
+      <button class="btn green sm" id="maSave">Submit for approval</button></div>
+    <div class="muted" style="font-size:12px;margin:4px 0">Mark <b>A</b> for a day off you took, <b>W</b> if you worked a Sunday/holiday (earns a comp-off). Present is the default — click a day to cycle. Submitting sends the month to your approver; only approved attendance counts in payroll.</div>
     <div id="maGrid" class="muted">Loading…</div></div>`;
   $("maMonth").addEventListener("change",()=>{ window.OPS._myAttMonth=$("maMonth").value; attendanceCard(emp); });
   $("maSave").addEventListener("click",e=>window.OPS.once(e.currentTarget,saveMyAtt));
   const first=ym+"-01", last=ym+"-"+String(monthDaysOf(ym)).padStart(2,"0");
-  const [{data:rows},{data:hol}]=await Promise.all([
-    sb().from("hr_attendance").select("work_date,status").eq("employee_id",emp.id).gte("work_date",first).lte("work_date",last),
+  const [{data:rows},{data:hol},{data:appr}]=await Promise.all([
+    sb().from("hr_attendance").select("work_date,status,approval_status,reject_note,assigned_approver").eq("employee_id",emp.id).gte("work_date",first).lte("work_date",last),
     sb().from("hr_holidays").select("holiday_date,name").gte("holiday_date",first).lte("holiday_date",last),
+    sb().from("profiles").select("id,full_name,email,role").in("role",["admin","approver"]).order("full_name"),
   ]);
   att.orig={}; att.work={}; (rows||[]).forEach(r=>{ att.orig[r.work_date]=r.status; att.work[r.work_date]=r.status; });
+  // month approval status (worst of the rows: pending > rejected > approved)
+  const sts=(rows||[]).map(r=>r.approval_status||"approved");
+  const mStatus = sts.includes("pending")?"pending":(sts.includes("rejected")?"rejected":(rows&&rows.length?"approved":null));
+  att.assignedApprover=(rows||[]).map(r=>r.assigned_approver).find(Boolean)||null;
+  const rejNote=(rows||[]).map(r=>r.reject_note).find(Boolean)||"";
+  if($("maStatus")) $("maStatus").innerHTML = mStatus ? (window.OPS.statusChip(mStatus==="pending"?"in_review":mStatus)+(mStatus==="rejected"&&rejNote?` <span class="muted" style="font-size:11px;color:#a11">${esc(rejNote)}</span>`:"")) : "";
+  if($("maApprover")) $("maApprover").innerHTML=(appr||[]).filter(p=>p.id!==window.OPS.me.id).map(p=>`<option value="${p.id}"${att.assignedApprover===p.id?' selected':''}>${esc(p.full_name||p.email)}</option>`).join("")||'<option value="">— no approver —</option>';
   att.hol={}; (hol||[]).forEach(h=>att.hol[h.holiday_date]=h.name);
   const lock = window.OPS.hrMonthLock ? await window.OPS.hrMonthLock(ym) : null;
   att.locked=!!lock;
@@ -221,13 +232,23 @@ function drawMyGrid(){
   }));
 }
 async function saveMyAtt(){
-  const ups=[], dels=[], keys=new Set([...Object.keys(att.orig),...Object.keys(att.work)]);
-  keys.forEach(d=>{ const nw=att.work[d]||"", ol=att.orig[d]||""; if(nw===ol) return;
-    if(nw) ups.push({employee_id:att.emp.id, work_date:d, status:nw, created_by:window.OPS.me.id}); else dels.push(d); });
-  if(!ups.length&&!dels.length){ window.OPS.flashTop("Nothing changed."); return; }
-  if(ups.length){ const {error}=await sb().from("hr_attendance").upsert(ups,{onConflict:"employee_id,work_date"}); if(error){ alert("Save failed: "+error.message); return; } }
+  const approver=($("maApprover")&&$("maApprover").value)||null;
+  if(!approver){ alert("Pick an approver to submit your attendance."); return; }
+  const now=new Date().toISOString();
+  // submit the WHOLE month for approval: all marked days become pending under the
+  // chosen approver; also stamp the implicit "present" days so the month is complete.
+  const nd=monthDaysOf(att.ym); const ups=[], dels=[];
+  for(let dd=1;dd<=nd;dd++){ const d=att.ym+"-"+String(dd).padStart(2,"0"); const st=att.work[d];
+    if(st==="absent"||st==="worked_off"){ ups.push({ employee_id:att.emp.id, work_date:d, status:st, created_by:window.OPS.me.id,
+      approval_status:"pending", assigned_approver:approver, submitted_at:now, approved_by:null, approved_at:null, reject_note:null }); }
+    else if(att.orig[d]){ dels.push(d); }   // a day cleared back to present → remove the record
+  }
+  if(!ups.length&&!dels.length){ window.OPS.flashTop("Nothing to submit."); return; }
+  if(ups.length){ const {error}=await sb().from("hr_attendance").upsert(ups,{onConflict:"employee_id,work_date"}); if(error){ alert("Submit failed: "+error.message); return; } }
   for(const d of dels){ await sb().from("hr_attendance").delete().eq("employee_id",att.emp.id).eq("work_date",d); }
-  window.OPS.flashTop("Attendance saved ✓"); attendanceCard(att.emp);
+  try{ await sb().from("notifications").insert({ user_id:approver, message:"Attendance submitted for review: "+(att.emp.name||"")+" ("+att.ym+")" }); }catch(e){}
+  window.OPS.refreshNotifs && window.OPS.refreshNotifs();
+  window.OPS.flashTop("Submitted for approval ✓"); attendanceCard(att.emp);
 }
 
 function claimForm(emp, typeKey, back){

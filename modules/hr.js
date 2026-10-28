@@ -69,7 +69,7 @@ async function hrMonthContext(ym){
     sb().from("hr_attendance").select("employee_id,work_date,status").gte("work_date",first).lte("work_date",last),
     sb().from("hr_holidays").select("holiday_date").gte("holiday_date",first).lte("holiday_date",last),
     sb().from("hr_comp_offs").select("*"),
-    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent"),
+    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent").eq("approval_status","approved"),
   ]);
   let sun=0; { const d=new Date(mb.start); while(d<=mb.end){ if(d.getUTCDay()===0) sun++; d.setUTCDate(d.getUTCDate()+1);} }
   const holCount=(hol||[]).length, offDays=sun+holCount;
@@ -284,7 +284,7 @@ async function salaryCalc(){
     sb().from("employees").select("*").eq("status","active").eq("emp_type","employee").order("name"),
     sb().from("salary_runs").select("*").eq("period_month",ym),
     sb().from("hr_comp_offs").select("employee_id,earned_on,expires_on,encashed_on"),
-    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent").lte("work_date",iso(mb.end)),
+    sb().from("hr_attendance").select("employee_id,work_date").eq("status","absent").eq("approval_status","approved").lte("work_date",iso(mb.end)),
     sb().from("hr_salary_revisions").select("employee_id,effective_from,monthly_salary").order("effective_from") ]);
   const runByEmp={}; (runs||[]).forEach(r=>runByEmp[r.employee_id]=r);
   // Leave netting: absences beyond the comp-off balance are LOP.
@@ -671,7 +671,7 @@ async function loadFnf(emp){
   if(!emp){ $("ffBody").innerHTML=""; return; }
   const [{data:credits},{data:abs},{data:advs},{data:existing},{data:revs}]=await Promise.all([
     sb().from("hr_comp_offs").select("*").eq("employee_id",emp.id),
-    sb().from("hr_attendance").select("work_date").eq("employee_id",emp.id).eq("status","absent"),
+    sb().from("hr_attendance").select("work_date").eq("employee_id",emp.id).eq("status","absent").eq("approval_status","approved"),
     sb().from("advances").select("id,amount,status").eq("party_kind","employee").eq("employee_id",emp.id).eq("status","open"),
     sb().from("hr_final_settlements").select("*").eq("employee_id",emp.id).order("created_at",{ascending:false}).limit(1),
     sb().from("hr_salary_revisions").select("employee_id,effective_from,monthly_salary").eq("employee_id",emp.id).order("effective_from"),
