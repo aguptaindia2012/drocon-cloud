@@ -261,7 +261,7 @@ function editor(){
         <button class="btn sm" id="dMsg">💬 Messenger</button>
         <button class="btn" id="dJson">⬇ Download JSON</button>
         <button class="btn sm" id="dImport">Import JSON…</button>
-        ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px"><input type="checkbox" id="dStock" style="width:auto"> reduce spare stock on save</label>':''}
+        ${TYPE==='invoice'?'<label class="muted" style="display:inline;margin-left:8px" title="On by default — uncheck to save this invoice without touching stock"><input type="checkbox" id="dStock" style="width:auto" checked> auto-reduce spare stock on save</label>':''}
         <div class="spacer"></div>
         ${D.id && window.OPS.canDelete()?'<button class="btn sm" id="dDel" style="color:#a3322a;border-color:#e4b4b4">Delete</button>':''}
       </div>
@@ -326,7 +326,10 @@ function editor(){
   $("dJson").addEventListener("click",()=>{ syncTerms(); window.OPS.docgen.downloadJson(toDocgen()); });
   $("dImport").addEventListener("click",importJson);
   if($("dToInvoice")) $("dToInvoice").addEventListener("click",convertToInvoice);
-  if($("dDel")) $("dDel").addEventListener("click",async()=>{ if(!confirm("Delete this document?"))return; await sb().from("documents").delete().eq("id",D.id); listView(TYPE); });
+  if($("dDel")) $("dDel").addEventListener("click",async()=>{ if(!confirm("Delete this document?"))return;
+    // reverse any stock this invoice moved (the inventory_moves trigger restores stock)
+    try{ await sb().from("inventory_moves").delete().eq("ref_doc_id",D.id); }catch(e){}
+    await sb().from("documents").delete().eq("id",D.id); listView(TYPE); });
   renderItems(); loadPickers(cfg);
   bindTerms(cfg);
 }
@@ -674,6 +677,28 @@ async function save(){
       if(!(num(it.rate)>=0)){ err("Line "+n+" ("+it.desc+"): rate is required."); return; }
     }
   }
+  // ---- sales-invoice stock pre-check (warn / gate BEFORE saving) ----
+  let _stockMoves=null;
+  if(TYPE==="invoice"){
+    if($("dStock") && $("dStock").checked){
+      const need={}; (D.items||[]).forEach(it=>{ if(it._spareId && num(it.qty)>0) need[it._spareId]=(need[it._spareId]||0)+num(it.qty); });
+      const ids=Object.keys(need);
+      if(ids.length){
+        _stockMoves=ids.map(id=>({ spare_id:id, qty:need[id] }));
+        const existOut={};   // this invoice's current out-moves get reversed, so add them back when checking
+        if(D.id){ const { data:ex }=await sb().from("inventory_moves").select("spare_id,qty,direction").eq("ref_doc_id",D.id);
+          (ex||[]).forEach(m=>{ if(m.direction==="out") existOut[m.spare_id]=(existOut[m.spare_id]||0)+num(m.qty); }); }
+        const { data:sp }=await sb().from("spare_catalogue").select("id,name,current_stock").in("id",ids);
+        const byId={}; (sp||[]).forEach(s=>byId[s.id]=s);
+        const short=ids.map(id=>({ name:((byId[id]||{}).name)||"(item)", avail:num((byId[id]||{}).current_stock)+(existOut[id]||0), need:need[id] })).filter(x=>x.need>x.avail+1e-9);
+        if(short.length){
+          const lines=short.map(x=>"• "+x.name+": available "+x.avail+", requested "+x.need).join("\n");
+          if(!window.OPS.canNegativeStock()){ $("dErr").textContent="Insufficient stock — see the message."; alert("Cannot save — insufficient stock (you don't have permission to allow negative stock):\n\n"+lines+"\n\nReduce the quantities, restock, or uncheck “auto-reduce spare stock”."); return; }
+          if(!confirm("Insufficient stock for:\n\n"+lines+"\n\nYou may allow negative stock — proceed anyway?")) return;
+        }
+      } else { _stockMoves=[]; }
+    } else { _stockMoves=[]; }   // toggle off → reverse any prior stock effect on this save
+  }
   const t=computeTotals();
   const rec={ doc_type:TYPE, number:D.number, fiscal_year:D.fiscal_year, seq:D.seq, doc_date:D.doc_date,
     party_kind:CONFIG[TYPE].partyKind, party_id:D.party_id||null, party_snapshot:D.party,
@@ -697,16 +722,16 @@ async function save(){
     if(error){ $("dErr").textContent=(error.code==="23505")?"That number already exists for this type — change it.":error.message; return; }
     D.id=ins.id; savedId=ins.id; }
   window.OPS.audit(D.id&&savedId?"saved":"created","document",savedId,TYPE+" "+D.number);
+  // ---- apply stock atomically (reverse old + apply new; or reverse-only if off) ----
+  if(TYPE==="invoice" && _stockMoves!==null){
+    try{ const { error:se }=await sb().rpc("apply_doc_stock",{ p_doc_id:savedId, p_number:D.number, p_direction:"out", p_moves:_stockMoves, p_allow_negative:window.OPS.canNegativeStock() }); if(se) throw se; }
+    catch(e){ window.OPS.flashTop("Saved, but stock update failed: "+(e.message||e)); editor(); return; }
+  }
   if(reverted){
     window.OPS.audit("edit_reapproval","document",savedId,TYPE+" "+D.number+" reverted to review after edit");
     try{ if(reviewerId) await sb().from("notifications").insert({ user_id:reviewerId, message:"Re-review needed: "+TYPE+" "+D.number+" was edited after approval." }); }catch(e){}
     window.OPS.refreshNotifs && window.OPS.refreshNotifs();
     window.OPS.flashTop("Saved — sent back for re-approval (edited after approval)"); editor(); return;
-  }
-  // optional inventory decrement for invoice spare lines
-  if(TYPE==="invoice" && $("dStock") && $("dStock").checked){
-    for(const it of D.items){ if(it._spareId && num(it.qty)>0){
-      await sb().from("inventory_moves").insert({ spare_id:it._spareId, qty:num(it.qty), direction:"out", reason:"invoice "+D.number, sales_invoice_no:D.number, ref_doc_id:savedId, created_by:window.OPS.me.id }); } }
   }
   window.OPS.flashTop("Saved ✓"); editor();
 }

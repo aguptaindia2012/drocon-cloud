@@ -177,6 +177,7 @@ const CAPABILITIES = [
   { key:"view_contacts", label:"View contacts (unmask phone numbers)" },
   { key:"can_export",    label:"Export data (CSV)" },
   { key:"can_delete",    label:"Delete records" },
+  { key:"allow_negative_stock", label:"Allow negative stock (oversell on invoices)" },
 ];
 window.OPS.CAPABILITIES = CAPABILITIES;
 // Standard short-day reasons — one source of truth for internal + external forms.
@@ -431,6 +432,8 @@ window.OPS.isExternal = isExternal;
 const canViewContacts = ()=> isAdmin() || window.OPS.perms.has("view_contacts");
 const canExport = ()=> isAdmin() || window.OPS.perms.has("can_export");
 const canDelete = ()=> isAdmin() || window.OPS.perms.has("can_delete");
+const canNegativeStock = ()=> isAdmin() || window.OPS.perms.has("allow_negative_stock");
+window.OPS.canNegativeStock = canNegativeStock;
 window.OPS.canExport=canExport; window.OPS.canDelete=canDelete;
 function maskPhone(v){ if(v==null||v==="") return ""; if(canViewContacts()) return v; const d=String(v).replace(/\D/g,""); return d.length<=3 ? "•••" : ("•••••• "+d.slice(-3)); }
 window.OPS.isAdmin=isAdmin; window.OPS.isApprover=isApprover;
@@ -826,6 +829,6 @@ if("serviceWorker" in navigator && (location.protocol==="https:"||location.proto
 }
 // Always-on build tag in the header — baked into the app bundle so it reflects
 // exactly the version the user is running (a stale number = an old cached app).
-const APP_BUILD = "309";   // bump with the service-worker VERSION on each deploy
+const APP_BUILD = "310";   // bump with the service-worker VERSION on each deploy
 window.OPS.build = APP_BUILD;   // used by the tour to detect new releases
 (function showBuild(){ const el=document.getElementById("buildTag"); if(el) el.textContent="build "+APP_BUILD; })();
