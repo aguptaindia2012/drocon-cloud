@@ -138,6 +138,34 @@ const CHECKS = [
         ? { status:"warn", detail:`Untagged → counted as Overheads in Category P&L: ${parts.join(", ")}. Tag the ones that belong to a category (leave true overheads blank).` }
         : { status:"pass", detail:"All costs carry a profit category (or are intentional overheads)." };
     }, fix:{ list:"costs", label:"Show untagged costs ›" } },
+  { name:"Stock reconciles with the movement ledger", run: async()=>{
+      const [sp,mv]=await Promise.all([
+        sb().from("spare_catalogue").select("id,name,current_stock"),
+        sb().from("inventory_moves").select("spare_id,qty,direction").limit(100000) ]);
+      if(sp.error||mv.error) return { status:"warn", detail:(sp.error||mv.error).message };
+      const net={}; (mv.data||[]).forEach(m=>{ net[m.spare_id]=(net[m.spare_id]||0)+num(m.qty)*(m.direction==="in"?1:-1); });
+      const bad=(sp.data||[]).filter(s=>Math.abs(num(s.current_stock)-(net[s.id]||0))>0.001);
+      return bad.length ? { status:"fail", detail:`${bad.length} spare(s) where current stock ≠ sum of movements (e.g. ${bad.slice(0,3).map(s=>esc(s.name)).join(", ")}) — a move may have been inserted without the trigger.` }
+                        : { status:"pass", detail:`${(sp.data||[]).length} spares reconcile with the inventory ledger` };
+    }},
+  { name:"No negative stock", run: async()=>{
+      const { data, error }=await sb().from("spare_catalogue").select("name,current_stock").lt("current_stock",0);
+      if(error) return { status:"warn", detail:error.message };
+      return (data&&data.length) ? { status:"warn", detail:`${data.length} spare(s) below zero (allowed via oversell): ${data.slice(0,4).map(s=>s.name+" ("+s.current_stock+")").join(", ")}` }
+                                 : { status:"pass", detail:"All spare stock ≥ 0" };
+    }},
+  { name:"Attendance awaiting approval", run: async()=>{
+      const { count, error }=await sb().from("hr_attendance").select("id",{count:"exact",head:true}).eq("approval_status","pending");
+      if(error) return { status:"warn", detail:error.message };
+      return count ? { status:"warn", detail:`${count} attendance day(s) pending approval — not counted in payroll until approved` }
+                   : { status:"pass", detail:"No attendance pending approval" };
+    }, fix:{ tool:"hr_att_approvals", label:"Open Attendance Approvals ›" } },
+  { name:"Expense claims awaiting clarification", run: async()=>{
+      const { count, error }=await sb().from("expense_claims").select("id",{count:"exact",head:true}).eq("status","clarification");
+      if(error) return { status:"warn", detail:error.message };
+      return count ? { status:"warn", detail:`${count} claim(s) sent back for clarification, awaiting employee resubmit` }
+                   : { status:"pass", detail:"No claims awaiting clarification" };
+    }, fix:{ tool:"expense_review", label:"Open Expense Claims ›" } },
   { name:"Idle-tracking views reachable", run: async()=>{
       const a=await sb().from("v_idle_active_pilots").select("*").limit(1);
       const b=await sb().from("v_idle_active_locations").select("*").limit(1);
