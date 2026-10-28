@@ -9,17 +9,18 @@
 const { $, esc, num, money, fmtDate, todayISO } = window.OPS.helpers;
 const sb = ()=>window.OPS.sb;
 const isApprover = ()=> window.OPS.isAdmin() || (window.OPS.isApprover && window.OPS.isApprover());
-let accounts=[], vendors=[], cats=[], acctId="", theDate=todayISO();
+let accounts=[], vendors=[], cats=[], spares=[], acctId="", theDate=todayISO();
 let _expOnlyUntagged=false, _payOnlyUntagged=false;   // "missing profit category" filters
 
 async function refs(){
   if(!accounts.length){
-    const [a,v,c]=await Promise.all([
+    const [a,v,c,sp]=await Promise.all([
       sb().from("cash_accounts").select("*").eq("is_active",true).order("kind"),
       sb().from("vendors").select("id,firm_name,name").order("firm_name"),
-      sb().from("expense_categories").select("*").eq("is_active",true).order("name")
+      sb().from("expense_categories").select("*").eq("is_active",true).order("name"),
+      sb().from("spare_catalogue").select("id,name,part_no,unit").eq("active",true).order("name")
     ]);
-    accounts=a.data||[]; vendors=v.data||[]; cats=c.data||[];
+    accounts=a.data||[]; vendors=v.data||[]; cats=c.data||[]; spares=sp.data||[];
     if(!acctId && accounts.length) acctId=accounts[0].id;
   }
 }
@@ -360,7 +361,8 @@ async function listPayables(){
   $("emBody").querySelectorAll("[data-mng]").forEach(b=>b.addEventListener("click",()=>managePayable(find(b.getAttribute("data-mng")), vendorBills)));
   $("emBody").querySelectorAll("[data-delp]").forEach(b=>b.addEventListener("click",async()=>{
     const x=find(b.getAttribute("data-delp")); if(!x) return;
-    if(!confirm("Delete supplier invoice “"+(x.p.vendor_invoice_no||'(no no.)')+"” for "+x.vendor_name+" ("+money(x.p.total)+")?\n\nThis also reverses its ledger entry. Only invoices with no payments/credits can be deleted.")) return;
+    if(!confirm("Delete supplier invoice “"+(x.p.vendor_invoice_no||'(no no.)')+"” for "+x.vendor_name+" ("+money(x.p.total)+")?\n\nThis also reverses its ledger entry and any stock it added. Only invoices with no payments/credits can be deleted.")) return;
+    try{ await sb().from("inventory_moves").delete().eq("ref_payable_id",x.p.id); }catch(e){}   // reverse stock it added
     const { error }=await sb().rpc("delete_payable",{ p_id:x.p.id });
     if(error){ alert(error.message); return; }
     window.OPS.audit("deleted","payables",x.p.id,(x.p.vendor_invoice_no||'')+" "+money(x.p.total));
@@ -522,6 +524,15 @@ function payForm(rec){
         <div class="small-note">A cheque handed over is <b>cheque issued</b>, not paid — it only hits the Day Book when the bank debits it.</div></div>
       <div class="field full"><label>Note</label><input id="py_note" value="${esc(e.note||'')}"></div>
     </div>
+    <div class="card" style="background:#fafbf8;margin-top:10px">
+      <div class="row" style="align-items:center"><b>Stock received on this bill</b> <span class="muted" style="font-size:12px;margin-left:6px">optional — adds these to inventory on save</span></div>
+      <div class="row wrap" style="gap:6px;margin:6px 0">
+        <select id="py_spare" style="max-width:300px"><option value="">— spare —</option>${spares.map(s=>`<option value="${s.id}">${esc((s.part_no?s.part_no+" · ":"")+s.name)}</option>`).join("")}</select>
+        <input id="py_sqty" type="number" step="any" placeholder="qty" style="max-width:90px">
+        <button type="button" class="btn sm" id="py_addItem">+ Add item</button>
+      </div>
+      <div id="py_items"></div>
+    </div>
     <div class="row wrap"><button class="btn green" id="pySave">${rec?"Save changes":"Create"}</button>
       <button class="btn" id="pyCancel">Cancel</button>
       <div class="spacer"></div>
@@ -529,6 +540,14 @@ function payForm(rec){
     <div class="err" id="pyErr"></div></div>`;
   $("pyBack").addEventListener("click",vendorBills); $("pyCancel").addEventListener("click",vendorBills);
   $("pyNewVendor").addEventListener("click",ev=>{ ev.preventDefault(); window.OPS.openTool("vendors"); });
+  let payItems=(rec&&Array.isArray(rec.stock_items))?rec.stock_items.slice():[];
+  function renderPayItems(){ const h=$("py_items"); if(!h) return;
+    h.innerHTML=payItems.length?`<table class="tight"><thead><tr><th>Item</th><th class="num">Qty</th><th></th></tr></thead><tbody>${payItems.map((it,i)=>`<tr><td>${esc(it.name||"")}</td><td class="num">${num(it.qty)}</td><td><a href="#" data-rm="${i}" style="color:#a3322a;text-decoration:none">✕</a></td></tr>`).join("")}</tbody></table>`:'<div class="muted" style="font-size:12px">No stock items — amount-only bill.</div>';
+    h.querySelectorAll("[data-rm]").forEach(a=>a.addEventListener("click",e=>{ e.preventDefault(); payItems.splice(+a.getAttribute("data-rm"),1); renderPayItems(); })); }
+  renderPayItems();
+  $("py_addItem").addEventListener("click",()=>{ const id=$("py_spare").value, q=num($("py_sqty").value);
+    if(!id||!(q>0)){ return; } const s=spares.find(x=>x.id===id);
+    payItems.push({ spare_id:id, name:s?((s.part_no?s.part_no+" · ":"")+s.name):"", qty:q }); $("py_sqty").value=""; $("py_spare").value=""; renderPayItems(); });
   $("pySave").addEventListener("click",async()=>{
     const amt=num($("py_amt").value), gst=num($("py_gst").value);
     if(!$("py_vendor").value){ $("pyErr").textContent="Select the vendor."; return; }
@@ -536,12 +555,16 @@ function payForm(rec){
     const out={ vendor_id:$("py_vendor").value, vendor_invoice_no:$("py_no").value||null,
       invoice_date:$("py_date").value||todayISO(), due_date:$("py_due").value||null,
       amount:amt, gst_amount:gst, total:amt+gst, category:$("py_cat").value||null,
-      cost_category:$("py_pcat").value||null,
+      cost_category:$("py_pcat").value||null, stock_items:payItems.length?payItems:null,
       status:$("py_status").value, note:$("py_note").value||null };
-    let err;
+    let err, savedId=rec?rec.id:null;
     if(rec){ ({error:err}=await sb().from("payables").update(out).eq("id",rec.id)); }
-    else { out.created_by=window.OPS.me.id; ({error:err}=await sb().from("payables").insert(out)); }
+    else { out.created_by=window.OPS.me.id; const ins=await sb().from("payables").insert(out).select("id").single(); err=ins.error; if(ins.data) savedId=ins.data.id; }
     if(err){ $("pyErr").textContent=err.message; return; }
+    // add/adjust stock for the listed items (reverses prior + applies new; empty = reverse only)
+    if(savedId){ try{ const moves=payItems.map(it=>({ spare_id:it.spare_id, qty:num(it.qty) }));
+      const { error:se }=await sb().rpc("apply_payable_stock",{ p_payable_id:savedId, p_number:out.vendor_invoice_no||"", p_moves:moves }); if(se) throw se;
+    }catch(e){ window.OPS.flashTop("Saved, but stock update failed: "+(e.message||e)); } }
     window.OPS.audit(rec?"edited":"created","payables",rec?rec.id:"new",out.vendor_invoice_no||"");
     window.OPS.flashTop("Saved ✓"); vendorBills();
   });
