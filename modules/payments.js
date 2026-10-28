@@ -103,13 +103,13 @@ function recordPayment(x, back){
       if(p.cash>0.005){
         const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:p.cash,
           tds_pct:p.tdsPct, tds_amount:p.tds, paid_on:p.date, account_id:p.account||null,
-          mode:p.mode, note:p.note||null, created_by:window.OPS.me.id });
+          mode:p.mode, reference:p.reference||null, note:p.note||null, created_by:window.OPS.me.id });
         if(error) return { error:/duplicate|just recorded/i.test(error.message)?"This exact receipt was just recorded — check the list before re-entering.":error.message };
       } else if(p.tds>0){
         // TDS-only (fully settled by contra + TDS): still record the TDS receipt
         const { error }=await sb().from("payments").insert({ document_id:x.r.id, amount:0,
           tds_pct:p.tdsPct, tds_amount:p.tds, paid_on:p.date, account_id:p.account||null,
-          mode:p.mode, note:p.note||null, created_by:window.OPS.me.id });
+          mode:p.mode, reference:p.reference||null, note:p.note||null, created_by:window.OPS.me.id });
         if(error) return { error:error.message };
       }
       if(p.settleTotal>0){

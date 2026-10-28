@@ -394,7 +394,7 @@ function payVendor(x, back){
     commit: async (p)=>{
       if(p.cash>0.005 || p.tds>0){
         const { error }=await sb().from("cash_txns").insert({ account_id:p.account, direction:"out",
-          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode,
+          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode, reference:p.reference||null,
           ref_type:"payable", ref_id:String(x.p.id), note:p.note||("Payment — "+(x.p.vendor_invoice_no||"")),
           created_by:window.OPS.me.id });
         if(error) return { error:/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message };
@@ -599,7 +599,7 @@ async function settle(kind, id, suggested, back){
     commit: async (p)=>{
       if(p.cash>0.005 || p.tds>0){
         const { error }=await sb().from("cash_txns").insert({ account_id:p.account, direction:"out",
-          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode,
+          txn_date:p.date, amount:p.cash, tds_pct:p.tdsPct, tds_amount:p.tds, mode:p.mode, reference:p.reference||null,
           ref_type:kind, ref_id:String(id), note:p.note||null, created_by:window.OPS.me.id });
         if(error) return { error:/duplicate|just recorded/i.test(error.message)?"This exact payment was just recorded — check before re-entering.":error.message };
       }

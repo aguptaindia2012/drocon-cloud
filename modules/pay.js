@@ -59,6 +59,7 @@ async function form(opts){
         <button class="btn sm" id="pf_fill" type="button">Fill remaining</button>
         <select id="pf_acct" style="max-width:230px"><option value="">— ${inWord} —</option></select>
         <select id="pf_mode" style="max-width:140px">${(opts.modes||["UPI","NEFT/RTGS","Cheque","Cash","Card","Other"]).map(x=>`<option>${esc(x)}</option>`).join("")}</select>
+        <input id="pf_ref" placeholder="Ref / UTR / cheque no." style="max-width:200px" title="Payment reference number">
       </div>` : `` }
 
       <div class="row" style="gap:6px;margin-top:12px;flex-wrap:wrap">
@@ -125,6 +126,7 @@ async function form(opts){
     if(t<0){ $("pf_err").textContent="TDS cannot be negative."; return; }
     const payload={ cleared:c, cash, tds:t, tdsPct:(showTds && $("pf_tdschk") && $("pf_tdschk").checked)?(num($("pf_tdspct").value)||null):null,
       account:showCash && $("pf_acct")?($("pf_acct").value||null):null, mode:showCash && $("pf_mode")?$("pf_mode").value:null, date:$("pf_date").value||todayISO(),
+      reference:(showCash && $("pf_ref"))?($("pf_ref").value.trim()||null):null,
       note:$("pf_note").value||null, settleTotal:st, settleLines:settleB.lines,
       settleItem:{ type:item.type, id:item.id, label:item.label, side:item.side } };
     let r; try{ r=await opts.commit(payload); }catch(e){ $("pf_err").textContent=e.message||String(e); return; }
