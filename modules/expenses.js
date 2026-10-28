@@ -160,11 +160,15 @@ async function myExpenses(){
     ${rows.length?`<div style="overflow:auto"><table><thead><tr><th>Type</th><th>Period</th><th class="num">Total</th><th>Receipts</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows.map(r=>`<tr><td><b>${esc(typeLabel(r.claim_type))}</b>${r.title?`<br><span class="muted">${esc(r.title)}</span>`:""}</td>
         <td>${esc(r.period||"—")}</td><td class="num">${money(r.total)}</td>
-        <td>${(r.receipts||[]).length||0}</td><td>${window.OPS.statusChip(r.status)}</td>
-        <td>${r.status==="submitted"||r.status==="draft"||r.status==="rejected"?`<button class="btn sm ghost" data-del="${r.id}">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
+        <td>${(r.receipts||[]).length||0}</td><td>${window.OPS.statusChip(r.status)}${r.status==="clarification"&&r.note?`<br><span class="muted" style="font-size:11px;color:#9a5b00">⚠ ${esc(r.note)}</span>`:""}</td>
+        <td>${r.status==="clarification"?`<button class="btn sm green" data-resub="${r.id}">Resubmit</button> `:''}${["submitted","draft","rejected","clarification"].includes(r.status)?`<button class="btn sm ghost" data-del="${r.id}">Delete</button>`:''}</td></tr>`).join("")}</tbody></table></div>`
       :'<div class="card muted">No claims yet — pick a type above to file one.</div>'}`;
   if($("mePrint")) $("mePrint").addEventListener("click",()=>printFormPicker(myExpenses));
   $("meBody").querySelectorAll("[data-new]").forEach(b=>b.addEventListener("click",()=>claimForm(emp, b.getAttribute("data-new"))));
+  $("meBody").querySelectorAll("[data-resub]").forEach(b=>b.addEventListener("click",async()=>{
+    await sb().from("expense_claims").update({ status:"submitted" }).eq("id",b.getAttribute("data-resub"));
+    window.OPS.flashTop("Resubmitted ✓"); myExpenses();
+  }));
   $("meBody").querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
     if(!confirm("Delete this claim?")) return;
     await sb().from("expense_claims").delete().eq("id",b.getAttribute("data-del")); myExpenses();
@@ -334,9 +338,17 @@ async function newClaimForEmployee(){
 async function expenseReview(){
   const m=$("main");
   m.innerHTML=`<div class="eyebrow">Finance</div><h1>Expense Claims</h1>
-    <div class="row wrap" style="margin:10px 0"><label style="margin:0">Show</label>
-      <select id="erStatus" style="width:auto"><option value="submitted">Pending review</option><option value="approved">Approved (to pay)</option><option value="part_paid">Part-paid</option><option value="paid">Paid</option><option value="rejected">Rejected</option><option value="">All</option></select>
-      <div class="spacer"></div><button class="btn green sm" id="erNew">+ Enter expense (on behalf of employee)</button></div>
+    <div class="row wrap" style="margin:10px 0;gap:8px;align-items:center">
+      <input id="erSearch" placeholder="🔎 name / ID / description" style="min-width:230px">
+      <select id="erStatus" style="width:auto"><option value="submitted">Pending review</option><option value="clarification">Needs clarification</option><option value="approved">Approved (to pay)</option><option value="part_paid">Part-paid</option><option value="paid">Paid/Settled</option><option value="rejected">Rejected</option><option value="">All</option></select>
+      <select id="erType" style="width:auto"><option value="">All types</option>${Object.keys(TYPES).map(k=>`<option value="${k}">${esc(TYPES[k].label)}</option>`).join("")}</select>
+      <label class="muted" style="margin:0">From</label><input id="erFrom" type="date" style="width:auto">
+      <label class="muted" style="margin:0">To</label><input id="erTo" type="date" style="width:auto">
+      <input id="erMin" type="number" step="any" placeholder="min ₹" style="width:88px">
+      <input id="erMax" type="number" step="any" placeholder="max ₹" style="width:88px">
+      <button class="btn sm" id="erClear">Clear</button>
+      <div class="spacer"></div><button class="btn green sm" id="erNew">+ Enter expense…</button></div>
+    <div id="erSummary" class="muted" style="margin-bottom:8px"></div>
     <div id="erBody" class="muted">Loading…</div>`;
   $("erNew").addEventListener("click",newClaimForEmployee);
   const load=async()=>{
@@ -345,12 +357,26 @@ async function expenseReview(){
     if(st) q=q.eq("status",st);
     const [{ data },{ data:tx },settleMap]=await Promise.all([ q, sb().from("cash_txns").select("ref_id,amount,tds_amount").eq("ref_type","expense_claim"), window.OPS.settle.settledBy("expense_claim") ]);
     const paidBy={}; (tx||[]).forEach(t=>paidBy[t.ref_id]=(paidBy[t.ref_id]||0)+num(t.amount)+num(t.tds_amount));
-    const rows=(data||[]).map(r=>{ r._paid=paidBy[r.id]||0; r._settled=num((settleMap||{})[r.id]||0); r._bal=Math.round((num(r.total)-r._paid-r._settled)*100)/100; return r; });
-    $("erBody").innerHTML = rows.length ? rows.map(cardHTML).join("") : '<div class="card muted">Nothing here.</div>';
+    let rows=(data||[]).map(r=>{ r._paid=paidBy[r.id]||0; r._settled=num((settleMap||{})[r.id]||0); r._bal=Math.round((num(r.total)-r._paid-r._settled)*100)/100; return r; });
+    // combinable client-side filters
+    const qs=($("erSearch").value||"").toLowerCase().trim(), typ=$("erType").value, from=$("erFrom").value, to=$("erTo").value;
+    const hasMin=$("erMin").value!=="", hasMax=$("erMax").value!=="", mn=num($("erMin").value), mx=num($("erMax").value);
+    rows=rows.filter(r=>{
+      if(typ && r.claim_type!==typ) return false;
+      const d=(r.created_at||"").slice(0,10); if(from && d<from) return false; if(to && d>to) return false;
+      const t=num(r.total); if(hasMin && t<mn) return false; if(hasMax && t>mx) return false;
+      if(qs){ const hay=((r.employee_name||"")+" "+(r.id||"")+" "+(r.title||"")+" "+(r.purpose||"")+" "+(r.claim_type||"")).toLowerCase(); if(!hay.includes(qs)) return false; }
+      return true;
+    });
+    const outstanding=rows.filter(r=>r.status==="approved"||r.status==="part_paid").reduce((s,r)=>s+Math.max(0,r._bal),0);
+    $("erSummary").innerHTML=`${rows.length} claim(s)`+(outstanding>0.005?` · <b style="color:#a3322a">Outstanding (approved, unsettled): ${money(outstanding)}</b>`:"");
+    $("erBody").innerHTML = rows.length ? rows.map(cardHTML).join("") : '<div class="card muted">Nothing matches these filters.</div>';
     rows.forEach(wire);
     window.OPS.wireProfitCatCells($("erBody"));
   };
-  $("erStatus").addEventListener("change",load);
+  ["erStatus","erType","erFrom","erTo"].forEach(id=>$(id).addEventListener("change",load));
+  ["erSearch","erMin","erMax"].forEach(id=>$(id).addEventListener("input",load));
+  $("erClear").addEventListener("click",()=>{ ["erSearch","erType","erFrom","erTo","erMin","erMax"].forEach(id=>$(id).value=""); $("erStatus").value="submitted"; load(); });
   window.OPS._expReviewLoad=load;
   load();
 }
@@ -386,7 +412,8 @@ function cardHTML(r){
       <select id="ecat_${r.id}" style="max-width:320px"><option value="">— not set —</option>${window.OPS.profitCats.options(r.cost_category,"cost")}</select></div>`
     :(r.status!=="rejected"?`<div class="row" style="margin-top:6px;align-items:center;gap:8px"><span class="muted" style="font-size:12px">Profit category (for P&amp;L):</span>${window.OPS.profitCatCell("expense_claims",r.id,r.cost_category)}</div>`:'')}
     <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center">
-      ${r.status==="submitted"?`<button class="btn green sm" data-act="approve" data-id="${r.id}">Approve</button>
+      ${(r.status==="submitted"||r.status==="clarification")?`<button class="btn green sm" data-act="approve" data-id="${r.id}">Approve</button>
+        <button class="btn sm" data-act="clarify" data-id="${r.id}" style="color:#9a5b00;border-color:#e4c98a">Ask clarification</button>
         <button class="btn sm" data-act="reject" data-id="${r.id}" style="color:#a3322a;border-color:#e4b4b4">Reject</button>`:''}
       ${(r.status==="approved"||r.status==="part_paid")?`<button class="btn green sm" data-act="pay" data-id="${r.id}">Record payment…</button>
         <span class="muted" style="font-size:12px">Paid ${money(r._paid||0)}${r._settled>0.005?(' · Settled '+money(r._settled)):''} · Balance <b>${money(r._bal!=null?r._bal:r.total)}</b></span>`:''}
@@ -414,9 +441,14 @@ function wire(r){
         await sb().from("expense_claims").update(patch).eq("id",r.id);
       } else if(act==="reject"){
         await sb().from("expense_claims").update({ status:"rejected", approver:window.OPS.me.id, approved_at:now, note }).eq("id",r.id);
+      } else if(act==="clarify"){
+        const msg=prompt("What clarification do you need from the employee?", note||""); if(msg===null) return;
+        await sb().from("expense_claims").update({ status:"clarification", note:msg||note||null }).eq("id",r.id);
+        try{ if(r.employee_id){ const {data:emp}=await sb().from("employees").select("user_id").eq("id",r.employee_id).maybeSingle();
+          if(emp&&emp.user_id) await sb().from("notifications").insert({ user_id:emp.user_id, message:"Clarification needed on your expense claim: "+(msg||"") }); } }catch(_e){}
       }
       window.OPS.audit&&window.OPS.audit("expense_"+act,"expense_claims",r.id,r.employee_name||"");
-      window.OPS.flashTop("Claim "+act+"d ✓");
+      window.OPS.flashTop(act==="clarify"?"Sent back for clarification":("Claim "+act+"d ✓"));
       if(window.OPS._expReviewLoad) window.OPS._expReviewLoad();
     });
   }));
